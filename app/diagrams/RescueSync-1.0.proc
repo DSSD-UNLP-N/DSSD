@@ -469,7 +469,7 @@
             </children>
             <children xmi:type="notation:Shape" xmi:id="_sk798KYDEfGXZskN-8AnPQ" type="3005" element="_sk7W4KYDEfGXZskN-8AnPQ" fontName="Segoe UI" fillColor="14334392" lineColor="10710316">
               <children xmi:type="notation:DecorationNode" xmi:id="_sk798qYDEfGXZskN-8AnPQ" type="5005"/>
-              <layoutConstraint xmi:type="notation:Bounds" xmi:id="_sk798aYDEfGXZskN-8AnPQ" x="1840" y="59"/>
+              <layoutConstraint xmi:type="notation:Bounds" xmi:id="_sk798aYDEfGXZskN-8AnPQ" x="1840" y="59" width="140" height="70"/>
             </children>
             <children xmi:type="notation:Shape" xmi:id="_sk_BRKYDEfGXZskN-8AnPQ" type="3008" element="_sk_BQKYDEfGXZskN-8AnPQ" fontName="Segoe UI">
               <children xmi:type="notation:DecorationNode" xmi:id="_sk_BRqYDEfGXZskN-8AnPQ" type="5026">
