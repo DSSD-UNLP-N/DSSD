@@ -153,6 +153,19 @@ def test_publicar_completa_las_dos_tareas_y_setea_la_ventana(login, emergencia, 
 
 
 @responses.activate
+def test_las_tareas_del_coordinador_las_ejecuta_el_coordinador_que_publica(login, emergencia, seeded):
+    """Bonita registra al ejecutor: tiene que ser quien publicó, y el técnico solo lee y setea variables."""
+    _con_lote(seeded, emergencia)
+    _mock_publicacion()
+    login("coordinador.regional").post(f"/emergencias/{emergencia}/publicar", data={"ventana_fin": _futuro()})
+
+    logins = [c.request.body for c in responses.calls if c.request.url.endswith("/loginservice")]
+    assert len(logins) == 2
+    assert "username=walter.bates" in logins[0]
+    assert "username=coordinador.regional" in logins[1]
+
+
+@responses.activate
 def test_reintento_cuando_revisar_ya_estaba_completada(login, emergencia, seeded):
     """Si un intento anterior se cortó en el medio, publicar de nuevo sigue desde 'Publicar…'."""
     _con_lote(seeded, emergencia)

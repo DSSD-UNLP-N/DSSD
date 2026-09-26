@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from app.core.config import Settings
-from app.integrations.bonita import BONITA_TEST_USERS, BonitaClient
+from app.integrations.bonita import BonitaClient
 from app.services.lotes import publicar_en_bonita
 
 pytestmark = [
@@ -54,11 +54,11 @@ def test_publicar_deja_el_caso_esperando_ofertas_con_la_ventana_elegida(bonita, 
         "emergenciaId": 998, "municipioId": 1, "nivelGravedad": "ALTO", "ventanaOfertasISO": provisoria})
 
     municipio = BonitaClient(settings.bonita_base_url, settings.bonita_timeout_seconds)
-    municipio.login(BONITA_TEST_USERS["MUNICIPIO"], settings.bonita_test_password)
+    municipio.login("operador.municipal", settings.bonita_test_password)
     municipio.complete_task_as_self(bonita.wait_for_task(case_id, "Registrar Emergencia")["id"])
 
     ventana = datetime.now().astimezone() + timedelta(hours=2)
-    publicar_en_bonita(settings, case_id, ventana)
+    publicar_en_bonita(settings, case_id, ventana, "coordinador.regional")
 
     tarea = bonita.wait_for_task(case_id, "Cargar Ofertas de Ayuda")
     assert tarea is not None, "tras publicar, el caso tiene que quedar esperando las ofertas"

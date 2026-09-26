@@ -13,8 +13,8 @@ import requests
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.integrations.bonita import BONITA_TEST_USERS, BonitaClient, BonitaError
-from app.models import Emergencia, EstadoEmergencia, Lote
+from app.integrations.bonita import BonitaClient, BonitaError
+from app.models import Emergencia, EstadoEmergencia, Lote, Usuario
 from app.schemas.lotes import LoteIn
 
 TAREA_REVISAR = "Revisar Informacion"
@@ -53,7 +53,7 @@ def borrar_lote(db: Session, emergencia: Emergencia, lote_id: int) -> None:
 
 
 def publicar_convocatoria(
-    db: Session, settings: Settings, *, emergencia: Emergencia, ventana_fin: datetime
+    db: Session, settings: Settings, *, emergencia: Emergencia, coordinador: Usuario, ventana_fin: datetime
 ) -> Emergencia:
     if emergencia.estado is not EstadoEmergencia.REGISTRADA:
         raise PublicacionError("Esta convocatoria ya fue publicada.")
@@ -67,7 +67,7 @@ def publicar_convocatoria(
         raise PublicacionError("El cierre de la ventana tiene que ser una fecha futura.")
 
     try:
-        publicar_en_bonita(settings, emergencia.bonita_case_id, ventana_fin)
+        publicar_en_bonita(settings, emergencia.bonita_case_id, ventana_fin, coordinador.username)
     except (BonitaError, requests.RequestException) as exc:
         db.rollback()
         raise PublicacionError(
@@ -82,12 +82,15 @@ def publicar_convocatoria(
     return emergencia
 
 
-def publicar_en_bonita(settings: Settings, case_id: int, ventana_fin: datetime) -> None:
-    """Completa "Revisar…" (si sigue pendiente), setea la ventana y completa "Publicar…"."""
+def publicar_en_bonita(settings: Settings, case_id: int, ventana_fin: datetime, coordinador_username: str) -> None:
+    """Completa "Revisar…" (si sigue pendiente), setea la ventana y completa "Publicar…".
+
+    Lo administrativo (leer tareas, setear la variable) va con el usuario técnico; las tareas
+    humanas las ejecuta el coordinador que publicó, para que el motor lo registre a él."""
     admin = BonitaClient(settings.bonita_base_url, settings.bonita_timeout_seconds)
     admin.login(settings.bonita_username, settings.bonita_password)
     coordinador = BonitaClient(settings.bonita_base_url, settings.bonita_timeout_seconds)
-    coordinador.login(BONITA_TEST_USERS["COORDINADOR"], settings.bonita_test_password)
+    coordinador.login(coordinador_username, settings.bonita_test_password)
 
     # Si un intento anterior se cortó después de completar "Revisar…", el caso ya está en
     # "Publicar…": se sigue desde ahí en vez de fallar.

@@ -11,15 +11,6 @@ import requests
 
 CONTRACT_INPUTS = ("emergenciaId", "municipioId", "nivelGravedad", "ventanaOfertasISO")
 
-# Usuario de prueba de la organización Bonita (entrega-2/ACME.xml) por rol de nuestra
-# app (app.models.Rol): quien nuestra app usa para completar tareas humanas de esa lane.
-BONITA_TEST_USERS = {
-    "MUNICIPIO": "operador.municipal",
-    "COORDINADOR": "coordinador.regional",
-    "ONG": "ong.cruzroja",
-}
-
-
 class BonitaError(RuntimeError):
     pass
 

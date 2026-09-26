@@ -89,7 +89,8 @@ def publicar(
     except ValidationError as exc:
         return _volver(emergencia_id, mensaje_de_error(exc, ETIQUETAS))
     try:
-        publicar_convocatoria(db, settings, emergencia=emergencia, ventana_fin=datos.ventana_fin)
+        publicar_convocatoria(
+            db, settings, emergencia=emergencia, coordinador=user, ventana_fin=datos.ventana_fin)
     except PublicacionError as exc:
         return _volver(emergencia_id, str(exc))
     return _volver(emergencia_id)

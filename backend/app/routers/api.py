@@ -188,6 +188,7 @@ def api_publicar(
             db,
             settings,
             emergencia=emergencia,
+            coordinador=user,
             ventana_fin=PublicacionIn(ventana_fin=body.ventana_fin).ventana_fin,
         )
     except PublicacionError as exc:
