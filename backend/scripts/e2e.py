@@ -32,6 +32,12 @@ from app.seed import DEMO_PASSWORD  # noqa: E402
 TAREA_TRAS_ALTA = "Revisar Informacion"
 TAREA_TRAS_PUBLICAR = "Cargar Ofertas de Ayuda"
 TAREA_TRAS_TIMER = "Evaluar Cobertura"
+TAREA_PUBLICAR = "Publicar Convocatoria"
+
+# Quién hace el recorrido. El motor tiene que registrar estos mismos usuarios como
+# iniciador del caso y ejecutor de cada tarea, no un genérico por rol ni el técnico.
+USUARIO_MUNICIPAL = "operador.municipal"
+USUARIO_COORDINADOR = "coordinador.regional"
 
 LOTES = [("Agua potable", "5000", "litros", "PRINCIPAL"),
          ("Frazadas", "800", "unidades", "PRINCIPAL"),
@@ -84,6 +90,18 @@ def tarea_activa(admin: BonitaClient, case_id) -> str:
     return tareas[0]["displayName"] if tareas else "(ninguna)"
 
 
+def iniciado_por(admin: BonitaClient, case_id) -> str:
+    return admin.user_name(admin.get_case(case_id)["started_by"])
+
+
+def ejecutada_por(admin: BonitaClient, case_id, prefijo: str) -> str:
+    """Quién completó esa tarea según el historial del motor, no según lo que cree la app."""
+    for tarea in admin.get_archived_human_tasks(case_id):
+        if tarea["displayName"].startswith(prefijo):
+            return admin.user_name(tarea["executedBy"])
+    return "(no ejecutada)"
+
+
 def esperar_tarea(admin: BonitaClient, case_id, prefijo: str, segundos: int) -> bool:
     limite = time.monotonic() + segundos
     while time.monotonic() < limite:
@@ -116,7 +134,7 @@ def fase_anonimo(r: Reporte, app: str) -> None:
 def fase_municipio(r: Reporte, app: str) -> tuple[int, int] | None:
     r.fase("Operador Municipal: alta de la emergencia")
     muni = Cliente(app)
-    resp = muni.login("operador.municipal")
+    resp = muni.login(USUARIO_MUNICIPAL)
     r.check("Login correcto", resp.status_code == 303 and destino(resp) == "/", str(resp.status_code))
     r.check("Home con el menú del perfil", "Registrar emergencia" in muni.get("/").text)
 
@@ -168,6 +186,12 @@ def fase_bonita_alta(r: Reporte, admin: BonitaClient, emergencia_id: int, case_i
             variables.get("emergenciaId") == str(emergencia_id) and variables.get("nivelGravedad") == "ALTO",
             str({k: variables.get(k) for k in ("emergenciaId", "nivelGravedad")}))
 
+    r.fase("Bonita: trazabilidad del alta (¿quién figura que lo hizo?)")
+    inicio = iniciado_por(admin, case_id)
+    r.check(f"El caso lo inició '{USUARIO_MUNICIPAL}', no el usuario técnico", inicio == USUARIO_MUNICIPAL, inicio)
+    ejecutor = ejecutada_por(admin, case_id, "Registrar Emergencia")
+    r.check(f"'Registrar Emergencia' la ejecutó '{USUARIO_MUNICIPAL}'", ejecutor == USUARIO_MUNICIPAL, ejecutor)
+
 
 def fase_ong_sin_publicar(r: Reporte, app: str, emergencia_id: int) -> Cliente:
     r.fase("ONG: todavía no ve nada (la convocatoria no está publicada)")
@@ -186,7 +210,7 @@ def fase_ong_sin_publicar(r: Reporte, app: str, emergencia_id: int) -> Cliente:
 def fase_lotes(r: Reporte, app: str, emergencia_id: int) -> Cliente:
     r.fase("Centro Coordinador: lotes de necesidades")
     coord = Cliente(app)
-    coord.login("coordinador.regional")
+    coord.login(USUARIO_COORDINADOR)
     r.check("Ve la emergencia de otro municipio", coord.get(f"/emergencias/{emergencia_id}").status_code == 200)
 
     resp = coord.post(f"/emergencias/{emergencia_id}/lotes",
@@ -240,6 +264,10 @@ def fase_bonita_publicacion(r: Reporte, admin: BonitaClient, case_id: int, venta
     guardada = admin.get_case_variables(case_id).get("ventanaOfertasISO", "")
     r.check("ventanaOfertasISO = la ventana publicada", guardada.startswith(ventana.isoformat()[:16]),
             f"{guardada} vs {ventana.isoformat()}")
+
+    for prefijo in (TAREA_TRAS_ALTA, TAREA_PUBLICAR):
+        ejecutor = ejecutada_por(admin, case_id, prefijo)
+        r.check(f"'{prefijo}…' la ejecutó '{USUARIO_COORDINADOR}'", ejecutor == USUARIO_COORDINADOR, ejecutor)
 
 
 def fase_ya_publicada(r: Reporte, coord: Cliente, emergencia_id: int, ventana: datetime) -> None:

@@ -87,6 +87,25 @@ class BonitaClient:
         resp.raise_for_status()
         return resp.json()
 
+    def get_case(self, case_id) -> dict:
+        resp = self._request("GET", f"/API/bpm/case/{case_id}")
+        resp.raise_for_status()
+        return resp.json()
+
+    def get_archived_human_tasks(self, case_id) -> list:
+        """Tareas ya completadas del caso. Traen 'executedBy': con quién las ejecutó el motor."""
+        resp = self._request(
+            "GET", "/API/bpm/archivedHumanTask", params={"f": f"caseId={case_id}", "p": 0, "c": 100}
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def user_name(self, user_id) -> str:
+        """Username a partir del id numérico que devuelven 'started_by' y 'executedBy'."""
+        resp = self._request("GET", f"/API/identity/user/{user_id}")
+        resp.raise_for_status()
+        return resp.json()["userName"]
+
     def current_user_id(self) -> str:
         resp = self._request("GET", "/API/system/session/unusedid")
         resp.raise_for_status()

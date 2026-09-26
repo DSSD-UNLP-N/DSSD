@@ -101,6 +101,26 @@ def test_get_human_tasks_pide_la_pagina_completa(client):
 
 
 @responses.activate
+def test_get_case_devuelve_quien_inicio_el_caso(client):
+    responses.add(responses.GET, f"{BASE}/API/bpm/case/1001", json={"id": "1001", "started_by": "101"})
+    assert client.get_case("1001")["started_by"] == "101"
+
+
+@responses.activate
+def test_get_archived_human_tasks_trae_el_ejecutor(client):
+    responses.add(responses.GET, f"{BASE}/API/bpm/archivedHumanTask",
+                  json=[{"displayName": "Registrar Emergencia", "executedBy": "101"}])
+    assert client.get_archived_human_tasks("1001")[0]["executedBy"] == "101"
+    assert "p=0" in responses.calls[0].request.url and "c=100" in responses.calls[0].request.url
+
+
+@responses.activate
+def test_user_name_resuelve_el_id_numerico(client):
+    responses.add(responses.GET, f"{BASE}/API/identity/user/101", json={"id": "101", "userName": "operador.municipal"})
+    assert client.user_name("101") == "operador.municipal"
+
+
+@responses.activate
 def test_wait_for_task_reintenta_hasta_que_la_tarea_aparece(client):
     """Bonita crea la tarea siguiente con un instante de retraso."""
     url = f"{BASE}/API/bpm/humanTask"
@@ -166,6 +186,9 @@ def test_todas_las_llamadas_llevan_timeout(monkeypatch):
         lambda: c.current_user_id(),
         lambda: c.assign_task("1", "2"),
         lambda: c.execute_task("1"),
+        lambda: c.get_case("1"),
+        lambda: c.get_archived_human_tasks("1"),
+        lambda: c.user_name("101"),
     ]
     for llamada in llamadas:
         with pytest.raises(requests.ConnectTimeout):
