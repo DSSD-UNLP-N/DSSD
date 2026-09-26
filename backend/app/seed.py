@@ -16,8 +16,13 @@ MUNICIPIO = ("Bahía Blanca", "Buenos Aires")
 ONGS = [("Cruz Roja Argentina", "30-54666544-5"), ("Bomberos Voluntarios", "30-68522415-9")]
 
 # (username, nombre, rol, ONG a la que representa). Los MUNICIPIO van al municipio de arriba.
+# Cada uno tiene su homónimo en la organización de Bonita (entrega-2/ACME.xml): la app
+# completa las tareas del motor logueándose con el mismo username.
 DEMO_USERS = [
     ("operador.municipal", "Operador Municipal", Rol.MUNICIPIO, None),
+    # Segundo municipal: con uno solo, "la tarea la ejecutó el usuario del rol" se cumple
+    # por casualidad y no prueba nada.
+    ("operador.municipal2", "Operador Municipal (segundo turno)", Rol.MUNICIPIO, None),
     ("coordinador.regional", "Centro Coordinador Regional", Rol.COORDINADOR, None),
     ("ong.cruzroja", "Representante Cruz Roja", Rol.ONG, "Cruz Roja Argentina"),
     ("ong.bomberos", "Representante Bomberos Voluntarios", Rol.ONG, "Bomberos Voluntarios"),
