@@ -9,3 +9,7 @@ backend/app/static/islands/
 # Documentacion de trabajo interna (no se entrega)
 entrega-1/*.md
 .claude/
+
+# Logs de uvicorn al correr la app a mano
+backend/uvicorn.log
+backend/uvicorn.err
