@@ -1,5 +1,5 @@
 """Alta de emergencia de punta a punta (T-05/T-06/T-07/T-08): formulario, POST,
-instanciación en Bonita y completar 'Registrar Emergencia' como el Municipio.
+instanciación en Bonita y completar 'Registrar Emergencia', todo como el operador que la pidió.
 Bonita queda simulado con HTTP mockeado (`responses`); no necesita Studio.
 """
 from urllib.parse import urlparse
@@ -14,16 +14,13 @@ BASE_PATH = urlparse(BASE).path  # "/bonita"
 
 
 def _mock_alta_ok(case_id="4242", task_id="9001"):
-    # login admin (walter.bates) para instanciar
+    # un solo login, como el operador que hizo el alta: instancia y completa la tarea él mismo
     responses.add(responses.POST, f"{BASE}/loginservice", status=204,
-                  headers={"Set-Cookie": "X-Bonita-API-Token=tok-admin; Path=/"})
+                  headers={"Set-Cookie": "X-Bonita-API-Token=tok-muni; Path=/"})
     responses.add(responses.GET, f"{BASE}/API/bpm/process", json=[{"id": "555"}])
     responses.add(responses.POST, f"{BASE}/API/bpm/process/555/instantiation", json={"caseId": case_id})
     responses.add(responses.GET, f"{BASE}/API/bpm/humanTask",
                   json=[{"id": task_id, "displayName": "Registrar Emergencia"}])
-    # login como operador.municipal para completar la tarea
-    responses.add(responses.POST, f"{BASE}/loginservice", status=204,
-                  headers={"Set-Cookie": "X-Bonita-API-Token=tok-muni; Path=/"})
     responses.add(responses.GET, f"{BASE}/API/system/session/unusedid", json={"user_id": "77"})
     responses.add(responses.PUT, f"{BASE}/API/bpm/userTask/{task_id}", status=200)
     responses.add(responses.POST, f"{BASE}/API/bpm/userTask/{task_id}/execution", status=200)
@@ -59,13 +56,25 @@ def test_alta_crea_emergencia_instancia_y_completa_registrar(login, seeded):
         assert e.municipio_id is not None
         assert e.estado.value == "REGISTRADA"
 
-    # las 8 llamadas HTTP se hicieron en el orden esperado (dos logins intercalados)
+    # las 7 llamadas HTTP se hicieron en el orden esperado, todas con la misma sesión
     paths = [urlparse(c.request.url).path[len(BASE_PATH):] for c in responses.calls]
     assert paths == [
         "/loginservice", "/API/bpm/process", "/API/bpm/process/555/instantiation",
-        "/API/bpm/humanTask", "/loginservice", "/API/system/session/unusedid",
+        "/API/bpm/humanTask", "/API/system/session/unusedid",
         "/API/bpm/userTask/9001", "/API/bpm/userTask/9001/execution",
     ]
+
+
+@responses.activate
+def test_el_alta_se_hace_con_el_usuario_que_la_pidio_y_no_con_el_tecnico(login, seeded):
+    """Bonita registra iniciador y ejecutor: cada operador tiene que figurar con su nombre."""
+    _mock_alta_ok()
+    login("operador.municipal2").post("/emergencias/nueva", data=DATOS)
+
+    logins = [c.request.body for c in responses.calls if c.request.url.endswith("/loginservice")]
+    assert len(logins) == 1
+    assert "username=operador.municipal2" in logins[0]
+    assert "walter.bates" not in logins[0]
 
 
 @responses.activate
