@@ -32,6 +32,11 @@ def test_pedir_mas_de_lo_que_tiene_no_alcanza(client):
     assert "Solicitado 10, disponible 4" in r["observaciones"]
 
 
+def test_el_resultado_trae_nombre_y_unidad_del_recurso(client):
+    r = _unico(client, "MEDIO", CRUZ_ROJA, "PARAMEDICO", 1)
+    assert (r["tipo_recurso"], r["nombre_recurso"], r["unidad"]) == ("PARAMEDICO", "Paramédico", "personas")
+
+
 def test_pedir_justo_lo_que_tiene_alcanza(client):
     assert _unico(client, "MEDIO", CRUZ_ROJA, "PARAMEDICO", 4)["alcanza"] is True
 

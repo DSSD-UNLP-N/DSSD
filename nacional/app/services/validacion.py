@@ -93,6 +93,6 @@ def _resultado(
 
     return ResultadoValidacionOut(
         cuit=cuit, ong=ong.nombre if ong else None, tipo_recurso=tipo.codigo,
-        solicitado=solicitado, disponible=disponible, alcanza=alcanza,
+        nombre_recurso=tipo.nombre, unidad=tipo.unidad, solicitado=solicitado, disponible=disponible, alcanza=alcanza,
         nivel=nivel, riesgo_permitido=riesgo, asignacion_sugerida=asignacion, observaciones=observaciones,
     )

@@ -104,6 +104,8 @@ class ResultadoValidacionOut(BaseModel):
     cuit: str
     ong: str | None  # None = ONG no registrada
     tipo_recurso: str
+    nombre_recurso: str
+    unidad: str
     solicitado: int
     disponible: int
     alcanza: bool
