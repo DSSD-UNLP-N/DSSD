@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool  # noqa: E402
 
 from app.db import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
+from app.seed import seed  # noqa: E402
 
 
 @pytest.fixture
@@ -30,6 +31,8 @@ def db(session_factory):
 
 @pytest.fixture
 def client(session_factory):
+    seed(session_factory)
+
     def _get_db():
         with session_factory() as session:
             yield session
