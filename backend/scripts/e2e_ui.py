@@ -291,13 +291,16 @@ def fase_ongs(u: Ui, app: str, emergencia_id: int) -> None:
 
     cargar_oferta(u, ["0", "0", "0", "0"])
     u.ve("al menos un lote", "Oferta vacía: pide cargar algo")
-    cargar_oferta(u, ["12", "5000", "0", "150"])
+    # Cruz Roja tiene 3000 litros de agua y 5000 raciones en el Sistema Nacional (nacional/app/seed.py).
+    cargar_oferta(u, ["0", "9000", "0", "0"])
+    u.ve("No alcanza tu inventario", "Ofrecer más agua de la que tiene: rechazado")
+    cargar_oferta(u, ["0", "2500", "0", "150"])
     u.ve("versión 1", "Primer envío: versión 1")
     u.foto("ong-cruzroja-v1")
-    cargar_oferta(u, ["12", "8000", "0", "0"])
+    cargar_oferta(u, ["0", "3000", "0", "0"])
     u.ve("versión 2", "Reenvío: versión 2")
     u.ve("Mi oferta vigente")
-    u.ve("8000 / 8000", "La v2 muestra el agua ofrecida completa")
+    u.ve("3000 / 8000", "La v2 muestra el agua ofrecida")
     # 1 = la fila del lote pedido; si la v1 siguiera vigente habría una 2ª en "Mi oferta vigente"
     u.r.check("La v2 reemplaza a la v1: sin raciones",
               u.page.locator(".lote-row", has_text="Ración de alimento").count() == 1)
@@ -308,9 +311,13 @@ def fase_ongs(u: Ui, app: str, emergencia_id: int) -> None:
     u.entrar(app, "ong.bomberos")
     u.abrir(app, emergencia_id)
     u.r.check("Bomberos no ve la oferta de Cruz Roja", u.page.get_by_text("Cruz Roja").count() == 0)
+    # Bomberos tiene 20 brigadistas y 4 autobombas.
     cargar_oferta(u, ["18", "0", "3", "0"])
     u.ve("versión 1", "Bomberos: versión 1")
     u.foto("ong-bomberos")
+    u.page.locator(".field", has_text="Autobomba").get_by_role("button", name="Retirar de este lote").click()
+    u.ve("Retiraste tu oferta a ese lote", "Bomberos retira las autobombas: versión 2 sin ese lote")
+    u.r.check("La v2 ya no ofrece autobombas", u.page.locator(".lote-row", has_text="Autobomba").count() == 1)
     u.salir()
 
 

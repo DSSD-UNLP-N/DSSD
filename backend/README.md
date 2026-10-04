@@ -98,6 +98,12 @@ API en `:8002`; ver su README). `app/integrations/nacional.py` es el cliente; si
 cargar un lote da 503 y no guarda nada. Config en `.env` (`NACIONAL_*`). Los tests la reemplazan por
 `FakeNacional` (`tests/conftest.py`).
 
+Tope de ofertas (`app/services/ofertas.py`): al enviar una oferta se suma lo que la ONG ofrece de cada recurso
+con lo que ya ofreció en sus otras convocatorias abiertas y se valida contra su inventario en el Sistema
+Nacional (`POST /validaciones`); si no alcanza, 400 y no se guarda nada. Reducir o retirar nunca consulta a la
+API. Retirar un lote = reenviar la oferta sin él; retirarla toda = reenviarla vacía (versión sin ítems,
+`retirada: true`); el historial de versiones no se toca.
+
 ## Bonita
 
 `app/integrations/bonita.py` es el cliente REST (login con CSRF, instanciar,

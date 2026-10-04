@@ -2,6 +2,13 @@
 
 Rama `modelado-tomas-e-3` (desde `origin/main`, 04/10/2026). Entrega 3: semana del 22/10.
 
+## Estado (04/10)
+
+Fases 0 a 7 hechas y probadas contra servidores reales (nacional :8002 + backend :8001 + SPA): API Nacional
+completa, lote con tipo del catálogo, tope de ofertas y retirar. **Fase 8 a medio hacer**: README, job de CI y
+`e2e_ui.py` actualizados, pero `e2e_ui.py` **no se corrió** (Bonita Studio estaba apagado; el flujo completo con
+Bonita sigue pendiente). Las fases usaron ~1 commit cada una.
+
 ## Objetivo
 
 1. **Modelado**: catálogo de certificaciones y tipos de recurso, ONGs del registro nacional,
