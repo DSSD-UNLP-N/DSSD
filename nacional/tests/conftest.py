@@ -23,6 +23,12 @@ def session_factory():
 
 
 @pytest.fixture
+def db(session_factory):
+    with session_factory() as session:
+        yield session
+
+
+@pytest.fixture
 def client(session_factory):
     def _get_db():
         with session_factory() as session:
