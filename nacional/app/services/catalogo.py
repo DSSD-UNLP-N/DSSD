@@ -1,7 +1,14 @@
-"""Consultas del catálogo y reglas de competencia compartidas con la validación."""
+"""Reglas de competencia compartidas entre la ficha de la ONG y la validación."""
 from datetime import date
 
-from app.models import Ong, Riesgo, TipoRecurso
+from app.models import Ong, OngCertificacion, Riesgo, TipoRecurso
+
+
+def certificacion_de(ong: Ong, tipo: TipoRecurso) -> OngCertificacion | None:
+    """La certificación de la ONG que habilita el tipo de recurso, o None."""
+    if tipo.certificacion_id is None:
+        return None
+    return next((c for c in ong.certificaciones if c.certificacion_id == tipo.certificacion_id), None)
 
 
 def riesgo_permitido(ong: Ong, tipo: TipoRecurso, hoy: date) -> Riesgo | None:
@@ -11,7 +18,7 @@ def riesgo_permitido(ong: Ong, tipo: TipoRecurso, hoy: date) -> Riesgo | None:
     vigente. None = la ONG no está certificada para este recurso (o la certificación venció)."""
     if tipo.certificacion_id is None:
         return Riesgo.CRITICO
-    cert = next((c for c in ong.certificaciones if c.certificacion_id == tipo.certificacion_id), None)
+    cert = certificacion_de(ong, tipo)
     if cert is None or cert.vence_el < hoy:
         return None
     return cert.riesgo_max

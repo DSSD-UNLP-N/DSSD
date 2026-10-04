@@ -1,3 +1,4 @@
+import enum
 from datetime import date
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -75,3 +76,43 @@ class InventarioItemIn(BaseModel):
 
 class InventarioIn(BaseModel):
     items: list[InventarioItemIn] = Field(min_length=1)
+
+
+class NivelCompetencia(str, enum.Enum):
+    PLENA = "PLENA"  # certificación vigente y suficiente para la gravedad
+    PARCIAL = "PARCIAL"  # certificación vigente pero de menor riesgo que la gravedad
+    SUPERVISADA = "SUPERVISADA"  # sin certificación vigente (o ONG no habilitada)
+
+
+class Asignacion(str, enum.Enum):
+    PRINCIPAL = "PRINCIPAL"
+    APOYO = "APOYO"
+
+
+class ItemValidacionIn(BaseModel):
+    cuit: str
+    tipo_recurso: str
+    cantidad: int = Field(gt=0)
+
+
+class ValidacionIn(BaseModel):
+    gravedad: Riesgo
+    items: list[ItemValidacionIn] = Field(min_length=1)
+
+
+class ResultadoValidacionOut(BaseModel):
+    cuit: str
+    ong: str | None  # None = ONG no registrada
+    tipo_recurso: str
+    solicitado: int
+    disponible: int
+    alcanza: bool
+    nivel: NivelCompetencia
+    riesgo_permitido: Riesgo | None
+    asignacion_sugerida: Asignacion
+    observaciones: list[str]
+
+
+class ValidacionOut(BaseModel):
+    alcanza_todo: bool
+    resultados: list[ResultadoValidacionOut]
