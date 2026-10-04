@@ -28,6 +28,14 @@ def _tipo_out(t: TipoRecurso) -> TipoRecursoOut:
     )
 
 
+def inventario_out(ong: Ong, i: Inventario, hoy: date) -> InventarioOut:
+    return InventarioOut(
+        tipo_recurso=i.tipo_recurso.codigo, nombre=i.tipo_recurso.nombre, unidad=i.tipo_recurso.unidad,
+        cantidad_total=i.cantidad_total, cantidad_comprometida=i.cantidad_comprometida,
+        disponible=i.disponible, riesgo_permitido=riesgo_permitido(ong, i.tipo_recurso, hoy),
+    )
+
+
 @router.get("/tipos-recurso", response_model=list[TipoRecursoOut], summary="Catálogo de tipos de recurso")
 def listar_tipos_recurso(db: Session = Depends(get_db)):
     tipos = db.scalars(
@@ -79,14 +87,7 @@ def ficha_ong(cuit: str, db: Session = Depends(get_db)):
             )
             for c in ong.certificaciones
         ],
-        inventario=[
-            InventarioOut(
-                tipo_recurso=i.tipo_recurso.codigo, nombre=i.tipo_recurso.nombre, unidad=i.tipo_recurso.unidad,
-                cantidad_total=i.cantidad_total, cantidad_comprometida=i.cantidad_comprometida,
-                disponible=i.disponible, riesgo_permitido=riesgo_permitido(ong, i.tipo_recurso, hoy),
-            )
-            for i in sorted(ong.inventario, key=lambda i: i.tipo_recurso.codigo)
-        ],
+        inventario=[inventario_out(ong, i, hoy) for i in sorted(ong.inventario, key=lambda i: i.tipo_recurso.codigo)],
     )
 
 

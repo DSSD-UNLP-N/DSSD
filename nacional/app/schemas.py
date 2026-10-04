@@ -1,6 +1,6 @@
 from datetime import date
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models import CategoriaRecurso, EstadoOng, Riesgo
 
@@ -66,3 +66,12 @@ class DisponibilidadOut(BaseModel):
     cantidad_comprometida: int
     disponible: int
     por_ong: list[DisponibilidadOngOut]
+
+
+class InventarioItemIn(BaseModel):
+    tipo_recurso: str
+    cantidad_total: int = Field(ge=0)
+
+
+class InventarioIn(BaseModel):
+    items: list[InventarioItemIn] = Field(min_length=1)

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 
 from app.config import get_settings
-from app.routers import catalogo
+from app.routers import catalogo, inventario
 
 app = FastAPI(
     title=get_settings().app_name,
@@ -9,8 +9,8 @@ app = FastAPI(
     "y validación de ofertas por niveles de competencia.",
 )
 
-
 app.include_router(catalogo.router)
+app.include_router(inventario.router)
 
 
 @app.get("/health", tags=["estado"])
