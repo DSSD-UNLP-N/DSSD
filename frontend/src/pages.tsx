@@ -549,23 +549,16 @@ export function DetallePage() {
     }
   }
 
-  async function oferta(ev: FormEvent<HTMLFormElement>) {
-    ev.preventDefault();
-    if (!e) return;
-    const fd = new FormData(ev.currentTarget);
-    const items = e.lotes
-      .map((l) => ({ lote_id: l.id, recurso: l.recurso, cantidad: Number(fd.get(`lote_${l.id}`) || 0) }))
-      .filter((i) => i.cantidad > 0);
-    if (!items.length) {
-      setError("Indicá cuánto ofrecés para al menos un lote.");
-      return;
-    }
+  async function enviarOferta(
+    items: { lote_id: number; recurso: string; cantidad: number }[],
+    mensaje: (o: Oferta) => string,
+  ) {
     setBusy(true);
     setError(null);
     setOk(null);
     try {
       const o = await api.createOferta(id, items);
-      setOk(`Oferta enviada (versión ${o.version_actual})`);
+      setOk(mensaje(o));
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error");
@@ -574,8 +567,35 @@ export function DetallePage() {
     }
   }
 
-  const ventanaAbierta = !!e.ventana_ofertas_fin && new Date(e.ventana_ofertas_fin) > new Date();
+  async function oferta(ev: FormEvent<HTMLFormElement>) {
+    ev.preventDefault();
+    if (!e) return;
+    const fd = new FormData(ev.currentTarget);
+    const items = e.lotes
+      .map((l) => ({ lote_id: l.id, recurso: l.recurso, cantidad: Number(fd.get(`lote_${l.id}`) || 0) }))
+      .filter((i) => i.cantidad > 0);
+    if (!items.length) {
+      setError("Indicá cuánto ofrecés para al menos un lote (o usá «Retirar mi oferta»).");
+      return;
+    }
+    await enviarOferta(items, (o) => `Oferta enviada (versión ${o.version_actual})`);
+  }
+
   const miOferta = user!.rol === "ONG" ? ofertas[0] : undefined;
+
+  // Retirar = reenviar la oferta sin ese lote (versión nueva); sin ningún lote, la oferta queda retirada.
+  const itemsVigentes = (miOferta && !miOferta.retirada ? miOferta.items : []).map(({ lote_id, recurso, cantidad }) => ({
+    lote_id,
+    recurso,
+    cantidad,
+  }));
+  const retirarLote = (loteId: number) =>
+    enviarOferta(
+      itemsVigentes.filter((i) => i.lote_id !== loteId),
+      (o) => (o.retirada ? "Retiraste tu oferta" : `Retiraste tu oferta a ese lote (versión ${o.version_actual})`),
+    );
+
+  const ventanaAbierta = !!e.ventana_ofertas_fin && new Date(e.ventana_ofertas_fin) > new Date();
   const cantidadOfrecida = (o: Oferta | undefined, loteId: number) =>
     o?.items.find((i) => i.lote_id === loteId)?.cantidad;
 
@@ -712,8 +732,17 @@ export function DetallePage() {
 
         {user!.rol === "ONG" && e.estado === "CONVOCATORIA" && ventanaAbierta && (
           <form className="panel" style={{ maxWidth: 620, marginBottom: "1.35rem" }} onSubmit={oferta}>
-            <h3>{miOferta ? `Modificar oferta (vas por la versión ${miOferta.version_actual})` : "Cargar oferta"}</h3>
-            <p className="hint">Cada envío reemplaza la oferta completa y queda como una versión nueva. Dejá en 0 lo que no ofrecés.</p>
+            <h3>
+              {itemsVigentes.length
+                ? `Modificar oferta (vas por la versión ${miOferta!.version_actual})`
+                : miOferta
+                  ? `Cargar oferta (retiraste la anterior, versión ${miOferta.version_actual})`
+                  : "Cargar oferta"}
+            </h3>
+            <p className="hint">
+              Cada envío reemplaza la oferta completa y queda como una versión nueva. Dejá en 0 lo que no ofrecés. No podés
+              ofrecer más de lo que tenés disponible, sumando tus ofertas en todas las convocatorias abiertas.
+            </p>
             {e.lotes.map((l) => (
               <div className="field" key={`${l.id}-${miOferta?.version_actual ?? 0}`}>
                 <label>
@@ -723,13 +752,28 @@ export function DetallePage() {
                   name={`lote_${l.id}`}
                   type="number"
                   min={0}
-                  defaultValue={cantidadOfrecida(miOferta, l.id) ?? 0}
+                  defaultValue={(!miOferta?.retirada && cantidadOfrecida(miOferta, l.id)) || 0}
                 />
+                {!!itemsVigentes.find((i) => i.lote_id === l.id) && (
+                  <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void retirarLote(l.id)}>
+                    Retirar de este lote
+                  </button>
+                )}
               </div>
             ))}
             <button className="btn btn-primary" disabled={busy}>
               Enviar oferta
             </button>
+            {itemsVigentes.length > 0 && (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={busy}
+                onClick={() => void enviarOferta([], () => "Retiraste tu oferta")}
+              >
+                Retirar mi oferta
+              </button>
+            )}
           </form>
         )}
 
@@ -740,6 +784,7 @@ export function DetallePage() {
               {ofertas.map((o) => (
                 <div key={o.id} style={{ marginBottom: "0.75rem" }}>
                   <strong>{o.ong_nombre}</strong> <span className="badge muted">v{o.version_actual}</span>
+                  {o.retirada && <span className="badge muted">retirada</span>}
                   {e.lotes.map((l) => {
                     const c = cantidadOfrecida(o, l.id);
                     return c ? (

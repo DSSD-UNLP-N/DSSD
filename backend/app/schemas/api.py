@@ -76,7 +76,8 @@ class OfertaItemIn(BaseModel):
 
 
 class OfertaIn(BaseModel):
-    items: list[OfertaItemIn] = Field(min_length=1)
+    # Cada envío es la oferta completa. Lista vacía = retirar la oferta (queda como versión nueva sin ítems).
+    items: list[OfertaItemIn]
 
 
 class OfertaItemOut(BaseModel):
@@ -95,5 +96,6 @@ class OfertaOut(BaseModel):
     ong_nombre: str
     version_actual: int
     items: list[OfertaItemOut]
+    retirada: bool = False  # la versión vigente no tiene ítems
 
     model_config = ConfigDict(from_attributes=True)

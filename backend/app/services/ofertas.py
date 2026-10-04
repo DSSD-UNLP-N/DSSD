@@ -1,7 +1,7 @@
 """T-11/T-12: ofertas de las ONGs, versionadas, con tope por inventario.
 
 Cada envío es la oferta completa: una versión nueva con todos sus ítems; las anteriores no se
-tocan (trazabilidad). Antes de guardar, lo que la ONG ofrece de cada recurso se suma con lo que
+tocan (trazabilidad). Retirar un lote es enviar la oferta sin él; retirarla toda, enviarla vacía. Antes de guardar, lo que la ONG ofrece de cada recurso se suma con lo que
 ya ofreció en sus otras convocatorias abiertas y se valida contra el inventario del Sistema
 Nacional: no puede prometer más de lo que tiene, ni el mismo recurso dos veces.
 """
@@ -67,6 +67,8 @@ def publicar_oferta(
         .where(Oferta.emergencia_id == emergencia.id, Oferta.ong_id == ong.id)
         .options(selectinload(Oferta.items))
     )
+    if not items and (oferta is None or not _items_vigentes(oferta)):
+        raise OfertaError("No tenés una oferta para retirar")
     _validar_tope(db, nacional, emergencia, ong, oferta, items, ahora)
 
     if oferta is None:
@@ -83,6 +85,10 @@ def publicar_oferta(
     return oferta
 
 
+def _items_vigentes(oferta: Oferta) -> list[OfertaItem]:
+    return [i for i in oferta.items if i.version == oferta.version_actual]
+
+
 def _validar_tope(
     db: Session, nacional: NacionalClient, emergencia: Emergencia, ong: Ong,
     oferta_actual: Oferta | None, items: list[OfertaItemIn], ahora: datetime,
@@ -96,8 +102,8 @@ def _validar_tope(
             nuevos[por_lote[item.lote_id].tipo_recurso] += item.cantidad
     previos: Counter[str] = Counter()
     if oferta_actual is not None:
-        for i in oferta_actual.items:
-            if i.version == oferta_actual.version_actual and por_lote[i.lote_id].tipo_recurso:
+        for i in _items_vigentes(oferta_actual):
+            if por_lote[i.lote_id].tipo_recurso:
                 previos[por_lote[i.lote_id].tipo_recurso] += i.cantidad
 
     # Solo se controla lo que esta oferta aumenta: reducir o retirar nunca se rechaza (ni consulta a la API).
@@ -117,8 +123,8 @@ def _validar_tope(
     for otra in otras:
         if not _esta_abierta(otra.emergencia, ahora):
             continue
-        for i in otra.items:
-            if i.version == otra.version_actual and i.lote.tipo_recurso in a_validar:
+        for i in _items_vigentes(otra):
+            if i.lote.tipo_recurso in a_validar:
                 total[i.lote.tipo_recurso] += i.cantidad
 
     resultado = nacional.validar(

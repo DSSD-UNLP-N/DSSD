@@ -53,6 +53,7 @@ export type Oferta = {
   ong_nombre: string;
   version_actual: number;
   items: { lote_id: number; recurso: string; cantidad: number; version: number }[];
+  retirada: boolean;
 };
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {

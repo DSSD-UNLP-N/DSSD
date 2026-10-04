@@ -143,3 +143,89 @@ def test_sin_cuit_no_se_puede_validar_el_inventario(api_login, seeded):
         s.commit()
     r = _ofrecer(api_login("ong.cruzroja"), em, (lote, 1))
     assert r.status_code == 400 and "CUIT" in r.json()["detail"]
+
+
+# --- retirar ---------------------------------------------------------------
+# Retirar un lote = reenviar la oferta sin él (versión nueva); retirarla toda = reenviarla vacía.
+
+def _items(seeded, emergencia):
+    from app.models import OfertaItem
+
+    with seeded() as s:
+        oferta = s.query(Oferta).filter_by(emergencia_id=emergencia).one()
+        return sorted((i.version, i.lote_id, i.cantidad) for i in s.query(OfertaItem).filter_by(oferta_id=oferta.id))
+
+
+def test_retirar_un_lote_deja_una_version_sin_ese_item_y_conserva_el_historial(api_login, seeded):
+    em, (a, b) = _emergencia(seeded, ("PARAMEDICO", 5), ("RACION_ALIMENTO", 100))
+    c = api_login("ong.cruzroja")
+    assert _ofrecer(c, em, (a, 2), (b, 50)).status_code == 201
+    r = _ofrecer(c, em, (a, 2))  # retira el lote b
+    assert r.status_code == 201
+    assert (r.json()["version_actual"], [i["lote_id"] for i in r.json()["items"]], r.json()["retirada"]) == (2, [a], False)
+    assert _items(seeded, em) == [(1, a, 2), (1, b, 50), (2, a, 2)]  # la v1 sigue intacta
+
+
+def test_retirar_toda_la_oferta(api_login, seeded):
+    em, (lote,) = _emergencia(seeded, ("PARAMEDICO", 5))
+    c = api_login("ong.cruzroja")
+    _ofrecer(c, em, (lote, 3))
+    r = _ofrecer(c, em)
+    assert r.status_code == 201
+    assert (r.json()["version_actual"], r.json()["items"], r.json()["retirada"]) == (2, [], True)
+    assert _items(seeded, em) == [(1, lote, 3)]  # el historial no se pierde
+    # el Coordinador la ve marcada como retirada
+    (oferta,) = api_login("coordinador.regional").get(f"/api/emergencias/{em}/ofertas").json()
+    assert oferta["retirada"] is True
+
+
+def test_retirar_libera_el_cupo_para_otra_convocatoria(api_login, seeded):
+    em1, (l1,) = _emergencia(seeded, ("PARAMEDICO", 10))
+    em2, (l2,) = _emergencia(seeded, ("PARAMEDICO", 10))
+    c = api_login("ong.cruzroja")
+    assert _ofrecer(c, em1, (l1, 4)).status_code == 201
+    assert _ofrecer(c, em2, (l2, 3)).status_code == 400  # 4 + 3 > 4
+    assert _ofrecer(c, em1).status_code == 201  # retira
+    assert _ofrecer(c, em2, (l2, 3)).status_code == 201
+
+
+def test_volver_a_ofertar_despues_de_retirar_se_valida_de_nuevo(api_login, seeded, nacional):
+    em, (lote,) = _emergencia(seeded, ("PARAMEDICO", 10))
+    c = api_login("ong.cruzroja")
+    _ofrecer(c, em, (lote, 2))
+    _ofrecer(c, em)
+    assert _ofrecer(c, em, (lote, 9)).status_code == 400
+    r = _ofrecer(c, em, (lote, 4))
+    assert (r.status_code, r.json()["version_actual"], r.json()["retirada"]) == (201, 3, False)
+
+
+def test_retirar_no_depende_del_sistema_nacional(api_login, seeded, nacional):
+    em, (lote,) = _emergencia(seeded, ("PARAMEDICO", 10))
+    c = api_login("ong.cruzroja")
+    _ofrecer(c, em, (lote, 2))
+    nacional.caido = True
+    r = _ofrecer(c, em)
+    assert r.status_code == 201 and r.json()["retirada"] is True
+    assert len(nacional.validaciones) == 1  # solo la del alta
+
+
+def test_no_se_puede_retirar_lo_que_no_se_ofreci(api_login, seeded):
+    em, (lote,) = _emergencia(seeded, ("PARAMEDICO", 10))
+    c = api_login("ong.cruzroja")
+    r = _ofrecer(c, em)
+    assert r.status_code == 400 and "No tenés una oferta para retirar" in r.json()["detail"]
+    assert _ofertas(seeded) == 0
+    _ofrecer(c, em, (lote, 1))
+    _ofrecer(c, em)
+    assert _ofrecer(c, em).status_code == 400  # ya estaba retirada
+
+
+def test_con_la_ventana_vencida_no_se_puede_retirar(api_login, seeded):
+    em, (lote,) = _emergencia(seeded, ("PARAMEDICO", 10))
+    c = api_login("ong.cruzroja")
+    _ofrecer(c, em, (lote, 2))
+    with seeded() as s:
+        s.get(Emergencia, em).ventana_ofertas_fin = _sin_zona(-timedelta(minutes=1))
+        s.commit()
+    r = _ofrecer(c, em)
+    assert r.status_code == 400 and "cerró" in r.json()["detail"]
