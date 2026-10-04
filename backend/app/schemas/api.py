@@ -27,9 +27,18 @@ class LoginIn(BaseModel):
     password: str = Field(min_length=1)
 
 
+class TipoRecursoOut(BaseModel):
+    codigo: str
+    nombre: str
+    categoria: str
+    unidad: str
+    certificacion_requerida: str | None = None
+
+
 class LoteOut(BaseModel):
     id: int
     recurso: str
+    tipo_recurso: str | None = None
     cantidad: int
     unidad: str
     tipo: TipoLote

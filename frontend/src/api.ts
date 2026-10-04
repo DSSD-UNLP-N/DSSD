@@ -10,9 +10,18 @@ export type Usuario = {
 export type Lote = {
   id: number;
   recurso: string;
+  tipo_recurso: string | null;
   cantidad: number;
   unidad: string;
   tipo: "PRINCIPAL" | "APOYO";
+};
+
+export type TipoRecurso = {
+  codigo: string;
+  nombre: string;
+  categoria: string;
+  unidad: string;
+  certificacion_requerida: string | null;
 };
 
 export type Emergencia = {
@@ -103,9 +112,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  tiposRecurso: () => request<TipoRecurso[]>("/api/tipos-recurso"),
   createLote: (
     id: number,
-    body: { recurso: string; cantidad: number; unidad: string; tipo: string },
+    body: { tipo_recurso: string; detalle?: string; cantidad: number; tipo: string },
   ) =>
     request<Lote>(`/api/emergencias/${id}/lotes`, {
       method: "POST",

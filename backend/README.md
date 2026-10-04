@@ -91,6 +91,13 @@ Sin sesión: páginas → redirige a `/login`; `/api/*` → 401 JSON. Rol incorr
 Para sumar una pantalla al menú de un perfil, poner su ruta en `MENU_POR_ROL`
 (`app/routers/pages.py`). Las plantillas reciben `session_user` y `rol_label` solas.
 
+## Sistema Nacional (nacional/)
+
+Los lotes se cargan eligiendo un tipo de recurso del catálogo del Sistema Nacional (`nacional/`, otra
+API en `:8002`; ver su README). `app/integrations/nacional.py` es el cliente; si la API no responde,
+cargar un lote da 503 y no guarda nada. Config en `.env` (`NACIONAL_*`). Los tests la reemplazan por
+`FakeNacional` (`tests/conftest.py`).
+
 ## Bonita
 
 `app/integrations/bonita.py` es el cliente REST (login con CSRF, instanciar,

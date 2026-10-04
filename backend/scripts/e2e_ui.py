@@ -2,6 +2,7 @@
 paso, lo que se ve en pantalla y lo que pasó en Bonita. Complementa a e2e.py, que habla HTTP.
 
 Requisitos: Bonita Studio con el proceso desplegado, backend (`uvicorn app.main:app --port 8001`),
+API Nacional (`cd nacional; uvicorn app.main:app --port 8002`, migrada y con seed),
 frontend (`npm run dev`), base migrada + seedeada, y Chrome o Chromium instalado.
 
     pip install -r requirements-dev.txt
@@ -105,10 +106,11 @@ def ejecutada_por(admin: BonitaClient, case_id, prefijo: str) -> str:
 
 
 CAPTURAS = Path(__file__).resolve().parent / "capturas"
-LOTES = [("Brigadistas forestales", "30", "personas", "PRINCIPAL"),
-         ("Agua potable", "8000", "litros", "PRINCIPAL"),
-         ("Camiones cisterna", "3", "unidades", "PRINCIPAL"),
-         ("Raciones de comida", "200", "raciones", "APOYO")]
+# (código del catálogo del Sistema Nacional, nombre que muestra, cantidad, tipo de lote)
+LOTES = [("BRIGADISTA_FORESTAL", "Brigadista forestal", "30", "PRINCIPAL"),
+         ("AGUA_POTABLE", "Agua potable", "8000", "PRINCIPAL"),
+         ("AUTOBOMBA", "Autobomba", "3", "PRINCIPAL"),
+         ("RACION_ALIMENTO", "Ración de alimento", "200", "APOYO")]
 PLAZO = 8000  # ms que se espera a que la SPA muestre algo
 
 
@@ -228,14 +230,13 @@ def fase_lotes_y_publicacion(u: Ui, app: str, emergencia_id: int, espera: int) -
     u.abrir(app, emergencia_id)
     u.ve("todavía no cargó lotes", "Sin lotes al principio")
 
-    for recurso, cantidad, unidad, tipo in LOTES:
-        u.page.locator("[name=recurso]").fill(recurso)
+    for codigo, nombre, cantidad, tipo in LOTES:
+        u.page.locator("[name=tipo_recurso]").select_option(codigo)
         u.page.locator("[name=cantidad]").fill(cantidad)
-        u.page.locator("[name=unidad]").fill(unidad)
         u.page.locator("[name=tipo]").select_option(tipo)
         u.page.get_by_role("button", name="Agregar lote").click()
-        u.ve(recurso, f"Lote '{recurso}' aparece en la lista")
-    u.r.check("El formulario se limpia tras agregar", u.page.locator("[name=recurso]").input_value() == "")
+        u.ve(nombre, f"Lote '{nombre}' aparece en la lista")
+    u.r.check("El formulario se limpia tras agregar", u.page.locator("[name=tipo_recurso]").input_value() == "")
     u.r.check("El lote de apoyo sale etiquetado", u.page.get_by_text("APOYO").count() > 0)
     u.foto("coordinador-lotes")
 
@@ -299,7 +300,7 @@ def fase_ongs(u: Ui, app: str, emergencia_id: int) -> None:
     u.ve("8000 / 8000", "La v2 muestra el agua ofrecida completa")
     # 1 = la fila del lote pedido; si la v1 siguiera vigente habría una 2ª en "Mi oferta vigente"
     u.r.check("La v2 reemplaza a la v1: sin raciones",
-              u.page.locator(".lote-row", has_text="Raciones de comida").count() == 1)
+              u.page.locator(".lote-row", has_text="Ración de alimento").count() == 1)
     u.foto("ong-cruzroja-v2")
     u.salir()
 

@@ -9,6 +9,7 @@ from app.core.deps import require_role
 from app.core.security import verify_password
 from app.core.labels import ROL_LABEL, TIPO_LABEL
 from app.db import get_db
+from app.integrations.nacional import NacionalClient, NacionalError, get_nacional
 from app.models import Emergencia, Oferta, OfertaItem, Rol, Usuario
 from app.schemas.api import (
     EmergenciaOut,
@@ -18,6 +19,7 @@ from app.schemas.api import (
     OfertaItemOut,
     OfertaOut,
     PublicarIn,
+    TipoRecursoOut,
     UsuarioOut,
 )
 from app.schemas.emergencias import EmergenciaIn
@@ -149,18 +151,36 @@ def api_detalle(
     return out
 
 
+NACIONAL_CAIDO = "El Sistema Nacional no responde; probá de nuevo en un momento."
+
+
+@router.get("/tipos-recurso", response_model=list[TipoRecursoOut])
+def api_tipos_recurso(
+    user: Usuario = Depends(require_role()),
+    nacional: NacionalClient = Depends(get_nacional),
+):
+    """Catálogo de recursos del Sistema Nacional, para elegir el tipo de cada lote."""
+    try:
+        return nacional.tipos_recurso()
+    except NacionalError as exc:
+        raise HTTPException(status_code=503, detail=NACIONAL_CAIDO) from exc
+
+
 @router.post("/emergencias/{emergencia_id}/lotes", response_model=LoteOut, status_code=201)
 def api_crear_lote(
     emergencia_id: int,
     body: LoteIn,
     user: Usuario = Depends(require_role(Rol.COORDINADOR)),
     db: Session = Depends(get_db),
+    nacional: NacionalClient = Depends(get_nacional),
 ):
     emergencia = _require_visible(db, user, emergencia_id)
     try:
-        lote = agregar_lote(db, emergencia, body)
+        lote = agregar_lote(db, emergencia, body, nacional)
     except LoteError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except NacionalError as exc:
+        raise HTTPException(status_code=503, detail=NACIONAL_CAIDO) from exc
     return lote
 
 

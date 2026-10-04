@@ -1,7 +1,7 @@
 import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { api, type Emergencia, type Meta, type Oferta, type Rol } from "./api";
+import { api, type Emergencia, type Meta, type Oferta, type Rol, type TipoRecurso } from "./api";
 import { useAuth } from "./auth";
 import { FlowBubbles } from "./FlowBubbles";
 import { PageHeader } from "./PageHeader";
@@ -473,6 +473,7 @@ export function DetallePage() {
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [tipos, setTipos] = useState<TipoRecurso[]>([]);
 
   const reload = useCallback(async () => {
     const [em, m, of] = await Promise.all([api.getEmergencia(id), api.meta(), api.listOfertas(id)]);
@@ -484,6 +485,16 @@ export function DetallePage() {
   useEffect(() => {
     void reload().catch((err) => setError(String(err.message || err)));
   }, [reload]);
+
+  // El catálogo de recursos (Sistema Nacional) solo hace falta para cargar lotes.
+  const cargaLotes = user?.rol === "COORDINADOR" && e?.estado === "REGISTRADA";
+  useEffect(() => {
+    if (!cargaLotes) return;
+    api
+      .tiposRecurso()
+      .then(setTipos)
+      .catch((err) => setError(err instanceof Error ? err.message : "Error"));
+  }, [cargaLotes]);
 
   if (!e) {
     return (
@@ -505,9 +516,9 @@ export function DetallePage() {
     setOk(null);
     try {
       await api.createLote(id, {
-        recurso: String(fd.get("recurso")),
+        tipo_recurso: String(fd.get("tipo_recurso")),
+        detalle: String(fd.get("detalle") ?? "").trim() || undefined,
         cantidad: Number(fd.get("cantidad")),
-        unidad: String(fd.get("unidad")),
         tipo: String(fd.get("tipo")),
       });
       form.reset();
@@ -648,16 +659,25 @@ export function DetallePage() {
             <form className="panel" onSubmit={addLote}>
               <h3>Agregar lote</h3>
               <div className="field">
-                <label>Recurso</label>
-                <input name="recurso" placeholder="Paramédicos, raciones…" required />
+                <label>Tipo de recurso</label>
+                <select name="tipo_recurso" required defaultValue="">
+                  <option value="" disabled>
+                    Elegí un recurso…
+                  </option>
+                  {tipos.map((t) => (
+                    <option key={t.codigo} value={t.codigo}>
+                      {t.nombre} ({t.unidad})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>Detalle (opcional)</label>
+                <input name="detalle" maxLength={80} placeholder="con equipo de trauma…" />
               </div>
               <div className="field">
                 <label>Cantidad</label>
                 <input name="cantidad" type="number" min={1} defaultValue={5} required />
-              </div>
-              <div className="field">
-                <label>Unidad</label>
-                <input name="unidad" defaultValue="personas" required />
               </div>
               <div className="field">
                 <label>Tipo</label>
