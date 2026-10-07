@@ -4,10 +4,11 @@ Rama `modelado-tomas-e-3` (desde `origin/main`, 04/10/2026). Entrega 3: semana d
 
 ## Estado (04/10)
 
-Fases 0 a 7 hechas y probadas contra servidores reales (nacional :8002 + backend :8001 + SPA): API Nacional
-completa, lote con tipo del catálogo, tope de ofertas y retirar. **Fase 8 a medio hacer**: README, job de CI y
-`e2e_ui.py` actualizados, pero `e2e_ui.py` **no se corrió** (Bonita Studio estaba apagado; el flujo completo con
-Bonita sigue pendiente). Las fases usaron ~1 commit cada una.
+Fases 0 a 8 hechas y probadas contra servidores reales (Bonita + nacional :8002 + backend :8001 + SPA): API Nacional
+completa, lote con tipo del catálogo, tope de ofertas y retirar. Tests: nacional 55, backend 153 (2 omitidos).
+`scripts/e2e_ui.py` en navegador real con Bonita: 59/59, y 62 con `--timer 90` (el boundary timer sigue andando).
+Pendiente: pushear la rama / PR, avisar al equipo de la tabla `inventario`, y lo opcional (pantalla de inventario de
+la ONG, mostrar el nivel de competencia en la SPA).
 
 ## Objetivo
 
