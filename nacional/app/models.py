@@ -4,9 +4,9 @@
 disponible = cantidad_total - cantidad_comprometida.
 """
 import enum
-from datetime import date
+from datetime import date, datetime
 
-from sqlalchemy import CheckConstraint, Date, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -116,3 +116,35 @@ class Inventario(Base):
     @property
     def disponible(self) -> int:
         return self.cantidad_total - self.cantidad_comprometida
+
+
+class CierreOperativo(Base):
+    """Aviso de que una ONG terminó una actividad: libera lo que tenía bloqueado."""
+
+    __tablename__ = "cierre_operativo"
+    __table_args__ = (UniqueConstraint("ong_id", "referencia", name="uq_cierre_ong_referencia"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ong_id: Mapped[int] = mapped_column(ForeignKey("ong.id"))
+    # Identificador de la actividad en el sistema que informa el cierre (emergencia, lote, etc.).
+    referencia: Mapped[str] = mapped_column(String(80))
+    informado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    ong: Mapped[Ong] = relationship()
+    items: Mapped[list["CierreItem"]] = relationship(back_populates="cierre", cascade="all, delete-orphan")
+
+
+class CierreItem(Base):
+    __tablename__ = "cierre_item"
+    __table_args__ = (
+        UniqueConstraint("cierre_id", "tipo_recurso_id"),
+        CheckConstraint("cantidad > 0", name="ck_cierre_item_cantidad"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cierre_id: Mapped[int] = mapped_column(ForeignKey("cierre_operativo.id"))
+    tipo_recurso_id: Mapped[int] = mapped_column(ForeignKey("tipo_recurso.id"))
+    cantidad: Mapped[int] = mapped_column(Integer)
+
+    cierre: Mapped[CierreOperativo] = relationship(back_populates="items")
+    tipo_recurso: Mapped[TipoRecurso] = relationship()

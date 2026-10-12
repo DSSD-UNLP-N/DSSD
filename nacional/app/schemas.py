@@ -1,5 +1,5 @@
 import enum
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -118,3 +118,33 @@ class ResultadoValidacionOut(BaseModel):
 class ValidacionOut(BaseModel):
     alcanza_todo: bool
     resultados: list[ResultadoValidacionOut]
+
+
+class CierreItemIn(BaseModel):
+    tipo_recurso: str
+    cantidad: int = Field(gt=0)
+
+
+class CierreIn(BaseModel):
+    cuit: str = Field(min_length=1, max_length=13)
+    referencia: str = Field(min_length=1, max_length=80)
+    items: list[CierreItemIn] = Field(min_length=1)
+
+
+class CierreItemOut(BaseModel):
+    tipo_recurso: str
+    nombre: str
+    unidad: str
+    cantidad_liberada: int
+    cantidad_total: int
+    cantidad_comprometida: int
+    disponible: int
+
+
+class CierreOut(BaseModel):
+    id: int
+    cuit: str
+    ong: str
+    referencia: str
+    informado_en: datetime
+    items: list[CierreItemOut]

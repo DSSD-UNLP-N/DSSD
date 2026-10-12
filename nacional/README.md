@@ -2,7 +2,7 @@
 
 API externa de la consigna (servicio 3): catálogo de certificaciones y recursos, inventario de las
 ONGs y validación de ofertas por niveles de competencia. Corre aparte de `backend/` (la app local).
-Por ahora sin JWT, Docker ni deploy: SQLite en desarrollo, modelos portables a Postgres.
+SQLite en desarrollo y Postgres en la nube. JWT todavía no está: entra como `Depends` sin cambiar estos contratos.
 
 ## Correr
 
@@ -31,6 +31,9 @@ lee la misma variable; si exportás una en la terminal, la leen los dos.
 | PUT | `/ongs/{cuit}/inventario` | Declara `cantidad_total` por tipo de recurso (upsert); 409 si queda por debajo de lo comprometido |
 | GET | `/recursos/disponibilidad?tipo_recurso=` | Disponibilidad global (solo ONGs habilitadas) con desglose por ONG |
 | POST | `/validaciones` | Valida cantidades y competencia; **no guarda nada** |
+| POST | `/cierres` | Informa el fin de una actividad y libera lo bloqueado (`cantidad_comprometida`) |
+| GET | `/cierres/{id}` | Un cierre ya informado |
+| GET | `/ongs/{cuit}/cierres` | Cierres de una ONG |
 
 ### `POST /validaciones`
 
@@ -45,6 +48,32 @@ suman. Siempre responde 200 con un resultado por (ONG, recurso):
 La app local (`backend/`) lo usa al publicar una oferta: suma lo que la ONG ya ofreció en sus otras convocatorias
 abiertas y rechaza si no alcanza. Más adelante lo puede usar Bonita al vencer el timer.
 
+### `POST /cierres`
+
+Informa al sistema central que la ONG terminó una actividad y libera los recursos que tenía bloqueados.
+Resta `cantidad_comprometida` (el bloqueo, servicio 4, es quien la suma). No toca `cantidad_total`.
+
+```json
+{ "cuit": "30-54666544-5", "referencia": "emergencia-12", "items": [{ "tipo_recurso": "PARAMEDICO", "cantidad": 2 }] }
+```
+
+- 201 con lo liberado y el inventario que queda (`comprometida` / `disponible`).
+- 409 si se pide liberar más de lo bloqueado, si el tipo no está en el inventario, o si esa `referencia` ya se informó para la misma ONG. Si un ítem falla, no se libera ninguno.
+- La misma actividad se identifica con `referencia`: un segundo aviso no vuelve a descontar.
+
+## Docker y deploy
+
+```bash
+docker build -t rescuesync-nacional ./nacional
+docker run --rm -p 8002:8002 rescuesync-nacional
+```
+
+Al arrancar corre `alembic upgrade head` y el seed. `DATABASE_URL` en Postgres (`postgres://` de Render se normaliza a `postgresql+psycopg://`). Sin esa variable usa SQLite dentro del contenedor.
+
+El blueprint está en `render.yaml` (servicio web + Postgres free). En Render: New → Blueprint, con este repo. La URL pública es la del servicio `rescuesync-nacional` (`/health` y `/docs`).
+
+Para que un push a `main` o `dev` despliegue solo: en el servicio, Settings → Deploy Hook, y guardar esa URL como secret `RENDER_DEPLOY_HOOK_URL` del repo. El workflow `.github/workflows/deploy-nacional.yml` construye la imagen en cada PR y, si el secret existe, dispara el hook.
+
 ## Tests
 
 ```bash
@@ -58,9 +87,9 @@ app/
   main.py      # app FastAPI
   config.py    # variables de entorno (DATABASE_URL)
   db.py        # engine, sesión, Base
-  models.py    # ong, certificacion, tipo_recurso, ong_certificacion, inventario
+  models.py    # ong, certificacion, tipo_recurso, ong_certificacion, inventario, cierre
   schemas.py   # entrada/salida de la API
-  routers/     # catalogo, inventario, validacion
+  routers/     # catalogo, inventario, validacion, cierre
   services/    # reglas (competencia y validación), sin HTTP
   seed.py      # datos de demo (mismos CUIT que backend/)
 migrations/    # Alembic

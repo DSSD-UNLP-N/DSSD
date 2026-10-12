@@ -1,0 +1,37 @@
+name: Deploy API Nacional
+
+on:
+  pull_request:
+    paths:
+      - "nacional/**"
+      - "render.yaml"
+      - ".github/workflows/deploy-nacional.yml"
+  push:
+    branches: [main, dev]
+    paths:
+      - "nacional/**"
+      - "render.yaml"
+      - ".github/workflows/deploy-nacional.yml"
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Construir la imagen
+        run: docker build -t rescuesync-nacional ./nacional
+
+  deploy:
+    needs: image
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar el deploy en Render
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "RENDER_DEPLOY_HOOK_URL no está en los secrets: la imagen se construyó y el deploy automático queda pendiente de ese hook."
+            exit 0
+          fi
+          curl -fsS -X POST "$HOOK"
