@@ -107,3 +107,22 @@ real y la API de la nube. Crea dos emergencias, carga un lote de paramédicos en
 
 Bloques A, B, C y E en verde; D se comporta como dice la tabla. Lo que falle se anota acá con su causa antes de
 corregir nada.
+
+## Resultados (12/10, Bonita real + API en la nube)
+
+| Bloque | Cómo | Resultado |
+|---|---|---|
+| A | `nacional/scripts/verificar_despliegue.py https://sistema-nacional-latest.onrender.com` | **38/38** |
+| B | `backend/scripts/e2e_ui.py` con el backend apuntando a la nube | **59/59** |
+| C | `backend/scripts/escenario_tope.py` (dos corridas seguidas) | **39/39** y **39/39** |
+| D1 | API inaccesible: cargar lote y aumentar oferta | 503, nada guardado (0 lotes nuevos, misma versión) |
+| D2 | API inaccesible: retirar | 201, retirada |
+| D3 | API que tarda 8 s, timeout de 5 s | 503 → con la nube dormida (42-51 s en frío) hay que subir el timeout o despertarla antes |
+| E | `pytest` | nacional **55**; backend **156** (2 omitidos que necesitan Bonita), incluidos 3 tests nuevos del alta |
+
+**Hallazgo y corrección.** En la primera corrida de C, el alta de una emergencia justo después de publicar otra dio
+502: Bonita creó el caso pero la tarea "Registrar Emergencia" tardó más de 5 s en aparecer. La base local quedó bien
+(rollback), pero en Bonita quedó un **caso huérfano** (10003) trabado en esa tarea y con `emergenciaId` 7, que SQLite
+reusó para la emergencia siguiente (caso 10004): dos casos apuntando a la misma emergencia. Corregido en
+`services/emergencias.py`: la espera de la tarea pasa a 20 s y, si el alta falla después de crear el caso, el usuario
+técnico lo borra (`DELETE /API/bpm/case/{id}`, probado contra Bonita real). El huérfano 10003 se borró a mano.
