@@ -75,6 +75,10 @@ Antes: Bonita desplegado, `NACIONAL_BASE_URL` apuntando a la nube, despertar el 
 6. Opcionales: pantalla de inventario de la ONG; mostrar el nivel de competencia en la SPA; tope contra la cantidad
    que pide cada lote.
 
+Liberación (Franco, 12/10, rama `franco/e3-liberacion-y-deploy`): `POST /cierres` informa el fin de una actividad
+y resta `cantidad_comprometida`. Imagen en `nacional/Dockerfile` y blueprint `render.yaml`; la URL pública sale
+al conectar el repo en Render.
+
 ## Objetivo
 
 1. **Modelado**: catálogo de certificaciones y tipos de recurso, ONGs del registro nacional,
