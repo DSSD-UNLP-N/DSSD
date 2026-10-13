@@ -97,19 +97,60 @@ def test_si_bonita_no_responde_a_tiempo_no_queda_emergencia_a_medias(login, seed
         assert s.query(Emergencia).count() == 0
 
 
-@responses.activate
-def test_si_no_aparece_la_tarea_registrar_no_queda_emergencia_a_medias(login, seeded):
+def _mock_caso_sin_tarea(case_id="1"):
+    """El caso se crea pero 'Registrar Emergencia' nunca aparece."""
     responses.add(responses.POST, f"{BASE}/loginservice", status=204,
                   headers={"Set-Cookie": "X-Bonita-API-Token=tok; Path=/"})
     responses.add(responses.GET, f"{BASE}/API/bpm/process", json=[{"id": "555"}])
-    responses.add(responses.POST, f"{BASE}/API/bpm/process/555/instantiation", json={"caseId": "1"})
-    responses.add(responses.GET, f"{BASE}/API/bpm/humanTask", json=[])  # nunca aparece
+    responses.add(responses.POST, f"{BASE}/API/bpm/process/555/instantiation", json={"caseId": case_id})
+    responses.add(responses.GET, f"{BASE}/API/bpm/humanTask", json=[])
+
+
+@responses.activate
+def test_si_no_aparece_la_tarea_registrar_no_queda_emergencia_a_medias(login, seeded):
+    _mock_caso_sin_tarea()
+    responses.add(responses.DELETE, f"{BASE}/API/bpm/case/1", status=200)
 
     r = login("operador.municipal").post(ALTA, json=DATOS)
 
     assert r.status_code == 502
     with seeded() as s:
         assert s.query(Emergencia).count() == 0
+
+
+@responses.activate
+def test_si_el_alta_falla_despues_de_crear_el_caso_se_borra_en_bonita(login, seeded):
+    """Sin esto quedaba un caso huérfano trabado en 'Registrar Emergencia' (visto en Studio el 12/10),
+    con un emergenciaId que SQLite reusa para la emergencia siguiente."""
+    _mock_caso_sin_tarea(case_id="77")
+    responses.add(responses.DELETE, f"{BASE}/API/bpm/case/77", status=200)
+
+    login("operador.municipal").post(ALTA, json=DATOS)
+
+    borrados = [c for c in responses.calls if c.request.method == "DELETE"]
+    assert [urlparse(c.request.url).path[len(BASE_PATH):] for c in borrados] == ["/API/bpm/case/77"]
+    # lo borra el usuario técnico: un operador no tiene permiso para borrar casos
+    logins = [c.request.body for c in responses.calls if c.request.url.endswith("/loginservice")]
+    assert "username=walter.bates" in logins[-1]
+
+
+@responses.activate
+def test_si_tampoco_se_puede_borrar_el_caso_la_respuesta_es_la_misma(login, seeded):
+    _mock_caso_sin_tarea()
+    responses.add(responses.DELETE, f"{BASE}/API/bpm/case/1", status=500)
+
+    r = login("operador.municipal").post(ALTA, json=DATOS)
+
+    assert r.status_code == 502 and "probá de nuevo" in r.json()["detail"]
+    with seeded() as s:
+        assert s.query(Emergencia).count() == 0
+
+
+@responses.activate
+def test_si_falla_antes_de_crear_el_caso_no_se_borra_nada(login, seeded):
+    responses.add(responses.POST, f"{BASE}/loginservice", status=401)
+    login("operador.municipal").post(ALTA, json=DATOS)
+    assert not [c for c in responses.calls if c.request.method == "DELETE"]
 
 
 def _campos_con_error(r) -> set[str]:

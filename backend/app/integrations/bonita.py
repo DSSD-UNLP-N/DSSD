@@ -57,6 +57,11 @@ class BonitaClient:
         resp.raise_for_status()
         return resp.json()["caseId"]
 
+    def delete_case(self, case_id) -> None:
+        """Borra el caso entero. Requiere un usuario administrador (el técnico)."""
+        resp = self._request("DELETE", f"/API/bpm/case/{case_id}")
+        resp.raise_for_status()
+
     def set_case_variable(self, case_id, name: str, value, java_type: str) -> None:
         resp = self._request(
             "PUT", f"/API/bpm/caseVariable/{case_id}/{name}", json={"value": value, "type": java_type}
