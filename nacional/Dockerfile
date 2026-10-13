@@ -13,10 +13,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copiar el proyecto
 COPY . .
 
-# Asegurar permisos de ejecución en el script de arranque
-RUN chmod +x /app/entrypoint.sh
+# Asegurar finales de línea Unix (LF) y permisos de ejecución
+RUN sed -i 's/\r$//' /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 
 # Puerto estándar (Render asigna $PORT automáticamente en runtime)
 EXPOSE 8002
 
-ENTRYPOINT ["/app/entrypoint.sh"]
+ENTRYPOINT ["/bin/sh", "/app/entrypoint.sh"]
