@@ -160,6 +160,7 @@ def test_usuario_municipio_sin_municipio_asignado_no_rompe(login, seeded):
     c.post("/api/auth/logout")
     r = c.post("/api/auth/login", json={"username": "sin.municipio", "password": DEMO_PASSWORD})
     assert r.status_code == 200
+    c.headers["Authorization"] = f"Bearer {r.json()['access_token']}"
 
     r = c.post(ALTA, json=DATOS)
     assert r.status_code == 502

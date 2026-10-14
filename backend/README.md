@@ -50,7 +50,7 @@ Qué protegen:
 - `test_models.py`: restricciones del esquema (únicos, CHECK de enums, cascadas, versiones de oferta).
 - `test_migrations.py`: **las migraciones coinciden con los modelos**. Si falla, cambiaste
   `models/entities.py` sin correr `alembic revision --autogenerate`.
-- `test_auth.py`: login, sesión y 401/403 por rol.
+- `test_auth.py`: login JWT, registro ONG y 401/403 por rol.
 - `test_bonita_client.py`: cliente de Bonita con HTTP simulado.
 - `test_bonita_contract.py`: el contrato de instanciación y las tareas del `.bos`
   (`entrega-2/RescueSync.bos`) coinciden con lo que manda la app. Si cambiás el contrato en
@@ -73,9 +73,18 @@ Usa el Chrome instalado; sin Chrome, `playwright install chromium`.
 
 ## Login y roles (T-04)
 
-Sesión por cookie firmada (`SESSION_SECRET`). Usuarios de demo (`python -m app.seed`,
+Autenticación JWT Bearer firmada con `JWT_SECRET`; la expiración se configura con
+`JWT_EXPIRATION_MINUTES` (60 minutos por defecto). En producción, definir un secreto
+aleatorio fuera del repositorio. Usuarios de demo (`python -m app.seed`,
 pass `demo1234`): `operador.municipal`, `coordinador.regional`, `ong.cruzroja`, `ong.bomberos`,
 `auditor`. Con `SHOW_DEMO_USERS=true` en `.env` el login los lista (solo desarrollo).
+
+`POST /api/auth/login` devuelve `access_token`, `token_type` y `user`.
+`POST /api/auth/register-ong` recibe `ong_nombre`, `cuit` (opcional), `nombre`
+del representante, `username` y `password`; crea la ONG y su primer usuario con
+rol `ONG` y devuelve un JWT. Ambos endpoints responden 409 si el usuario o la
+organización ya existen. En los endpoints protegidos enviar
+`Authorization: Bearer <access_token>`.
 
 Proteger una ruta con el rol:
 
@@ -87,9 +96,9 @@ from app.models import Rol
 def lotes(user: Usuario = Depends(require_role(Rol.COORDINADOR))): ...
 ```
 
-Sin sesión: páginas → redirige a `/login`; `/api/*` → 401 JSON. Rol incorrecto: 403.
-Para sumar una pantalla al menú de un perfil, poner su ruta en `MENU_POR_ROL`
-(`app/routers/pages.py`). Las plantillas reciben `session_user` y `rol_label` solas.
+Sin token o con token inválido: `/api/*` → 401 JSON. Rol incorrecto: 403.
+El logout es stateless: el cliente descarta el token y este deja de servir al
+expirar; no se mantiene una lista de revocación en el servidor.
 
 ## Bonita
 

@@ -2,7 +2,7 @@ import os
 
 # Antes de importar la app: que ningún test toque dev.db ni un Postgres real.
 os.environ["DATABASE_URL"] = "sqlite://"
-os.environ["SESSION_SECRET"] = "test-secret"
+os.environ["JWT_SECRET"] = "test-secret"
 os.environ["BONITA_BASE_URL"] = "http://bonita.test/bonita"  # nunca pegarle a un Bonita real en los tests
 os.environ["SHOW_DEMO_USERS"] = "false"  # que el .env local de cada uno no cambie lo que ven los tests
 
@@ -65,6 +65,7 @@ def login(client):
     def _login(username: str):
         r = client.post("/api/auth/login", json={"username": username, "password": PASSWORD})
         assert r.status_code == 200, f"login de {username} falló: {r.status_code}"
+        client.headers["Authorization"] = f"Bearer {r.json()['access_token']}"
         return client
 
     return _login

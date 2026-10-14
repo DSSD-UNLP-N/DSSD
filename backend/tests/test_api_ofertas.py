@@ -32,6 +32,7 @@ def api_login(client):
         client.post("/api/auth/logout")
         r = client.post("/api/auth/login", json={"username": username, "password": PASSWORD})
         assert r.status_code == 200, r.text
+        client.headers["Authorization"] = f"Bearer {r.json()['access_token']}"
         return client
 
     return _login

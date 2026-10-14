@@ -22,7 +22,8 @@ class Settings(BaseSettings):
     # La primera llamada tras un rato sin uso tarda varios segundos (arranque en frío del motor).
     bonita_timeout_seconds: float = 10.0
     database_url: str = "postgresql+psycopg://rescuesync:rescuesync@localhost:5432/rescuesync"
-    session_secret: str = "dev-only-change-me"
+    jwt_secret: str = "dev-only-change-me"
+    jwt_expiration_minutes: int = 60
     ventana_provisoria_horas: int = 72
     # Muestra los usuarios de demo y su contraseña en el login. Solo para desarrollo/demo.
     show_demo_users: bool = False

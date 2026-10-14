@@ -1,15 +1,16 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import Settings, get_settings
 from app.core.deps import require_role
-from app.core.security import verify_password
+from app.core.security import create_access_token, hash_password, verify_password
 from app.core.labels import ROL_LABEL, TIPO_LABEL
 from app.db import get_db
-from app.models import Emergencia, Oferta, OfertaItem, Rol, Usuario
+from app.models import Emergencia, Oferta, OfertaItem, Ong, Rol, Usuario
 from app.schemas.api import (
     EmergenciaOut,
     LoginIn,
@@ -18,6 +19,8 @@ from app.schemas.api import (
     OfertaItemOut,
     OfertaOut,
     PublicarIn,
+    RegisterOngIn,
+    TokenOut,
     UsuarioOut,
 )
 from app.schemas.emergencias import EmergenciaIn
@@ -87,19 +90,67 @@ def meta(settings: Settings = Depends(get_settings)):
     return {"tipos": TIPO_LABEL, "roles": ROL_LABEL, "demo": demo}
 
 
-@router.post("/auth/login", response_model=UsuarioOut)
-def api_login(body: LoginIn, request: Request, db: Session = Depends(get_db)):
+def _token_response(user: Usuario, settings: Settings) -> TokenOut:
+    return TokenOut(
+        access_token=create_access_token(
+            user.id, settings.jwt_secret, settings.jwt_expiration_minutes
+        ),
+        user=user,
+    )
+
+
+@router.post("/auth/login", response_model=TokenOut)
+def api_login(
+    body: LoginIn,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
     user = db.scalar(select(Usuario).where(Usuario.username == body.username.strip()))
     if user is None or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
-    request.session.clear()
-    request.session.update({"uid": user.id, "nombre": user.nombre, "rol": user.rol.value})
-    return user
+    return _token_response(user, settings)
+
+
+@router.post("/auth/register-ong", response_model=TokenOut, status_code=201)
+def api_register_ong(
+    body: RegisterOngIn,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    username = body.username
+    ong_name = body.ong_nombre
+    cuit = body.cuit
+    if db.scalar(select(Usuario.id).where(Usuario.username == username)):
+        raise HTTPException(status_code=409, detail="El nombre de usuario ya está registrado")
+    if db.scalar(select(Ong.id).where(Ong.nombre == ong_name)):
+        raise HTTPException(status_code=409, detail="La ONG ya está registrada")
+    if cuit and db.scalar(select(Ong.id).where(Ong.cuit == cuit)):
+        raise HTTPException(status_code=409, detail="El CUIT ya está registrado")
+
+    try:
+        ong = Ong(nombre=ong_name, cuit=cuit)
+        db.add(ong)
+        db.flush()
+        user = Usuario(
+            username=username,
+            password_hash=hash_password(body.password),
+            nombre=body.nombre,
+            rol=Rol.ONG,
+            ong_id=ong.id,
+        )
+        db.add(user)
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="La ONG o el usuario ya están registrados") from exc
+    db.refresh(user)
+    return _token_response(user, settings)
 
 
 @router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
-def api_logout(request: Request):
-    request.session.clear()
+def api_logout():
+    # JWT is stateless; clients discard their access token on logout.
+    return None
 
 
 @router.get("/auth/me", response_model=UsuarioOut)
