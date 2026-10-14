@@ -63,17 +63,31 @@ Antes: Bonita desplegado, `NACIONAL_BASE_URL` apuntando a la nube, despertar el 
    3 (reemplaza) y entra 1 en la segunda; **retira** y se libera el cupo.
 5. **Cierre**: `POST /cierres` libera lo bloqueado (cuando esté desplegado y el bloqueo exista).
 
-## Pendiente para cerrar la entrega
+## Pendiente para cerrar la entrega (revisado 14/10)
 
-1. Desplegar la rama de Franco en Render y verificar `/cierres` y que la base sea Postgres.
-2. **Bloqueo/compromiso (servicio 4)**: nadie suma `cantidad_comprometida` todavía; sin esto la liberación solo se
-   prueba tocando la base a mano.
-3. JWT y alta de ONGs (servicio 1).
-4. Subir el timeout del cliente a la nube (5 s es poco con el servicio dormido) y correr `e2e_ui.py` contra la URL
-   pública.
-5. PR de mi rama a `main`, y después la de Franco.
-6. Opcionales: pantalla de inventario de la ONG; mostrar el nivel de competencia en la SPA; tope contra la cantidad
-   que pide cada lote.
+Servicios de la consigna: 2 (catálogo) y 3 (validación) hechos; 5 (liberación, `POST /cierres`) mergeado en
+`modelado-tomas-e-3` (PR #4). Con eso la rama tiene 63 + 156 tests verdes y `verificar_despliegue.py` da 38/38 en local.
+
+1. **La nube está caída** (`sistema-nacional-latest`: timeout y 502 el 14/10). Revisar logs en Render. Hay dos
+   empaquetados en paralelo: Franco (`Dockerfile` + `start.sh` + `render.yaml`, ya en la rama) y Fabrizio
+   (`cloud-deploy-fabri`: otro `Dockerfile` + `entrypoint.sh`, los dos tocan `config.py`). Elegir uno.
+2. **Bloqueo (servicio 4), PR #5 de Leandro** (`POST /adjudicaciones/bloquear`, `/{id}/liberar`). Probado combinado:
+   bloquea con `FOR UPDATE`, es idempotente, 409 sin stock y la validación ve lo bloqueado. Antes de mergear:
+   - su migración cuelga de `0001` igual que la de cierres → **dos cabezas de Alembic**: falla `alembic upgrade head`
+     (y el arranque en la nube). Arreglo: `down_revision = 'b99371d39182'`;
+   - **dos formas de liberar** que no se conocen: si libera `/cierres`, después `/adjudicaciones/{id}/liberar` da 500
+     ("inconsistencia crítica"). Hay que dejar una sola (p. ej. `/cierres` libera el compromiso de su referencia);
+   - usa ids internos (`ong_id`, `tipo_recurso_id`); el resto de la API usa CUIT y códigos, que es lo que conocen la app
+     y Bonita;
+   - no trae tests.
+3. **JWT y registro de ONGs (servicio 1)**: la rama `franco_v` los agrega en la **app local** (`backend/`), no en la API
+   Nacional, que es donde los pide la consigna. Además reemplaza la sesión por cookie sin tocar la SPA (el login de la
+   SPA se rompería) y parte de `main` viejo (sin catálogo ni tope). Hay que llevar `/login` y `POST /ongs` a `nacional/`
+   y proteger sus endpoints.
+4. Juntar todo en una rama, mergear a `main` (la entrega pide repositorio y Dockerfile), redesplegar y verificar con
+   `verificar_despliegue.py` (sumarle bloqueo y cierre). Confirmar que la base en Render sea Postgres.
+5. Timeout del cliente a la nube: 5 s es poco con el servicio dormido (42-51 s en frío).
+6. Opcionales: pantalla de inventario de la ONG; nivel de competencia en la SPA; tope contra lo que pide cada lote.
 
 Liberación (Franco, 12/10, rama `franco/e3-liberacion-y-deploy`): `POST /cierres` informa el fin de una actividad
 y resta `cantidad_comprometida`. Imagen en `nacional/Dockerfile` y blueprint `render.yaml`; la URL pública sale
