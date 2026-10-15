@@ -31,6 +31,7 @@ lee la misma variable; si exportás una en la terminal, la leen los dos.
 | PUT | `/ongs/{cuit}/inventario` | Declara `cantidad_total` por tipo de recurso (upsert); 409 si queda por debajo de lo comprometido |
 | GET | `/recursos/disponibilidad?tipo_recurso=` | Disponibilidad global (solo ONGs habilitadas) con desglose por ONG |
 | POST | `/validaciones` | Valida cantidades y competencia; **no guarda nada** |
+| POST | `/adjudicaciones` | Compromete inventario de forma atómica e idempotente |
 | POST | `/cierres` | Informa el fin de una actividad y libera lo bloqueado (`cantidad_comprometida`) |
 | GET | `/cierres/{id}` | Un cierre ya informado |
 | GET | `/ongs/{cuit}/cierres` | Cierres de una ONG |
@@ -59,6 +60,15 @@ Resta `cantidad_comprometida` (el bloqueo, servicio 4, es quien la suma). No toc
 
 - 201 con lo liberado y el inventario que queda (`comprometida` / `disponible`).
 - 409 si se pide liberar más de lo bloqueado, si el tipo no está en el inventario, o si esa `referencia` ya se informó para la misma ONG. Si un ítem falla, no se libera ninguno.
+
+### `POST /adjudicaciones`
+
+Recibe `referencia_id`, `ong_id`, `emergencia_id` e ítems con `inventario_id` y `cantidad`.
+En PostgreSQL bloquea las filas de inventario con `SELECT ... FOR UPDATE`, valida el stock y
+actualiza `cantidad_comprometida` junto con la cabecera y sus ítems en una única transacción.
+La referencia es única: repetirla devuelve la adjudicación existente con 200 sin volver a
+comprometer recursos; una nueva adjudicación creada responde 201 y el stock insuficiente
+responde 409.
 - La misma actividad se identifica con `referencia`: un segundo aviso no vuelve a descontar.
 
 ## Docker y deploy

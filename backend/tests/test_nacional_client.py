@@ -53,3 +53,17 @@ def test_validar_con_422_o_caida_sale_como_nacional_error():
     responses.add(responses.POST, f"{BASE}/validaciones", status=422, json={"detail": "Tipo de recurso inexistente: X"})
     with pytest.raises(NacionalError):
         NacionalClient(BASE).validar("ALTO", [])
+
+
+@responses.activate
+def test_adjudicar_recursos_manda_el_payload():
+    resultado = {"id": 4, "referencia_id": "emergencia-12"}
+    responses.add(responses.POST, f"{BASE}/adjudicaciones", json=resultado, status=201)
+    datos = {
+        "referencia_id": "emergencia-12",
+        "ong_id": 1,
+        "emergencia_id": 12,
+        "items": [{"inventario_id": 3, "cantidad": 2}],
+    }
+
+    assert NacionalClient(BASE).adjudicar_recursos_nacional(datos) == resultado
