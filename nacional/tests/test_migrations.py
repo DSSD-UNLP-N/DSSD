@@ -14,7 +14,7 @@ from app.db import Base
 NACIONAL = Path(__file__).resolve().parents[1]
 TABLAS = {
     "ong", "certificacion", "tipo_recurso", "ong_certificacion", "inventario",
-    "cierre_operativo", "cierre_item",
+    "cierre_operativo", "cierre_item", "adjudicacion", "adjudicacion_item",
 }
 
 

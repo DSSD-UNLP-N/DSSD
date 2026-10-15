@@ -148,3 +148,37 @@ class CierreItem(Base):
 
     cierre: Mapped[CierreOperativo] = relationship(back_populates="items")
     tipo_recurso: Mapped[TipoRecurso] = relationship()
+
+
+class Adjudicacion(Base):
+    """Compromiso atómico de inventario para una adjudicación."""
+
+    __tablename__ = "adjudicacion"
+    __table_args__ = (UniqueConstraint("referencia_id", name="uq_adjudicacion_referencia"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    referencia_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    ong_id: Mapped[int] = mapped_column(ForeignKey("ong.id"), nullable=False)
+    emergencia_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    fecha_creacion: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    ong: Mapped[Ong] = relationship()
+    items: Mapped[list["AdjudicacionItem"]] = relationship(
+        back_populates="adjudicacion", cascade="all, delete-orphan"
+    )
+
+
+class AdjudicacionItem(Base):
+    __tablename__ = "adjudicacion_item"
+    __table_args__ = (
+        UniqueConstraint("adjudicacion_id", "inventario_id", name="uq_adjudicacion_inventario"),
+        CheckConstraint("cantidad > 0", name="ck_adjudicacion_item_cantidad"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    adjudicacion_id: Mapped[int] = mapped_column(ForeignKey("adjudicacion.id"), nullable=False)
+    inventario_id: Mapped[int] = mapped_column(ForeignKey("inventario.id"), nullable=False)
+    cantidad: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    adjudicacion: Mapped[Adjudicacion] = relationship(back_populates="items")
+    inventario: Mapped[Inventario] = relationship()

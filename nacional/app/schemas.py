@@ -148,3 +148,29 @@ class CierreOut(BaseModel):
     referencia: str
     informado_en: datetime
     items: list[CierreItemOut]
+
+
+class AdjudicacionItemIn(BaseModel):
+    inventario_id: int = Field(gt=0)
+    cantidad: int = Field(gt=0)
+
+
+class AdjudicacionIn(BaseModel):
+    referencia_id: str = Field(min_length=1, max_length=80)
+    ong_id: int = Field(gt=0)
+    emergencia_id: int = Field(gt=0)
+    items: list[AdjudicacionItemIn] = Field(min_length=1)
+
+
+class AdjudicacionItemOut(BaseModel):
+    inventario_id: int
+    cantidad: int
+
+
+class AdjudicacionOut(BaseModel):
+    id: int
+    referencia_id: str
+    ong_id: int
+    emergencia_id: int
+    fecha_creacion: datetime
+    items: list[AdjudicacionItemOut]
