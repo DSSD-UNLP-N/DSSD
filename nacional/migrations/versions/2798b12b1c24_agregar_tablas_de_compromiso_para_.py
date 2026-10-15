@@ -1,7 +1,7 @@
 """Agregar tablas de Compromiso para bloqueo transaccional
 
 Revision ID: 2798b12b1c24
-Revises: 0001
+Revises: b99371d39182
 Create Date: 2026-10-13 10:09:26.862231
 """
 from alembic import op
@@ -9,7 +9,7 @@ import sqlalchemy as sa
 
 
 revision = '2798b12b1c24'
-down_revision = '0001'
+down_revision = 'b99371d39182'
 branch_labels = None
 depends_on = None
 

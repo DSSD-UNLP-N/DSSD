@@ -12,7 +12,11 @@ from sqlalchemy import create_engine, inspect
 from app.db import Base
 
 NACIONAL = Path(__file__).resolve().parents[1]
-TABLAS = {"ong", "certificacion", "tipo_recurso", "ong_certificacion", "inventario"}
+TABLAS = {
+    "ong", "certificacion", "tipo_recurso", "ong_certificacion", "inventario",
+    "cierre_operativo", "cierre_item", "compromiso", "compromiso_item",
+    "adjudicacion", "adjudicacion_item",
+}
 
 
 @pytest.fixture
