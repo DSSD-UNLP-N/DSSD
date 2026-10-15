@@ -54,3 +54,19 @@ def test_hay_una_sola_cabeza_de_migraciones():
     c = Config(str(NACIONAL / "alembic.ini"))
     c.set_main_option("script_location", str(NACIONAL / "migrations"))
     assert len(ScriptDirectory.from_config(c).get_heads()) == 1
+
+
+def test_una_base_en_0001_migra_hasta_el_final_conservando_los_datos(cfg):
+    """La base de la nube quedó en `0001` (el primer deploy). Si esa revisión se renombra o se reescribe,
+    `alembic upgrade head` falla al arrancar el contenedor ("Can't locate revision '0001'")."""
+    from sqlalchemy import text
+
+    command.upgrade(cfg, "0001")
+    engine = create_engine(cfg.get_main_option("sqlalchemy.url"))
+    with engine.begin() as conn:
+        conn.execute(text("INSERT INTO ong (cuit, nombre, estado) VALUES ('30-1-1', 'Previa', 'HABILITADA')"))
+
+    command.upgrade(cfg, "head")
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT nombre FROM ong")).scalar_one() == "Previa"
+    assert TABLAS <= set(inspect(engine).get_table_names())
