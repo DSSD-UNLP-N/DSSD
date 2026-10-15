@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.integrations.bonita import BonitaClient, BonitaError
+from app.integrations.nacional import NacionalClient
 from app.models import Emergencia, EstadoEmergencia, Lote, Usuario
 from app.schemas.lotes import LoteIn
 
@@ -34,9 +35,21 @@ def _editable(emergencia: Emergencia) -> None:
         raise LoteError("La convocatoria ya está publicada: los lotes no se pueden modificar.")
 
 
-def agregar_lote(db: Session, emergencia: Emergencia, datos: LoteIn) -> Lote:
+def agregar_lote(db: Session, emergencia: Emergencia, datos: LoteIn, nacional: NacionalClient) -> Lote:
+    """Lanza NacionalError si el catálogo no responde (el router lo traduce a 503)."""
     _editable(emergencia)
-    lote = Lote(emergencia_id=emergencia.id, **datos.model_dump())
+    tipo = next((t for t in nacional.tipos_recurso() if t["codigo"] == datos.tipo_recurso), None)
+    if tipo is None:
+        raise LoteError(f"Tipo de recurso inexistente: {datos.tipo_recurso}.")
+    lote = Lote(
+        emergencia_id=emergencia.id,
+        # El nombre del catálogo más el detalle libre: el resto de la app sigue mostrando `recurso`.
+        recurso=f"{tipo['nombre']} ({datos.detalle})" if datos.detalle else tipo["nombre"],
+        cantidad=datos.cantidad,
+        unidad=tipo["unidad"],
+        tipo_recurso=tipo["codigo"],
+        tipo=datos.tipo,
+    )
     db.add(lote)
     db.commit()
     db.refresh(lote)

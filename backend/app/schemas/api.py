@@ -27,9 +27,18 @@ class LoginIn(BaseModel):
     password: str = Field(min_length=1)
 
 
+class TipoRecursoOut(BaseModel):
+    codigo: str
+    nombre: str
+    categoria: str
+    unidad: str
+    certificacion_requerida: str | None = None
+
+
 class LoteOut(BaseModel):
     id: int
     recurso: str
+    tipo_recurso: str | None = None
     cantidad: int
     unidad: str
     tipo: TipoLote
@@ -67,7 +76,8 @@ class OfertaItemIn(BaseModel):
 
 
 class OfertaIn(BaseModel):
-    items: list[OfertaItemIn] = Field(min_length=1)
+    # Cada envío es la oferta completa. Lista vacía = retirar la oferta (queda como versión nueva sin ítems).
+    items: list[OfertaItemIn]
 
 
 class OfertaItemOut(BaseModel):
@@ -86,5 +96,6 @@ class OfertaOut(BaseModel):
     ong_nombre: str
     version_actual: int
     items: list[OfertaItemOut]
+    retirada: bool = False  # la versión vigente no tiene ítems
 
     model_config = ConfigDict(from_attributes=True)

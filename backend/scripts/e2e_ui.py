@@ -2,6 +2,7 @@
 paso, lo que se ve en pantalla y lo que pasó en Bonita. Complementa a e2e.py, que habla HTTP.
 
 Requisitos: Bonita Studio con el proceso desplegado, backend (`uvicorn app.main:app --port 8001`),
+API Nacional (`cd nacional; uvicorn app.main:app --port 8002`, migrada y con seed),
 frontend (`npm run dev`), base migrada + seedeada, y Chrome o Chromium instalado.
 
     pip install -r requirements-dev.txt
@@ -21,6 +22,7 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import requests
 from playwright.sync_api import Page, sync_playwright
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -105,10 +107,11 @@ def ejecutada_por(admin: BonitaClient, case_id, prefijo: str) -> str:
 
 
 CAPTURAS = Path(__file__).resolve().parent / "capturas"
-LOTES = [("Brigadistas forestales", "30", "personas", "PRINCIPAL"),
-         ("Agua potable", "8000", "litros", "PRINCIPAL"),
-         ("Camiones cisterna", "3", "unidades", "PRINCIPAL"),
-         ("Raciones de comida", "200", "raciones", "APOYO")]
+# (código del catálogo del Sistema Nacional, nombre que muestra, cantidad, tipo de lote)
+LOTES = [("BRIGADISTA_FORESTAL", "Brigadista forestal", "30", "PRINCIPAL"),
+         ("AGUA_POTABLE", "Agua potable", "8000", "PRINCIPAL"),
+         ("AUTOBOMBA", "Autobomba", "3", "PRINCIPAL"),
+         ("RACION_ALIMENTO", "Ración de alimento", "200", "APOYO")]
 PLAZO = 8000  # ms que se espera a que la SPA muestre algo
 
 
@@ -228,14 +231,13 @@ def fase_lotes_y_publicacion(u: Ui, app: str, emergencia_id: int, espera: int) -
     u.abrir(app, emergencia_id)
     u.ve("todavía no cargó lotes", "Sin lotes al principio")
 
-    for recurso, cantidad, unidad, tipo in LOTES:
-        u.page.locator("[name=recurso]").fill(recurso)
+    for codigo, nombre, cantidad, tipo in LOTES:
+        u.page.locator("[name=tipo_recurso]").select_option(codigo)
         u.page.locator("[name=cantidad]").fill(cantidad)
-        u.page.locator("[name=unidad]").fill(unidad)
         u.page.locator("[name=tipo]").select_option(tipo)
         u.page.get_by_role("button", name="Agregar lote").click()
-        u.ve(recurso, f"Lote '{recurso}' aparece en la lista")
-    u.r.check("El formulario se limpia tras agregar", u.page.locator("[name=recurso]").input_value() == "")
+        u.ve(nombre, f"Lote '{nombre}' aparece en la lista")
+    u.r.check("El formulario se limpia tras agregar", u.page.locator("[name=tipo_recurso]").input_value() == "")
     u.r.check("El lote de apoyo sale etiquetado", u.page.get_by_text("APOYO").count() > 0)
     u.foto("coordinador-lotes")
 
@@ -271,6 +273,24 @@ def fase_bonita_publicacion(r: Reporte, admin: BonitaClient, case_id: int, fin: 
         r.check(f"'{prefijo}…' es del actor '{esperado}'", actor == esperado, actor)
 
 
+def retirar_ofertas_previas(app: str, emergencia_id: int, r: Reporte) -> None:
+    """Las corridas anteriores dejan convocatorias abiertas (2 h) con ofertas, y cada oferta abierta
+    descuenta del inventario de la ONG: sin esto la segunda corrida seguida se pasaría del tope.
+    Se retiran por la API, con la misma función que usa la SPA (reenviar la oferta vacía)."""
+    retiradas = 0
+    for usuario in ("ong.cruzroja", "ong.bomberos"):
+        sesion = requests.Session()
+        sesion.post(f"{app}/api/auth/login", json={"username": usuario, "password": DEMO_PASSWORD}).raise_for_status()
+        for e in sesion.get(f"{app}/api/emergencias").json():
+            if e["id"] == emergencia_id or e["estado"] != "CONVOCATORIA":
+                continue
+            for o in sesion.get(f"{app}/api/emergencias/{e['id']}/ofertas").json():
+                if not o["retirada"]:
+                    sesion.post(f"{app}/api/emergencias/{e['id']}/ofertas", json={"items": []})
+                    retiradas += 1
+    r.check("Limpieza: ofertas de corridas anteriores retiradas", True, f"{retiradas} retiradas")
+
+
 def cargar_oferta(u: Ui, cantidades: list[str]) -> None:
     for campo, valor in zip(u.page.locator("[name^=lote_]").all(), cantidades):
         campo.fill(valor)
@@ -278,6 +298,8 @@ def cargar_oferta(u: Ui, cantidades: list[str]) -> None:
 
 
 def fase_ongs(u: Ui, app: str, emergencia_id: int) -> None:
+    u.r.fase("Limpieza de corridas anteriores")
+    retirar_ofertas_previas(app, emergencia_id, u.r)
     u.r.fase("ONG Cruz Roja: oferta versionada")
     u.entrar(app, "ong.cruzroja")
     u.ve("Hola,", "Login correcto: panel de la ONG")
@@ -290,16 +312,19 @@ def fase_ongs(u: Ui, app: str, emergencia_id: int) -> None:
 
     cargar_oferta(u, ["0", "0", "0", "0"])
     u.ve("al menos un lote", "Oferta vacía: pide cargar algo")
-    cargar_oferta(u, ["12", "5000", "0", "150"])
+    # Cruz Roja tiene 3000 litros de agua y 5000 raciones en el Sistema Nacional (nacional/app/seed.py).
+    cargar_oferta(u, ["0", "9000", "0", "0"])
+    u.ve("No alcanza tu inventario", "Ofrecer más agua de la que tiene: rechazado")
+    cargar_oferta(u, ["0", "2500", "0", "150"])
     u.ve("versión 1", "Primer envío: versión 1")
     u.foto("ong-cruzroja-v1")
-    cargar_oferta(u, ["12", "8000", "0", "0"])
+    cargar_oferta(u, ["0", "3000", "0", "0"])
     u.ve("versión 2", "Reenvío: versión 2")
     u.ve("Mi oferta vigente")
-    u.ve("8000 / 8000", "La v2 muestra el agua ofrecida completa")
+    u.ve("3000 / 8000", "La v2 muestra el agua ofrecida")
     # 1 = la fila del lote pedido; si la v1 siguiera vigente habría una 2ª en "Mi oferta vigente"
     u.r.check("La v2 reemplaza a la v1: sin raciones",
-              u.page.locator(".lote-row", has_text="Raciones de comida").count() == 1)
+              u.page.locator(".lote-row", has_text="Ración de alimento").count() == 1)
     u.foto("ong-cruzroja-v2")
     u.salir()
 
@@ -307,9 +332,14 @@ def fase_ongs(u: Ui, app: str, emergencia_id: int) -> None:
     u.entrar(app, "ong.bomberos")
     u.abrir(app, emergencia_id)
     u.r.check("Bomberos no ve la oferta de Cruz Roja", u.page.get_by_text("Cruz Roja").count() == 0)
+    # Bomberos tiene 20 brigadistas y 4 autobombas.
     cargar_oferta(u, ["18", "0", "3", "0"])
     u.ve("versión 1", "Bomberos: versión 1")
     u.foto("ong-bomberos")
+    u.page.locator(".field", has_text="Autobomba").get_by_role("button", name="Retirar de este lote").click()
+    u.ve("Retiraste tu oferta a ese lote", "Bomberos retira las autobombas: versión 2 sin ese lote")
+    u.ve("v2", "Mi oferta vigente pasó a v2")  # el mensaje sale antes de que la lista termine de recargar
+    u.r.check("La v2 ya no ofrece autobombas", u.page.locator(".lote-row", has_text="Autobomba").count() == 1)
     u.salir()
 
 

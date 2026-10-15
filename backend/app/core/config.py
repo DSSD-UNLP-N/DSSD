@@ -21,7 +21,10 @@ class Settings(BaseSettings):
     bonita_test_password: str = "bpm"
     # La primera llamada tras un rato sin uso tarda varios segundos (arranque en frío del motor).
     bonita_timeout_seconds: float = 10.0
-    database_url: str = "postgresql+psycopg://rescuesync:rescuesync@localhost:5432/rescuesync"
+    # Sistema Nacional (nacional/): catálogo de recursos y validación de ofertas.
+    nacional_base_url: str = "http://localhost:8002"
+    nacional_timeout_seconds: float = 5.0
+    database_url: str ="postgresql+psycopg://rescuesync:rescuesync@localhost:5432/rescuesync"
     session_secret: str = "dev-only-change-me"
     ventana_provisoria_horas: int = 72
     # Muestra los usuarios de demo y su contraseña en el login. Solo para desarrollo/demo.

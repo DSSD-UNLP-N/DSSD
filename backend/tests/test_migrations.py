@@ -63,6 +63,25 @@ def test_0002_marca_como_principal_los_lotes_existentes(cfg):
         assert conn.execute(text("SELECT tipo FROM lote")).scalar_one() == "PRINCIPAL"
 
 
+def test_0004_deja_sin_tipo_de_recurso_los_lotes_existentes(cfg):
+    from sqlalchemy import text
+
+    command.upgrade(cfg, "0003")
+    engine = create_engine(cfg.get_main_option("sqlalchemy.url"))
+    with engine.begin() as conn:
+        conn.execute(text("INSERT INTO municipio (id, nombre, provincia) VALUES (1, 'M', 'P')"))
+        conn.execute(text(
+            "INSERT INTO emergencia (id, municipio_id, tipo, nivel_gravedad, zona_afectada, descripcion,"
+            " estado, creada_en) VALUES (1, 1, 'x', 'ALTO', 'z', 'd', 'REGISTRADA', '2026-09-22')"))
+        conn.execute(text(
+            "INSERT INTO lote (emergencia_id, recurso, cantidad, unidad, tipo)"
+            " VALUES (1, 'Agua', 10, 'litros', 'PRINCIPAL')"))
+
+    command.upgrade(cfg, "head")
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT tipo_recurso FROM lote")).scalar_one() is None
+
+
 def test_hay_una_sola_cabeza_de_migraciones():
     from alembic.script import ScriptDirectory
 

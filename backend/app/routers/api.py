@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
@@ -9,7 +8,8 @@ from app.core.deps import require_role
 from app.core.security import verify_password
 from app.core.labels import ROL_LABEL, TIPO_LABEL
 from app.db import get_db
-from app.models import Emergencia, Oferta, OfertaItem, Rol, Usuario
+from app.integrations.nacional import NacionalClient, NacionalError, get_nacional
+from app.models import Emergencia, Oferta, Rol, Usuario
 from app.schemas.api import (
     EmergenciaOut,
     LoginIn,
@@ -18,6 +18,7 @@ from app.schemas.api import (
     OfertaItemOut,
     OfertaOut,
     PublicarIn,
+    TipoRecursoOut,
     UsuarioOut,
 )
 from app.schemas.emergencias import EmergenciaIn
@@ -30,6 +31,7 @@ from app.services.emergencias import (
     registrar_emergencia,
     tarea_ong_en_bonita,
 )
+from app.services.ofertas import OfertaError, publicar_oferta
 from app.services.lotes import (
     LoteError,
     PublicacionError,
@@ -149,18 +151,36 @@ def api_detalle(
     return out
 
 
+NACIONAL_CAIDO = "El Sistema Nacional no responde; probá de nuevo en un momento."
+
+
+@router.get("/tipos-recurso", response_model=list[TipoRecursoOut])
+def api_tipos_recurso(
+    user: Usuario = Depends(require_role()),
+    nacional: NacionalClient = Depends(get_nacional),
+):
+    """Catálogo de recursos del Sistema Nacional, para elegir el tipo de cada lote."""
+    try:
+        return nacional.tipos_recurso()
+    except NacionalError as exc:
+        raise HTTPException(status_code=503, detail=NACIONAL_CAIDO) from exc
+
+
 @router.post("/emergencias/{emergencia_id}/lotes", response_model=LoteOut, status_code=201)
 def api_crear_lote(
     emergencia_id: int,
     body: LoteIn,
     user: Usuario = Depends(require_role(Rol.COORDINADOR)),
     db: Session = Depends(get_db),
+    nacional: NacionalClient = Depends(get_nacional),
 ):
     emergencia = _require_visible(db, user, emergencia_id)
     try:
-        lote = agregar_lote(db, emergencia, body)
+        lote = agregar_lote(db, emergencia, body, nacional)
     except LoteError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except NacionalError as exc:
+        raise HTTPException(status_code=503, detail=NACIONAL_CAIDO) from exc
     return lote
 
 
@@ -202,13 +222,15 @@ def api_publicar(
 
 
 def _oferta_out(o: Oferta) -> OfertaOut:
+    items = [OfertaItemOut.model_validate(i) for i in o.items if i.version == o.version_actual]
     return OfertaOut(
         id=o.id,
         emergencia_id=o.emergencia_id,
         ong_id=o.ong_id,
         ong_nombre=o.ong.nombre,
         version_actual=o.version_actual,
-        items=[OfertaItemOut.model_validate(i) for i in o.items if i.version == o.version_actual],
+        items=items,
+        retirada=not items,
     )
 
 
@@ -232,49 +254,15 @@ def api_crear_oferta(
     body: OfertaIn,
     user: Usuario = Depends(require_role(Rol.ONG)),
     db: Session = Depends(get_db),
+    nacional: NacionalClient = Depends(get_nacional),
 ):
     """Cada envío es la oferta completa: una versión nueva con todos sus ítems (T-12)."""
-    from app.models import EstadoEmergencia
-
     emergencia = _require_visible(db, user, emergencia_id)
-    if emergencia.estado is EstadoEmergencia.CERRADA:
-        raise HTTPException(status_code=400, detail="La ventana de ofertas ya cerró")
-    if emergencia.estado is not EstadoEmergencia.CONVOCATORIA:
-        raise HTTPException(status_code=400, detail="La convocatoria no está abierta")
-    fin = emergencia.ventana_ofertas_fin
-    if fin is not None and fin.replace(tzinfo=fin.tzinfo or timezone.utc) <= datetime.now(timezone.utc):
-        raise HTTPException(status_code=400, detail="La ventana de ofertas ya cerró")
-    if user.ong_id is None:
-        raise HTTPException(status_code=400, detail="Tu usuario no tiene ONG asignada")
-
-    lote_ids = {l.id for l in emergencia.lotes}
-    pedidos = [item.lote_id for item in body.items]
-    if len(set(pedidos)) != len(pedidos):
-        raise HTTPException(status_code=400, detail="Hay lotes repetidos en la oferta")
-    for lote_id in pedidos:
-        if lote_id not in lote_ids:
-            raise HTTPException(status_code=400, detail=f"Lote {lote_id} inválido")
-
-    oferta = db.scalar(
-        select(Oferta).where(Oferta.emergencia_id == emergencia_id, Oferta.ong_id == user.ong_id)
-    )
-    if oferta is None:
-        oferta = Oferta(emergencia_id=emergencia_id, ong_id=user.ong_id, version_actual=1)
-        db.add(oferta)
-        db.flush()
-    else:
-        oferta.version_actual += 1
-
-    for item in body.items:
-        db.add(
-            OfertaItem(
-                oferta_id=oferta.id,
-                version=oferta.version_actual,
-                lote_id=item.lote_id,
-                recurso=item.recurso,
-                cantidad=item.cantidad,
-            )
-        )
-    db.commit()
-    db.refresh(oferta)
+    try:
+        oferta = publicar_oferta(db, nacional, emergencia=emergencia, ong=user.ong, items=body.items)
+    except OfertaError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except NacionalError as exc:
+        db.rollback()
+        raise HTTPException(status_code=503, detail=NACIONAL_CAIDO) from exc
     return _oferta_out(oferta)

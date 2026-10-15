@@ -110,6 +110,9 @@ class Lote(Base):
     recurso: Mapped[str] = mapped_column(String(120))
     cantidad: Mapped[int] = mapped_column(Integer)
     unidad: Mapped[str] = mapped_column(String(30))  # personas, raciones, litros…
+    # Código del catálogo del Sistema Nacional (PARAMEDICO…). Nullable: los lotes anteriores al
+    # catálogo no lo tienen y no se validan contra el inventario.
+    tipo_recurso: Mapped[str | None] = mapped_column(String(40))
     tipo: Mapped[TipoLote] = mapped_column(
         _enum(TipoLote), default=TipoLote.PRINCIPAL, server_default=TipoLote.PRINCIPAL.value
     )
