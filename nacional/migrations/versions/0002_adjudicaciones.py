@@ -1,14 +1,14 @@
 """adjudicaciones y compromisos de inventario
 
 Revision ID: 0002
-Revises: 0001
+Revises: 2798b12b1c24
 """
 from alembic import op
 import sqlalchemy as sa
 
 
 revision = "0002"
-down_revision = "b99371d39182"
+down_revision = "2798b12b1c24"
 branch_labels = None
 depends_on = None
 

@@ -2,8 +2,7 @@ import enum
 from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
-
-from app.models import CategoriaRecurso, EstadoOng, Riesgo
+from app.models import CategoriaRecurso, EstadoOng, Riesgo, EstadoCompromiso
 
 
 class TipoRecursoOut(BaseModel):
@@ -174,3 +173,29 @@ class AdjudicacionOut(BaseModel):
     emergencia_id: int
     fecha_creacion: datetime
     items: list[AdjudicacionItemOut]
+class ItemCompromisoIn(BaseModel):
+    tipo_recurso_id: int = Field(gt=0)
+    cantidad: int = Field(gt=0)
+
+class CompromisoIn(BaseModel):
+    emergencia_id: int = Field(gt=0)
+    ong_id: int = Field(gt=0)
+    items: list[ItemCompromisoIn] = Field(min_length=1)
+
+class CompromisoItemOut(BaseModel):
+    tipo_recurso_id: int
+    cantidad: int
+    model_config = ConfigDict(from_attributes=True)
+
+class CompromisoOut(BaseModel):
+    id: int
+    emergencia_id: int
+    ong_id: int
+    estado: EstadoCompromiso
+    items: list[CompromisoItemOut]
+    model_config = ConfigDict(from_attributes=True)
+
+class LiberacionOut(BaseModel):
+    compromiso_id: int
+    estado: EstadoCompromiso
+    mensaje: str
