@@ -18,16 +18,17 @@ qué hay que hacer, cuándo está terminada y cómo se prueba. Los responsables 
 espera la API, la integración falla el último día.
 
 **Qué hay que hacer**
-1. Escribir `entrega-3/contratos.md` con los ejemplos exactos (request y response, códigos de error) de:
+1. ~~Escribir~~ **Hecho (16/10): `entrega-3/contratos.md`** con los ejemplos exactos (request y response, códigos de error) de:
    - `GET /api/bonita/emergencias/{id}/ofertas` (app → Bonita) y el header `X-Api-Key`;
    - `POST /evaluaciones`, `POST /adjudicaciones/{referencia}/confirmar`, `.../liberar`, `POST /cierres` (API Nacional);
    - `POST /api/bonita/emergencias/{id}/eventos` (Bonita → app);
    - formato de la referencia (`emg-{emergencia_id}:{cuit}`), variables de Bonita y estados de la app.
 2. En **Bonita Studio**:
-   - que "Evaluar Cobertura y Definir Curso de Acción" esté en la lane del **Coordinador** (en el `.bos` del repo
-     figura en la de la ONG);
-   - ver si Studio trae el **conector REST** (Extensiones). Si no, se usa un conector de script Groovy;
-   - exportar el `.bos` actual al repo: el de `entrega-2/` es del 20/09 y no tiene los cambios posteriores.
+   - ~~"Evaluar Cobertura…" en la lane del Coordinador~~: **verificado, ya lo está** en el workspace (`entrega41`,
+     02/10); el `.bos` del repo es anterior;
+   - ver si Studio trae el **conector REST** (Connectors → agregar → buscar "REST"). Si no, conector de script Groovy;
+   - **reexportar el `.bos`** al repo (`entrega-2/RescueSync.bos`): es del 20/09 y no tiene los cambios posteriores;
+   - agregar los parámetros del proceso (`appBaseUrl`, `nacionalBaseUrl`, `bonitaApiKey`).
 3. Pasarlo al equipo por PR y acordarlo.
 
 **Terminado cuando**: `contratos.md` mergeado y todos de acuerdo; `.bos` actualizado en el repo.

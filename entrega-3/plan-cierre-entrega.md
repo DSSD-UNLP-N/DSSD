@@ -74,10 +74,10 @@ las ofertas de una convocatoria vencida **hasta que Bonita pidió el consolidado
 | **Validar Cierre Operativo Bilateral** | Coordinador | Confirma el cierre cuando todas terminaron | App → Bonita |
 | **Liberar Recursos y Notificar Cierre** | Bonita (servicio) | `POST /cierres` por cada ONG adjudicada; avisa a la app | Bonita → Nacional, Bonita → App |
 
-**A verificar en Studio antes de empezar** (en el `.bos` del repo, del 20/09): "Evaluar Cobertura y Definir Curso de
-Acción" figura en la lane de la ONG, y debería estar en la del Coordinador (si no, Bonita la asigna al actor ONG). Lo
-mismo con "Obtener Ofertas…" (es de servicio, da igual la lane). "Confirmar Finalización" es multi-instancia sin
-configurar: ver WP6.
+**Verificado el 16/10 en el workspace de Studio** (`entrega41`, del 02/10): "Evaluar Cobertura y Definir Curso de
+Acción" **ya está en la lane del Coordinador** (el `.bos` del repo, del 20/09, la tenía en la de la ONG: hay que
+reexportarlo). "Confirmar Finalización" es multi-instancia paralela con cardinalidad vacía: ver WP6. Ningún
+ServiceTask tiene conector todavía.
 
 ---
 
