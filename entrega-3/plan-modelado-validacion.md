@@ -2,13 +2,82 @@
 
 Rama `modelado-tomas-e-3` (desde `origin/main`, 04/10/2026). Entrega 3: semana del 22/10.
 
-## Estado (04/10)
+## Estado (12/10)
 
 Fases 0 a 8 hechas y probadas contra servidores reales (Bonita + nacional :8002 + backend :8001 + SPA): API Nacional
 completa, lote con tipo del catálogo, tope de ofertas y retirar. Tests: nacional 55, backend 153 (2 omitidos).
 `scripts/e2e_ui.py` en navegador real con Bonita: 59/59, y 62 con `--timer 90` (el boundary timer sigue andando).
-Pendiente: pushear la rama / PR, avisar al equipo de la tabla `inventario`, y lo opcional (pantalla de inventario de
-la ONG, mostrar el nivel de competencia en la SPA).
+Rama pusheada (`modelado-tomas-e-3`), sin PR.
+
+**En la nube** (`https://sistema-nacional-latest.onrender.com`, verificado 12/10): `/docs` y `/health` responden, el
+seed está cargado y `POST /validaciones` da el mismo resultado que en local. Corre el código de mi rama: **todavía no
+tiene `/cierres`** (la liberación de Franco, rama `franco/e3-liberacion-y-deploy`, construida sobre mi rama, 63 tests
+verdes). A confirmar en el panel de Render: que la base sea Postgres (si fuera SQLite del contenedor, los datos se
+pierden en cada deploy).
+
+## Arquitectura final: dónde corre cada pieza
+
+| Pieza | Dónde | Base de datos |
+|---|---|---|
+| Bonita (motor del proceso, timer) | PC local (Studio) | H2 de Studio |
+| App local: backend `:8001` + SPA `:5173` | PC local | `backend/dev.db` (SQLite; Postgres opcional): emergencias, lotes, **ofertas**, usuarios |
+| API Nacional | Render (nube) | Postgres de Render: certificaciones, tipos de recurso, ONGs, **inventario**, cierres |
+
+Las ofertas nunca salen de la base local (directiva 1). La nube nunca llama a la app local: siempre la inicia la
+app local o Bonita (directivas 3 y 4).
+
+```
+Navegador ─► SPA ─► App local ─────────────► API Nacional (nube)
+                       │  GET /tipos-recurso al cargar un lote
+                       │  POST /validaciones al ofertar
+                       │  POST /cierres al finalizar la actividad          (Franco, sin desplegar)
+                       ▼
+                    Bonita (instancia, tareas, timer)
+```
+
+## Qué hace cada pieza en la app final
+
+| Paso del proceso | Quién llama | A qué | Estado |
+|---|---|---|---|
+| Alta de emergencia | App local | Bonita (instancia) | Hecho |
+| Cargar lote con tipo de recurso | App local | Nacional `GET /tipos-recurso` | Hecho |
+| Publicar convocatoria | App local | Bonita (completa tareas, setea la ventana) | Hecho |
+| Ofertar / editar / retirar | App local | Nacional `POST /validaciones` (tope por inventario) | Hecho |
+| Vence el timer, validar ofertas | Bonita | App local `GET` ofertas, luego Nacional `POST /validaciones` | **Falta** (ServiceTask vacío) |
+| Adjudicar y bloquear recursos | Bonita / App local | Nacional (bloqueo, servicio 4) | **Falta** |
+| Finalizar actividad y liberar | App local | Nacional `POST /cierres` | En rama de Franco, sin desplegar |
+| Login JWT y alta de ONGs | App local | Nacional (servicio 1) | **Falta** |
+
+Ojo: hoy la app local ya llama a la API al ofertar. La consigna describe que valida Bonita al vencer el timer; las
+dos validaciones son compatibles (una avisa al ofertar, la otra clasifica al cierre). Conviene explicarlo en el coloquio.
+
+## Guion de presentación (Entrega 3)
+
+Antes: Bonita desplegado, `NACIONAL_BASE_URL` apuntando a la nube, despertar el servicio (plan gratis) unos minutos antes.
+
+1. **Swagger en la nube**: `/tipos-recurso`, `/ongs/{cuit}` (certificaciones con vigencia, inventario, riesgo permitido).
+2. **`POST /validaciones`** con gravedad ALTO y 5 paramédicos de Cruz Roja: no alcanza (disponible 4) y nivel
+   PARCIAL → APOYO; Bomberos con paramédicos: SUPERVISADA (certificación vencida).
+3. **App**: el Coordinador crea un lote eligiendo el tipo del catálogo y publica.
+4. **ONG Cruz Roja** (4 paramédicos): ofrece 2 en una emergencia, 3 en otra → rechazo (2+3 > 4); edita la primera a
+   3 (reemplaza) y entra 1 en la segunda; **retira** y se libera el cupo.
+5. **Cierre**: `POST /cierres` libera lo bloqueado (cuando esté desplegado y el bloqueo exista).
+
+## Pendiente para cerrar la entrega
+
+1. Desplegar la rama de Franco en Render y verificar `/cierres` y que la base sea Postgres.
+2. **Bloqueo/compromiso (servicio 4)**: nadie suma `cantidad_comprometida` todavía; sin esto la liberación solo se
+   prueba tocando la base a mano.
+3. JWT y alta de ONGs (servicio 1).
+4. Subir el timeout del cliente a la nube (5 s es poco con el servicio dormido) y correr `e2e_ui.py` contra la URL
+   pública.
+5. PR de mi rama a `main`, y después la de Franco.
+6. Opcionales: pantalla de inventario de la ONG; mostrar el nivel de competencia en la SPA; tope contra la cantidad
+   que pide cada lote.
+
+Liberación (Franco, 12/10, rama `franco/e3-liberacion-y-deploy`): `POST /cierres` informa el fin de una actividad
+y resta `cantidad_comprometida`. Imagen en `nacional/Dockerfile` y blueprint `render.yaml`; la URL pública sale
+al conectar el repo en Render.
 
 ## Objetivo
 

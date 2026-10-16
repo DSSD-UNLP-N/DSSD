@@ -1,9 +1,8 @@
 import enum
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
-
-from app.models import CategoriaRecurso, EstadoOng, Riesgo
+from app.models import CategoriaRecurso, EstadoOng, Riesgo, EstadoCompromiso
 
 
 class TipoRecursoOut(BaseModel):
@@ -118,3 +117,85 @@ class ResultadoValidacionOut(BaseModel):
 class ValidacionOut(BaseModel):
     alcanza_todo: bool
     resultados: list[ResultadoValidacionOut]
+
+
+class CierreItemIn(BaseModel):
+    tipo_recurso: str
+    cantidad: int = Field(gt=0)
+
+
+class CierreIn(BaseModel):
+    cuit: str = Field(min_length=1, max_length=13)
+    referencia: str = Field(min_length=1, max_length=80)
+    items: list[CierreItemIn] = Field(min_length=1)
+
+
+class CierreItemOut(BaseModel):
+    tipo_recurso: str
+    nombre: str
+    unidad: str
+    cantidad_liberada: int
+    cantidad_total: int
+    cantidad_comprometida: int
+    disponible: int
+
+
+class CierreOut(BaseModel):
+    id: int
+    cuit: str
+    ong: str
+    referencia: str
+    informado_en: datetime
+    items: list[CierreItemOut]
+
+
+class AdjudicacionItemIn(BaseModel):
+    inventario_id: int = Field(gt=0)
+    cantidad: int = Field(gt=0)
+
+
+class AdjudicacionIn(BaseModel):
+    referencia_id: str = Field(min_length=1, max_length=80)
+    ong_id: int = Field(gt=0)
+    emergencia_id: int = Field(gt=0)
+    items: list[AdjudicacionItemIn] = Field(min_length=1)
+
+
+class AdjudicacionItemOut(BaseModel):
+    inventario_id: int
+    cantidad: int
+
+
+class AdjudicacionOut(BaseModel):
+    id: int
+    referencia_id: str
+    ong_id: int
+    emergencia_id: int
+    fecha_creacion: datetime
+    items: list[AdjudicacionItemOut]
+class ItemCompromisoIn(BaseModel):
+    tipo_recurso_id: int = Field(gt=0)
+    cantidad: int = Field(gt=0)
+
+class CompromisoIn(BaseModel):
+    emergencia_id: int = Field(gt=0)
+    ong_id: int = Field(gt=0)
+    items: list[ItemCompromisoIn] = Field(min_length=1)
+
+class CompromisoItemOut(BaseModel):
+    tipo_recurso_id: int
+    cantidad: int
+    model_config = ConfigDict(from_attributes=True)
+
+class CompromisoOut(BaseModel):
+    id: int
+    emergencia_id: int
+    ong_id: int
+    estado: EstadoCompromiso
+    items: list[CompromisoItemOut]
+    model_config = ConfigDict(from_attributes=True)
+
+class LiberacionOut(BaseModel):
+    compromiso_id: int
+    estado: EstadoCompromiso
+    mensaje: str

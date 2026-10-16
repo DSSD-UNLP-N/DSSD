@@ -4,9 +4,10 @@
 disponible = cantidad_total - cantidad_comprometida.
 """
 import enum
-from datetime import date
+from datetime import date, datetime
 
-from sqlalchemy import CheckConstraint, Date, ForeignKey, Integer, String, Text, UniqueConstraint
+
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -116,3 +117,108 @@ class Inventario(Base):
     @property
     def disponible(self) -> int:
         return self.cantidad_total - self.cantidad_comprometida
+
+
+class CierreOperativo(Base):
+    """Aviso de que una ONG terminó una actividad: libera lo que tenía bloqueado."""
+
+    __tablename__ = "cierre_operativo"
+    __table_args__ = (UniqueConstraint("ong_id", "referencia", name="uq_cierre_ong_referencia"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ong_id: Mapped[int] = mapped_column(ForeignKey("ong.id"))
+    # Identificador de la actividad en el sistema que informa el cierre (emergencia, lote, etc.).
+    referencia: Mapped[str] = mapped_column(String(80))
+    informado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    ong: Mapped[Ong] = relationship()
+    items: Mapped[list["CierreItem"]] = relationship(back_populates="cierre", cascade="all, delete-orphan")
+
+
+class CierreItem(Base):
+    __tablename__ = "cierre_item"
+    __table_args__ = (
+        UniqueConstraint("cierre_id", "tipo_recurso_id"),
+        CheckConstraint("cantidad > 0", name="ck_cierre_item_cantidad"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cierre_id: Mapped[int] = mapped_column(ForeignKey("cierre_operativo.id"))
+    tipo_recurso_id: Mapped[int] = mapped_column(ForeignKey("tipo_recurso.id"))
+    cantidad: Mapped[int] = mapped_column(Integer)
+
+    cierre: Mapped[CierreOperativo] = relationship(back_populates="items")
+    tipo_recurso: Mapped[TipoRecurso] = relationship()
+
+
+class Adjudicacion(Base):
+    """Compromiso atómico de inventario para una adjudicación."""
+
+    __tablename__ = "adjudicacion"
+    __table_args__ = (UniqueConstraint("referencia_id", name="uq_adjudicacion_referencia"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    referencia_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    ong_id: Mapped[int] = mapped_column(ForeignKey("ong.id"), nullable=False)
+    emergencia_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    fecha_creacion: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    ong: Mapped[Ong] = relationship()
+    items: Mapped[list["AdjudicacionItem"]] = relationship(
+        back_populates="adjudicacion", cascade="all, delete-orphan"
+    )
+
+
+class AdjudicacionItem(Base):
+    __tablename__ = "adjudicacion_item"
+    __table_args__ = (
+        UniqueConstraint("adjudicacion_id", "inventario_id", name="uq_adjudicacion_inventario"),
+        CheckConstraint("cantidad > 0", name="ck_adjudicacion_item_cantidad"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    adjudicacion_id: Mapped[int] = mapped_column(ForeignKey("adjudicacion.id"), nullable=False)
+    inventario_id: Mapped[int] = mapped_column(ForeignKey("inventario.id"), nullable=False)
+    cantidad: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    adjudicacion: Mapped[Adjudicacion] = relationship(back_populates="items")
+    inventario: Mapped[Inventario] = relationship()
+class EstadoCompromiso(str, enum.Enum):
+    ACTIVO = "ACTIVO"
+    LIBERADO = "LIBERADO"
+
+class Compromiso(Base):
+    __tablename__ = "compromiso"
+    __table_args__ = (
+        UniqueConstraint("emergencia_id", "ong_id", name="uq_compromiso_emergencia_ong"),
+    )
+    
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    emergencia_id: Mapped[int] = mapped_column(index=True)
+    ong_id: Mapped[int] = mapped_column(ForeignKey("ong.id"))
+    
+    # Se asume el uso de la función _enum existente en tu archivo models.py
+    estado: Mapped[EstadoCompromiso] = mapped_column(
+        _enum(EstadoCompromiso), 
+        default=EstadoCompromiso.ACTIVO, 
+        server_default=EstadoCompromiso.ACTIVO.value,
+        nullable=False
+    )
+    
+    ong: Mapped["Ong"] = relationship()
+    items: Mapped[list["CompromisoItem"]] = relationship(back_populates="compromiso", cascade="all, delete-orphan")
+
+class CompromisoItem(Base):
+    __tablename__ = "compromiso_item"
+    __table_args__ = (
+        CheckConstraint("cantidad > 0", name="ck_compromiso_item_cantidad"),
+        UniqueConstraint("compromiso_id", "tipo_recurso_id", name="uq_compromiso_item_recurso"),
+    )
+    
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    compromiso_id: Mapped[int] = mapped_column(ForeignKey("compromiso.id"))
+    tipo_recurso_id: Mapped[int] = mapped_column(ForeignKey("tipo_recurso.id"))
+    cantidad: Mapped[int] = mapped_column()
+    
+    compromiso: Mapped["Compromiso"] = relationship(back_populates="items")
+    tipo_recurso: Mapped["TipoRecurso"] = relationship()

@@ -15,13 +15,13 @@ class Settings(BaseSettings):
 
     @field_validator("database_url", mode="before")
     @classmethod
-    def fix_database_url(cls, v: str) -> str:
-        if isinstance(v, str):
-            if v.startswith("postgres://"):
-                return v.replace("postgres://", "postgresql+psycopg://", 1)
-            if v.startswith("postgresql://") and not v.startswith("postgresql+"):
-                return v.replace("postgresql://", "postgresql+psycopg://", 1)
-        return v
+    def _driver_postgres(cls, url: str) -> str:
+        # Render entrega postgres://; SQLAlchemy con psycopg 3 pide el driver explícito.
+        if url.startswith("postgres://"):
+            return "postgresql+psycopg://" + url.removeprefix("postgres://")
+        if url.startswith("postgresql://"):
+            return "postgresql+psycopg://" + url.removeprefix("postgresql://")
+        return url
 
 
 @lru_cache
