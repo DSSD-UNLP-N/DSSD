@@ -14,8 +14,7 @@ from app.db import Base
 NACIONAL = Path(__file__).resolve().parents[1]
 TABLAS = {
     "ong", "certificacion", "tipo_recurso", "ong_certificacion", "inventario",
-    "cierre_operativo", "cierre_item", "compromiso", "compromiso_item",
-    "adjudicacion", "adjudicacion_item",
+    "cierre_operativo", "cierre_item", "adjudicacion", "adjudicacion_item",
 }
 
 
@@ -70,3 +69,19 @@ def test_una_base_en_0001_migra_hasta_el_final_conservando_los_datos(cfg):
     with engine.connect() as conn:
         assert conn.execute(text("SELECT nombre FROM ong")).scalar_one() == "Previa"
     assert TABLAS <= set(inspect(engine).get_table_names())
+
+
+def test_0003_deja_adjudicadas_las_adjudicaciones_existentes(cfg):
+    from sqlalchemy import text
+
+    command.upgrade(cfg, "0002")
+    engine = create_engine(cfg.get_main_option("sqlalchemy.url"))
+    with engine.begin() as conn:
+        conn.execute(text("INSERT INTO ong (id, cuit, nombre, estado) VALUES (1, '30-1-1', 'Previa', 'HABILITADA')"))
+        conn.execute(text(
+            "INSERT INTO adjudicacion (referencia_id, ong_id, emergencia_id, fecha_creacion)"
+            " VALUES ('emergencia-1', 1, 1, '2026-10-14')"))
+
+    command.upgrade(cfg, "head")
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT estado FROM adjudicacion")).scalar_one() == "ADJUDICADA"

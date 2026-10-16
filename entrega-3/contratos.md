@@ -127,6 +127,9 @@ Cálculo de la cobertura (decisión a confirmar en la revisión):
   pregunta "¿se cubrieron todos los lotes?").
 - Sin ofertas: `cobertura_completa = false`, `porcentaje_cobertura = 0`, `ongs = []`.
 
+Una ONG que la API no conoce (CUIT sin registrar) vuelve con `estado: "NO_RESERVADA"`, `referencia: null` y `reservado: 0`
+en cada ítem: no hay nada que confirmar ni liberar. Una ONG suspendida o sin stock vuelve `RESERVADA` con `reservado: 0`.
+
 Idempotencia: la clave es la referencia. Si ya existe en `RESERVADA` o `ADJUDICADA`, se devuelve lo mismo; si está
 `LIBERADA` o `CERRADA` (otra ronda ya la usó) responde `409`.
 
@@ -224,7 +227,7 @@ Todo esto va en **una sola migración** de la app (WP1) para que dos tareas no c
 
 | Dónde | Hoy | Cambio |
 |---|---|---|
-| API Nacional `POST /adjudicaciones` | Compromete con `ong_id` e `inventario_id` | Se reemplaza por `/evaluaciones` + `confirmar`/`liberar`. Hasta que WP2 esté, se deja sin tocar |
+| API Nacional `POST /adjudicaciones` | Compromete con `ong_id` e `inventario_id` | `/evaluaciones` + `confirmar`/`liberar` ya existen (WP2). Se deja por ahora (tiene tests y es el bloqueo transaccional de Leandro); sus filas nacen `ADJUDICADA`. Borrarlo cuando el equipo lo confirme |
 | API Nacional tablas `compromiso`, `compromiso_item` | Sin uso | Se borran con una migración nueva |
 | API Nacional `POST /cierres` | Libera lo que le pasen | Libera lo que comprometió la referencia (WP3) |
 | `.bos` del repo | Del 20/09; "Evaluar Cobertura" en la lane de la ONG | Reexportar desde Studio (WP0) |

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 
 from app.config import get_settings
-from app.routers import adjudicacion, catalogo, cierre, inventario, validacion
+from app.routers import adjudicacion, catalogo, cierre, inventario, reservas, validacion
 
 
 app = FastAPI(
@@ -14,6 +14,7 @@ app.include_router(catalogo.router)
 app.include_router(inventario.router)
 app.include_router(validacion.router)
 app.include_router(cierre.router)
+app.include_router(reservas.router)
 app.include_router(adjudicacion.router, prefix="/adjudicaciones", tags=["Adjudicaciones"])
 
 @app.get("/health", tags=["estado"])

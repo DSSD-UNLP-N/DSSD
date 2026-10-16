@@ -27,6 +27,7 @@ def _salida(adjudicacion: Adjudicacion) -> AdjudicacionOut:
         ong_id=adjudicacion.ong_id,
         emergencia_id=adjudicacion.emergencia_id,
         fecha_creacion=adjudicacion.fecha_creacion,
+        estado=adjudicacion.estado,
         items=[
             AdjudicacionItemOut(inventario_id=item.inventario_id, cantidad=item.cantidad)
             for item in adjudicacion.items

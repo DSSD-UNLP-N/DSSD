@@ -2,7 +2,7 @@ import enum
 from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
-from app.models import CategoriaRecurso, EstadoOng, Riesgo, EstadoCompromiso
+from app.models import CategoriaRecurso, EstadoAdjudicacion, EstadoOng, Riesgo
 
 
 class TipoRecursoOut(BaseModel):
@@ -172,30 +172,86 @@ class AdjudicacionOut(BaseModel):
     ong_id: int
     emergencia_id: int
     fecha_creacion: datetime
+    estado: EstadoAdjudicacion
     items: list[AdjudicacionItemOut]
-class ItemCompromisoIn(BaseModel):
-    tipo_recurso_id: int = Field(gt=0)
+
+
+# --- Evaluación y reserva (eslabón 4): lo que Bonita manda tal cual lo recibió de la app local ---
+
+class LoteEvaluacionIn(BaseModel):
+    lote_id: int
+    tipo_recurso: str | None = None  # None = lote anterior al catálogo: no se puede cubrir
+    cantidad: int = Field(gt=0)
+    tipo: str = "PRINCIPAL"
+
+
+class ItemOfertaIn(BaseModel):
+    lote_id: int
+    tipo_recurso: str
     cantidad: int = Field(gt=0)
 
-class CompromisoIn(BaseModel):
+
+class OfertaEvaluacionIn(BaseModel):
+    cuit: str = Field(min_length=1, max_length=13)
+    ong: str | None = None
+    version: int | None = None
+    items: list[ItemOfertaIn] = Field(min_length=1)
+
+
+class EvaluacionIn(BaseModel):
     emergencia_id: int = Field(gt=0)
-    ong_id: int = Field(gt=0)
-    items: list[ItemCompromisoIn] = Field(min_length=1)
+    ronda: int = Field(default=1, ge=1)
+    gravedad: Riesgo
+    lotes: list[LoteEvaluacionIn]
+    ofertas: list[OfertaEvaluacionIn]
 
-class CompromisoItemOut(BaseModel):
-    tipo_recurso_id: int
-    cantidad: int
-    model_config = ConfigDict(from_attributes=True)
 
-class CompromisoOut(BaseModel):
-    id: int
+class LoteCoberturaOut(BaseModel):
+    lote_id: int
+    tipo_recurso: str | None
+    pedido: int
+    reservado: int
+    porcentaje: float
+    cubierto: bool
+
+
+class ItemEvaluadoOut(BaseModel):
+    lote_id: int
+    tipo_recurso: str
+    ofrecido: int
+    reservado: int
+    nivel: NivelCompetencia
+    riesgo_permitido: Riesgo | None
+    asignacion_sugerida: Asignacion
+    observaciones: list[str]
+
+
+class OngEvaluadaOut(BaseModel):
+    cuit: str
+    ong: str | None
+    referencia: str | None  # None = ONG no registrada: no hay nada reservado
+    estado: str  # EstadoAdjudicacion, o NO_RESERVADA
+    items: list[ItemEvaluadoOut]
+
+
+class EvaluacionOut(BaseModel):
     emergencia_id: int
-    ong_id: int
-    estado: EstadoCompromiso
-    items: list[CompromisoItemOut]
-    model_config = ConfigDict(from_attributes=True)
+    ronda: int
+    cobertura_completa: bool
+    porcentaje_cobertura: float
+    lotes: list[LoteCoberturaOut]
+    ongs: list[OngEvaluadaOut]
 
-class LiberacionOut(BaseModel):
-    compromiso_id: int
-    estado: EstadoCompromiso
-    mensaje: str
+
+class ReservaOut(BaseModel):
+    referencia: str
+    estado: EstadoAdjudicacion
+
+
+class RecursoLiberadoOut(BaseModel):
+    tipo_recurso: str
+    cantidad: int
+
+
+class LiberacionOut(ReservaOut):
+    liberado: list[RecursoLiberadoOut]
