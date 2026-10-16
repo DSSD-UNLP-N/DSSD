@@ -30,7 +30,14 @@ export type Emergencia = {
   nivel_gravedad: "BAJO" | "MEDIO" | "ALTO" | "CRITICO";
   zona_afectada: string;
   descripcion: string;
-  estado: "REGISTRADA" | "CONVOCATORIA" | "CERRADA";
+  estado:
+    | "REGISTRADA"
+    | "CONVOCATORIA"
+    | "CERRADA"
+    | "EN_EVALUACION"
+    | "ADJUDICACION"
+    | "EN_EJECUCION"
+    | "RESUELTA";
   bonita_case_id: number | null;
   ventana_ofertas_fin: string | null;
   creada_en: string;

@@ -31,8 +31,9 @@ def _filtro_visibilidad(user: Usuario):
     if user.rol is Rol.MUNICIPIO:
         return Emergencia.municipio_id == user.municipio_id
     if user.rol is Rol.ONG:
-        # Una vez vencida la ventana la ONG sigue viendo la convocatoria (y su oferta), solo que cerrada.
-        return Emergencia.estado.in_([EstadoEmergencia.CONVOCATORIA, EstadoEmergencia.CERRADA])
+        # Una vez vencida la ventana la ONG sigue viendo la convocatoria (y su oferta), y después
+        # la evaluación, la adjudicación y la ejecución. Solo no ve la que todavía no se publicó.
+        return Emergencia.estado != EstadoEmergencia.REGISTRADA
     return True
 
 

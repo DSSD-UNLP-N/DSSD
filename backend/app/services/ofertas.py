@@ -2,7 +2,7 @@
 
 Cada envío es la oferta completa: una versión nueva con todos sus ítems; las anteriores no se
 tocan (trazabilidad). Retirar un lote es enviar la oferta sin él; retirarla toda, enviarla vacía. Antes de guardar, lo que la ONG ofrece de cada recurso se suma con lo que
-ya ofreció en sus otras convocatorias abiertas y se valida contra el inventario del Sistema
+ya ofreció en sus otras convocatorias sin evaluar y se valida contra el inventario del Sistema
 Nacional: no puede prometer más de lo que tiene, ni el mismo recurso dos veces.
 """
 from __future__ import annotations
@@ -22,6 +22,11 @@ class OfertaError(RuntimeError):
     """La oferta no se puede guardar (ventana cerrada, lotes inválidos, no alcanza el inventario…)."""
 
 
+# Hasta que Bonita pide el consolidado (EN_EVALUACION) la reserva no existe en la API Nacional:
+# lo ofrecido en una convocatoria abierta, o vencida y sin evaluar, compromete el stock acá.
+COMPROMETEN_STOCK = (EstadoEmergencia.CONVOCATORIA, EstadoEmergencia.CERRADA)
+
+
 def _esta_abierta(e: Emergencia, ahora: datetime) -> bool:
     if e.estado is not EstadoEmergencia.CONVOCATORIA:
         return False
@@ -30,10 +35,10 @@ def _esta_abierta(e: Emergencia, ahora: datetime) -> bool:
 
 
 def _verificar_abierta(e: Emergencia, ahora: datetime) -> None:
-    if e.estado is EstadoEmergencia.CERRADA:
-        raise OfertaError("La ventana de ofertas ya cerró")
-    if e.estado is not EstadoEmergencia.CONVOCATORIA:
+    if e.estado is EstadoEmergencia.REGISTRADA:
         raise OfertaError("La convocatoria no está abierta")
+    if e.estado is not EstadoEmergencia.CONVOCATORIA:
+        raise OfertaError("La ventana de ofertas ya cerró")
     if not _esta_abierta(e, ahora):
         raise OfertaError("La ventana de ofertas ya cerró")
 
@@ -113,7 +118,7 @@ def _validar_tope(
     if not ong.cuit:
         raise OfertaError("Tu ONG no tiene CUIT registrado; no se puede validar su inventario.")
 
-    # Lo ya ofrecido en las otras convocatorias abiertas de la ONG también compromete el stock.
+    # Lo ya ofrecido en sus otras convocatorias sin evaluar también compromete el stock.
     total: Counter[str] = Counter({t: nuevos[t] for t in a_validar})
     otras = db.scalars(
         select(Oferta)
@@ -121,7 +126,7 @@ def _validar_tope(
         .options(selectinload(Oferta.items).selectinload(OfertaItem.lote), selectinload(Oferta.emergencia))
     )
     for otra in otras:
-        if not _esta_abierta(otra.emergencia, ahora):
+        if otra.emergencia.estado not in COMPROMETEN_STOCK:
             continue
         for i in _items_vigentes(otra):
             if i.lote.tipo_recurso in a_validar:

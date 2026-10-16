@@ -56,6 +56,10 @@ function formatFecha(iso: string | null) {
 function estadoBadge(estado: Emergencia["estado"]) {
   if (estado === "CONVOCATORIA") return <span className="badge signal">Convocatoria abierta</span>;
   if (estado === "CERRADA") return <span className="badge muted">Ventana cerrada</span>;
+  if (estado === "EN_EVALUACION") return <span className="badge muted">En evaluación</span>;
+  if (estado === "ADJUDICACION") return <span className="badge signal">Adjudicación</span>;
+  if (estado === "EN_EJECUCION") return <span className="badge signal">En ejecución</span>;
+  if (estado === "RESUELTA") return <span className="badge muted">Resuelta</span>;
   return <span className="badge ok">Registrada</span>;
 }
 

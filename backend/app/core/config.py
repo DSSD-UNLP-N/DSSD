@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     # Sistema Nacional (nacional/): catálogo de recursos y validación de ofertas.
     nacional_base_url: str = "http://localhost:8002"
     nacional_timeout_seconds: float = 5.0
+    # Clave compartida con los conectores de Bonita (cabecera X-Api-Key en /api/bonita/*).
+    bonita_api_key: str = "rescuesync-dev-key"
     database_url: str ="postgresql+psycopg://rescuesync:rescuesync@localhost:5432/rescuesync"
     session_secret: str = "dev-only-change-me"
     ventana_provisoria_horas: int = 72
