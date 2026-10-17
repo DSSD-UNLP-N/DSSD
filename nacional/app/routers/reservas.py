@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.schemas import EvaluacionIn, EvaluacionOut, LiberacionOut, ReservaOut
+from app.schemas import EvaluacionIn, EvaluacionOut, LiberacionOut, ReservaOut, ResolucionIn, ResolucionOut
 from app.services import reservas
 from app.services.validacion import TipoRecursoDesconocido
 
@@ -65,3 +65,16 @@ def liberar_reserva(referencia: str, db: Session = Depends(get_db)):
         return reservas.liberar(db, referencia)
     except _ERRORES as exc:
         raise _http(exc) from exc
+
+
+@router.post("/adjudicaciones/resolucion", response_model=ResolucionOut,
+             summary="Confirmar las reservas elegidas y liberar las demás, en una sola llamada")
+def resolver_reservas(body: ResolucionIn, db: Session = Depends(get_db)):
+    """Lo que Bonita manda cuando el Municipio adjudica: `confirmar` pasa cada referencia a `ADJUDICADA` y `liberar`
+    devuelve el stock de las demás. Valida todo antes de cambiar nada (`404` si una referencia no existe, `409` si
+    alguna ya no admite la operación) y es idempotente: repetir la llamada completa no resta dos veces."""
+    try:
+        return reservas.resolver(db, body.confirmar, body.liberar)
+    except _ERRORES as exc:
+        raise _http(exc) from exc
+

@@ -148,6 +148,16 @@ Pasa `RESERVADA` (o `ADJUDICADA` sin cerrar) → `LIBERADA` y **devuelve el stoc
 Response `200`: `{"referencia": "...", "estado": "LIBERADA", "liberado": [{"tipo_recurso": "PARAMEDICO", "cantidad": 4}]}`.
 Repetida → `200` sin volver a restar. Si estaba `CERRADA` → `409`.
 
+### 3.3b `POST /adjudicaciones/resolucion` — lo que decidió el Municipio, en una sola llamada
+
+Request: `{"confirmar": ["emg-12-r1-30-54666544-5"], "liberar": ["emg-12-r1-30-68522415-9"]}`.
+Confirma las primeras (`ADJUDICADA`) y libera las segundas (`LIBERADA`, devuelve el stock). Valida todo antes de cambiar
+nada (`404` si una referencia no existe, `409` si alguna ya no admite la operación, `400` si una está repetida o en las
+dos listas) y es idempotente: repetir la llamada completa no resta dos veces. Response `200`:
+`{"confirmadas": [{referencia, estado}], "liberadas": [{referencia, estado, liberado}]}`.
+Bonita arma el cuerpo con Groovy a partir de `evaluacionJson` (las referencias) y `ongsAdjudicadas` (los CUIT elegidos),
+así un solo conector REST resuelve un número de ONGs que cambia en cada emergencia.
+
 ### 3.4 `POST /cierres` — fin de la actividad (servicio 5)
 
 ```json
@@ -198,8 +208,8 @@ El detalle de la evaluación **no** se guarda en una variable de Bonita: viaja e
 |---|---|---|---|
 | Alta de emergencia | Municipio | Instancia el caso y completa "Registrar Emergencia" | Hecho |
 | Publicar convocatoria | Coordinador | Completa "Revisar…" y "Publicar…", setea `ventanaOfertasISO` | Hecho |
-| **Decidir** (`POST /api/emergencias/{id}/decision`) | Coordinador | Setea `decisionCoordinador` = `PARCIAL` \| `REFORMULAR` y completa "Evaluar Cobertura…" | WP5 |
-| **Adjudicar** (`POST /api/emergencias/{id}/adjudicar`) | Municipio | Setea `ongsAdjudicadas` (lista JSON de CUIT) y completa "Adjudicar Ofertas" | WP5 |
+| **Decidir** (`POST /api/emergencias/{id}/decision`) | Coordinador | Setea `decisionCoordinador` = `PARCIAL` \| `REFORMULAR` y completa "Evaluar Cobertura…". REFORMULAR antes libera en la API Nacional las referencias de la ronda | Hecho |
+| **Adjudicar** (`POST /api/emergencias/{id}/adjudicar`) | Municipio | Setea `ongsAdjudicadas` (lista JSON de CUIT) y completa "Adjudicar Ofertas"; solo se puede elegir entre las ONGs `RESERVADA` | Hecho |
 | **Finalizar** (`POST /api/emergencias/{id}/finalizar`) | ONG | Completa su instancia de "Confirmar Finalizacion…" (o, en la versión simple, la completa la app cuando todas terminaron) | WP6 |
 | **Monitorear** y **Validar cierre** | Coordinador | Completa "Monitorear Ejecucion…" y "Validar Cierre Operativo Bilateral" | WP6 |
 

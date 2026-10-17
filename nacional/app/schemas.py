@@ -255,3 +255,15 @@ class RecursoLiberadoOut(BaseModel):
 
 class LiberacionOut(ReservaOut):
     liberado: list[RecursoLiberadoOut]
+
+
+class ResolucionIn(BaseModel):
+    """La decisión del Municipio sobre las reservas de una emergencia: cuáles se confirman y cuáles se liberan."""
+    confirmar: list[str] = Field(default_factory=list)
+    liberar: list[str] = Field(default_factory=list)
+
+
+class ResolucionOut(BaseModel):
+    confirmadas: list[ReservaOut]
+    liberadas: list[LiberacionOut]
+

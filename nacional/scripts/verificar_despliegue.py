@@ -207,6 +207,19 @@ def main() -> int:
     v.check("R12 Ofrecer más de lo que tiene (5 > 4): NO_RESERVADA, sin recortar ni reservar nada",
             status == 200 and (ev["ongs"][0]["estado"], ev["ongs"][0]["items"][0]["reservado"]) == ("NO_RESERVADA", 0)
             and comprometidos() == (0, 0), (status, ev, comprometidos()))
+    segunda = {**pedido, "emergencia_id": emergencia + 2}
+    ref2, ref2_b = f"emg-{emergencia + 2}-r1-{CRUZ_ROJA}", f"emg-{emergencia + 2}-r1-{BOMBEROS}"
+    v.pedir("POST", "/evaluaciones", segunda)
+    status, res = v.pedir("POST", "/adjudicaciones/resolucion", {"confirmar": [ref2], "liberar": [ref2_b]})
+    v.check("R13 Resolución: confirma Cruz Roja y libera Bomberos en una sola llamada",
+            status == 200 and [c["estado"] for c in res["confirmadas"]] == ["ADJUDICADA"]
+            and [x["estado"] for x in res["liberadas"]] == ["LIBERADA"] and comprometidos() == (4, 0),
+            (status, res, comprometidos()))
+    v.check("R14 Repetir la resolución no cambia nada",
+            v.pedir("POST", "/adjudicaciones/resolucion", {"confirmar": [ref2], "liberar": [ref2_b]})[0] == 200
+            and comprometidos() == (4, 0))
+    v.pedir("POST", f"/adjudicaciones/{ref2}/liberar")
+    v.check("R15 Al liberar la adjudicada, el inventario queda como al principio", comprometidos() == (0, 0), comprometidos())
 
     print(f"\n{v.ok}/{v.total} verificaciones OK")
     return 0 if v.ok == v.total else 1

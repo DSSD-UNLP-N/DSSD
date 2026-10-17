@@ -24,6 +24,7 @@ from app.models import (
 )
 from app.schemas import (
     EvaluacionIn, EvaluacionOut, ItemEvaluadoOut, LiberacionOut, LoteCoberturaOut, OngEvaluadaOut, RecursoLiberadoOut,
+    ResolucionOut, ReservaOut,
 )
 from app.services.validacion import TipoRecursoDesconocido, competencia
 
@@ -236,3 +237,32 @@ def liberar(db: Session, ref: str) -> LiberacionOut:
         liberado=[RecursoLiberadoOut(tipo_recurso=i.inventario.tipo_recurso.codigo, cantidad=i.cantidad)
                   for i in adj.items],
     )
+
+
+def resolver(db: Session, confirmar_refs: list[str], liberar_refs: list[str]) -> ResolucionOut:
+    """Confirma unas reservas y libera otras en una sola llamada (lo que decidió el Municipio).
+
+    Se valida todo antes de tocar nada: si una referencia no existe o no admite la operación, no se cambia ninguna.
+    Cada operación es idempotente, así que repetir la llamada completa es seguro."""
+    todas = confirmar_refs + liberar_refs
+    if len(set(todas)) != len(todas):
+        raise ReservaError("Una referencia no puede repetirse ni estar en las dos listas")
+    existentes = {a.referencia_id: a for a in db.scalars(
+        select(Adjudicacion).where(Adjudicacion.referencia_id.in_(todas)))} if todas else {}
+    for ref in todas:
+        if ref not in existentes:
+            raise ReservaNoExiste(f"La referencia {ref} no existe")
+    for ref in confirmar_refs:
+        if existentes[ref].estado in (EstadoAdjudicacion.LIBERADA, EstadoAdjudicacion.CERRADA):
+            raise ReservaEnConflicto(f"La referencia {ref} está {existentes[ref].estado.value}; no se puede adjudicar")
+    for ref in liberar_refs:
+        if existentes[ref].estado is EstadoAdjudicacion.CERRADA:
+            raise ReservaEnConflicto(f"La referencia {ref} ya está CERRADA; sus recursos ya se liberaron")
+
+    confirmadas = [confirmar(db, ref) for ref in confirmar_refs]
+    liberadas = [liberar(db, ref) for ref in liberar_refs]
+    return ResolucionOut(
+        confirmadas=[ReservaOut(referencia=a.referencia_id, estado=a.estado) for a in confirmadas],
+        liberadas=liberadas,
+    )
+

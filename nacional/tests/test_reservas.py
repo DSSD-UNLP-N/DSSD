@@ -250,3 +250,58 @@ def test_una_cerrada_no_se_libera_ni_se_confirma(client, session_factory):
 
     assert client.post(f"/adjudicaciones/{ref}/liberar").status_code == 409
     assert client.post(f"/adjudicaciones/{ref}/confirmar").status_code == 409
+
+
+def _dos_reservas(client):
+    client.post("/evaluaciones", json=_cuerpo((CRUZ_ROJA, [(1, "PARAMEDICO", 4)]), (BOMBEROS, [(1, "PARAMEDICO", 2)])))
+    return f"emg-12-r1-{CRUZ_ROJA}", f"emg-12-r1-{BOMBEROS}"
+
+
+def test_resolucion_confirma_las_elegidas_y_libera_las_demas(client, session_factory):
+    cruz, bomberos = _dos_reservas(client)
+
+    r = client.post("/adjudicaciones/resolucion", json={"confirmar": [cruz], "liberar": [bomberos]})
+
+    assert r.status_code == 200
+    assert r.json()["confirmadas"] == [{"referencia": cruz, "estado": "ADJUDICADA"}]
+    assert r.json()["liberadas"] == [{"referencia": bomberos, "estado": "LIBERADA",
+                                      "liberado": [{"tipo_recurso": "PARAMEDICO", "cantidad": 2}]}]
+    assert _comprometido(session_factory, CRUZ_ROJA, "PARAMEDICO") == 4
+    assert _comprometido(session_factory, BOMBEROS, "PARAMEDICO") == 0
+
+
+def test_repetir_la_resolucion_no_cambia_nada(client, session_factory):
+    cruz, bomberos = _dos_reservas(client)
+    cuerpo = {"confirmar": [cruz], "liberar": [bomberos]}
+    primera = client.post("/adjudicaciones/resolucion", json=cuerpo)
+    segunda = client.post("/adjudicaciones/resolucion", json=cuerpo)
+
+    assert segunda.status_code == 200 and segunda.json() == primera.json()
+    assert _comprometido(session_factory, CRUZ_ROJA, "PARAMEDICO") == 4
+    assert _comprometido(session_factory, BOMBEROS, "PARAMEDICO") == 0
+
+
+def test_resolucion_con_una_referencia_inexistente_no_cambia_ninguna(client, session_factory):
+    cruz, bomberos = _dos_reservas(client)
+
+    r = client.post("/adjudicaciones/resolucion", json={"confirmar": [cruz], "liberar": [bomberos, "no-existe"]})
+
+    assert r.status_code == 404
+    assert _estado(session_factory, cruz) is EstadoAdjudicacion.RESERVADA
+    assert _comprometido(session_factory, BOMBEROS, "PARAMEDICO") == 2
+
+
+def test_resolucion_con_una_ya_liberada_es_409_y_no_cambia_ninguna(client, session_factory):
+    cruz, bomberos = _dos_reservas(client)
+    client.post(f"/adjudicaciones/{cruz}/liberar")
+
+    r = client.post("/adjudicaciones/resolucion", json={"confirmar": [cruz], "liberar": [bomberos]})
+
+    assert r.status_code == 409
+    assert _comprometido(session_factory, BOMBEROS, "PARAMEDICO") == 2  # la de Bomberos no se tocó
+
+
+def test_resolucion_no_admite_una_referencia_en_las_dos_listas(client):
+    cruz, _ = _dos_reservas(client)
+    assert client.post("/adjudicaciones/resolucion", json={"confirmar": [cruz], "liberar": [cruz]}).status_code == 400
+
