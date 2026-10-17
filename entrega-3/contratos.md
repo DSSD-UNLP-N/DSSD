@@ -210,8 +210,9 @@ El detalle de la evaluación **no** se guarda en una variable de Bonita: viaja e
 | Publicar convocatoria | Coordinador | Completa "Revisar…" y "Publicar…", setea `ventanaOfertasISO` | Hecho |
 | **Decidir** (`POST /api/emergencias/{id}/decision`) | Coordinador | Setea `decisionCoordinador` = `PARCIAL` \| `REFORMULAR` y completa "Evaluar Cobertura…". REFORMULAR antes libera en la API Nacional las referencias de la ronda | Hecho |
 | **Adjudicar** (`POST /api/emergencias/{id}/adjudicar`) | Municipio | Setea `ongsAdjudicadas` (lista JSON de CUIT) y completa "Adjudicar Ofertas"; solo se puede elegir entre las ONGs `RESERVADA` | Hecho |
-| **Finalizar** (`POST /api/emergencias/{id}/finalizar`) | ONG | Completa su instancia de "Confirmar Finalizacion…" (o, en la versión simple, la completa la app cuando todas terminaron) | WP6 |
-| **Monitorear** y **Validar cierre** | Coordinador | Completa "Monitorear Ejecucion…" y "Validar Cierre Operativo Bilateral" | WP6 |
+| **Monitorear** (`POST /api/emergencias/{id}/monitoreo`) | Coordinador | Completa "Monitorear Ejecucion del Despliegue"; habilita que las ONGs finalicen | Hecho (WP6) |
+| **Finalizar** (`POST /api/emergencias/{id}/finalizar`) | ONG | Marca la oferta FINALIZADA; cuando todas finalizaron, la app completa "Confirmar Finalizacion de Actividades" como admin | Hecho (WP6) |
+| **Validar cierre** (`POST /api/emergencias/{id}/validar-cierre`) | Coordinador | 409 si alguna ONG no finalizó; completa "Validar Cierre Operativo Bilateral"; Bonita libera stock y manda CIERRE | Hecho (WP6) |
 
 Cada tarea la ejecuta el usuario del rol correspondiente (mismo username en Bonita), como hoy.
 
@@ -232,7 +233,22 @@ Oferta:      vigente ─▶ ADJUDICADA | NO_ADJUDICADA ─▶ FINALIZADA        
 
 Tabla nueva `notificacion`: `id`, destinatario (`ong_id` o `usuario_id`), `emergencia_id`, `texto`, `creada_en`, `leida`.
 Columna nueva `emergencia.ronda` (entero, default 1).
-Todo esto va en **una sola migración** de la app (WP1) para que dos tareas no creen migraciones en paralelo.
+Columna nueva `emergencia.monitoreo_completado` (booleano, default false) — migración 0006.
+Todo esto va en **dos migraciones** de la app: WP1 (0005) para los estados y notificaciones; 0006 para monitoreo_completado.
+
+### Nuevos endpoints de la app (WP6)
+
+| Método | Ruta | Rol | Descripción |
+|---|---|---|---|
+| `GET` | `/api/notificaciones` | ONG | Lista propias (por `ong_id`), más recientes primero; incluye `leida` |
+| `POST` | `/api/notificaciones/{id}/leida` | ONG | Marca leída; 404 si no pertenece a la ONG |
+| `POST` | `/api/emergencias/{id}/monitoreo` | COORDINADOR | Completa el monitoreo; 409 si no es EN_EJECUCION; idempotente |
+| `POST` | `/api/emergencias/{id}/finalizar` | ONG | Oferta adjudicada → FINALIZADA; 409 si no hay monitoreo; idempotente; cuando todas finalizan la app completa la tarea Bonita |
+| `POST` | `/api/emergencias/{id}/validar-cierre` | COORDINADOR | 409 si alguna ONG no finalizó; completa la tarea Bonita; devuelve EmergenciaOut todavía EN_EJECUCION (RESUELTA llega vía evento CIERRE) |
+
+El detalle (`GET /api/emergencias/{id}`) devuelve además:
+- `monitoreo_completado: bool`
+- `ongs_adjudicadas: [{ong_id, ong_nombre, cuit, estado_oferta}]` — solo para COORDINADOR y AUDITOR
 
 ---
 

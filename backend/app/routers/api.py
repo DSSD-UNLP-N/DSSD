@@ -1,5 +1,5 @@
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -9,13 +9,15 @@ from app.core.security import verify_password
 from app.core.labels import ROL_LABEL, TIPO_LABEL
 from app.db import get_db
 from app.integrations.nacional import NacionalClient, NacionalError, get_nacional
-from app.models import Emergencia, Oferta, Rol, Usuario
+from app.models import Emergencia, EstadoOferta, Notificacion, Oferta, Rol, Usuario
 from app.schemas.api import (
     AdjudicarIn,
     DecisionIn,
     EmergenciaOut,
     LoginIn,
     LoteOut,
+    NotificacionOut,
+    OngEjecucionOut,
     OfertaIn,
     OfertaItemOut,
     OfertaOut,
@@ -34,7 +36,7 @@ from app.services.emergencias import (
     registrar_emergencia,
     tarea_ong_en_bonita,
 )
-from app.services.ciclo import CicloError, adjudicar, decidir
+from app.services.ciclo import CicloError, adjudicar, decidir, finalizar_oferta, monitorear, validar_cierre
 from app.services.ofertas import OfertaError, publicar_oferta
 from app.services.lotes import (
     LoteError,
@@ -69,6 +71,7 @@ def _emergencia_out(e: Emergencia) -> EmergenciaOut:
         municipio_nombre=e.municipio.nombre if e.municipio else None,
         municipio_provincia=e.municipio.provincia if e.municipio else None,
         lotes=[LoteOut.model_validate(l) for l in e.lotes],
+        monitoreo_completado=e.monitoreo_completado,
     )
 
 
@@ -149,14 +152,33 @@ def api_detalle(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ):
-    return _detalle_out(_require_visible(db, user, emergencia_id), user, settings)
+    return _detalle_out(_require_visible(db, user, emergencia_id), user, settings, db)
 
 
-def _detalle_out(emergencia: Emergencia, user: Usuario, settings: Settings) -> EmergenciaOut:
+def _detalle_out(emergencia: Emergencia, user: Usuario, settings: Settings, db: Session | None = None) -> EmergenciaOut:
     out = _emergencia_out(emergencia)
     out.tarea_bonita = tarea_ong_en_bonita(settings, emergencia, user)
     if emergencia.evaluacion and user.rol is not Rol.ONG:
         out.evaluacion = Evaluacion.model_validate_json(emergencia.evaluacion)
+    # ONGs adjudicadas: para coordinador y auditor en detalle.
+    if db is not None and user.rol in (Rol.COORDINADOR, Rol.AUDITOR):
+        ofertas_adj = db.scalars(
+            select(Oferta)
+            .where(
+                Oferta.emergencia_id == emergencia.id,
+                Oferta.estado.in_([EstadoOferta.ADJUDICADA, EstadoOferta.FINALIZADA]),
+            )
+            .options(selectinload(Oferta.ong))
+        ).all()
+        out.ongs_adjudicadas = [
+            OngEjecucionOut(
+                ong_id=o.ong_id,
+                ong_nombre=o.ong.nombre,
+                cuit=o.ong.cuit,
+                estado_oferta=o.estado,
+            )
+            for o in ofertas_adj
+        ]
     return out
 
 
@@ -179,7 +201,7 @@ def api_decidir(
     except NacionalError as exc:
         db.rollback()
         raise HTTPException(status_code=503, detail=NACIONAL_CAIDO) from exc
-    return _detalle_out(_load_emergencia(db, emergencia_id), user, settings)
+    return _detalle_out(_load_emergencia(db, emergencia_id), user, settings, db)
 
 
 @router.post("/emergencias/{emergencia_id}/adjudicar", response_model=EmergenciaOut)
@@ -196,7 +218,7 @@ def api_adjudicar(
         adjudicar(settings, emergencia=emergencia, municipal=user, cuits=body.cuits)
     except CicloError as exc:
         raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
-    return _detalle_out(_load_emergencia(db, emergencia_id), user, settings)
+    return _detalle_out(_load_emergencia(db, emergencia_id), user, settings, db)
 
 
 NACIONAL_CAIDO = "El Sistema Nacional no responde; probá de nuevo en un momento."
@@ -315,3 +337,88 @@ def api_crear_oferta(
         db.rollback()
         raise HTTPException(status_code=503, detail=NACIONAL_CAIDO) from exc
     return _oferta_out(oferta)
+
+
+# --- notificaciones ---
+
+@router.get("/notificaciones", response_model=list[NotificacionOut])
+def api_notificaciones(
+    user: Usuario = Depends(require_role(Rol.ONG)),
+    db: Session = Depends(get_db),
+):
+    """Notificaciones del usuario o de su ONG; más recientes primero."""
+    if user.ong_id is None:
+        return []
+    items = db.scalars(
+        select(Notificacion)
+        .where(Notificacion.ong_id == user.ong_id)
+        .order_by(Notificacion.creada_en.desc())
+    ).all()
+    return items
+
+
+@router.post("/notificaciones/{notificacion_id}/leida", status_code=status.HTTP_204_NO_CONTENT)
+def api_marcar_leida(
+    notificacion_id: int,
+    user: Usuario = Depends(require_role(Rol.ONG)),
+    db: Session = Depends(get_db),
+):
+    """Marca una notificación como leída. Solo la propia ONG puede hacerlo."""
+    n = db.get(Notificacion, notificacion_id)
+    if n is None or n.ong_id != user.ong_id:
+        raise HTTPException(status_code=404, detail="Notificación no encontrada")
+    n.leida = True
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --- monitoreo y cierre bilateral ---
+
+@router.post("/emergencias/{emergencia_id}/monitoreo", response_model=EmergenciaOut)
+def api_monitoreo(
+    emergencia_id: int,
+    user: Usuario = Depends(require_role(Rol.COORDINADOR)),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    """El Coordinador completa el monitoreo de ejecución: habilita que las ONGs finalicen."""
+    emergencia = _require_visible(db, user, emergencia_id)
+    try:
+        monitorear(db, settings, emergencia=emergencia, coordinador=user)
+    except CicloError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    return _detalle_out(_load_emergencia(db, emergencia_id), user, settings, db)
+
+
+@router.post("/emergencias/{emergencia_id}/finalizar", response_model=EmergenciaOut)
+def api_finalizar(
+    emergencia_id: int,
+    user: Usuario = Depends(require_role(Rol.ONG)),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    """La ONG informa que terminó sus actividades. Cuando todas finalizaron, la app completa la tarea en Bonita."""
+    emergencia = _require_visible(db, user, emergencia_id)
+    if user.ong is None:
+        raise HTTPException(status_code=403, detail="Tu perfil no está asociado a una ONG")
+    try:
+        finalizar_oferta(db, settings, emergencia=emergencia, ong=user.ong)
+    except CicloError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    return _detalle_out(_load_emergencia(db, emergencia_id), user, settings, db)
+
+
+@router.post("/emergencias/{emergencia_id}/validar-cierre", response_model=EmergenciaOut)
+def api_validar_cierre(
+    emergencia_id: int,
+    user: Usuario = Depends(require_role(Rol.COORDINADOR)),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    """El Coordinador valida el cierre bilateral. Bonita libera el stock y manda el evento CIERRE."""
+    emergencia = _require_visible(db, user, emergencia_id)
+    try:
+        validar_cierre(db, settings, emergencia=emergencia, coordinador=user)
+    except CicloError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    return _detalle_out(_load_emergencia(db, emergencia_id), user, settings, db)

@@ -8,7 +8,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import Emergencia, EstadoEmergencia, EstadoOferta, Notificacion, Oferta, OfertaItem
+from app.models import Emergencia, EstadoEmergencia, EstadoOferta, Notificacion, Oferta, OfertaItem, Ong
 from app.schemas.evaluacion import Evaluacion
 from app.services.emergencias import cerrar_ventanas_vencidas
 
@@ -88,6 +88,39 @@ def guardar_evaluacion(db: Session, emergencia_id: int, resultado: Evaluacion) -
     e.evaluacion = nueva
     if resultado.cobertura_completa:
         e.estado = EstadoEmergencia.ADJUDICACION
+    db.commit()
+    return True
+
+
+def registrar_cierre(db: Session, emergencia_id: int, cuits: list[str]) -> bool:
+    """Bonita terminó el caso: emergencia → RESUELTA, notificación de cierre a cada ONG adjudicada.
+    False si no existe. Repetir el evento no duplica notificaciones (idempotente)."""
+    e = db.get(Emergencia, emergencia_id)
+    if e is None:
+        return False
+    if e.estado is EstadoEmergencia.RESUELTA:
+        return True
+    if e.estado is not EstadoEmergencia.EN_EJECUCION:
+        raise ConsolidadoError(f"La emergencia está en {e.estado.value}: no se puede cerrar")
+    # Notificar solo a las ONGs que aún no tienen notificación de cierre para esta emergencia.
+    ong_ids_ya_notificadas: set[int] = set()
+    for n in db.scalars(select(Notificacion).where(
+        Notificacion.emergencia_id == e.id,
+        Notificacion.texto.like("%cerrada%"),
+    )):
+        ong_ids_ya_notificadas.add(n.ong_id)
+    if cuits:
+        ongs = db.scalars(
+            select(Ong).where(Ong.cuit.in_(cuits))
+        ).all()
+        for ong in ongs:
+            if ong.id not in ong_ids_ya_notificadas:
+                db.add(Notificacion(
+                    ong_id=ong.id,
+                    emergencia_id=e.id,
+                    texto=f"La emergencia #{e.id} fue cerrada. Gracias por tu colaboración.",
+                ))
+    e.estado = EstadoEmergencia.RESUELTA
     db.commit()
     return True
 

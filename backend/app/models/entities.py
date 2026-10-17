@@ -108,6 +108,8 @@ class Emergencia(Base):
     ronda: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     # Resultado de la evaluación (JSON tal como lo devuelve la API Nacional); lo manda Bonita en un evento.
     evaluacion: Mapped[str | None] = mapped_column(Text)
+    # True una vez que el Coordinador completó "Monitorear Ejecución del Despliegue".
+    monitoreo_completado: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     creada_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     municipio: Mapped[Municipio] = relationship()
