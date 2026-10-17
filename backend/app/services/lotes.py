@@ -10,12 +10,13 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import requests
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.integrations.bonita import BonitaClient, BonitaError
 from app.integrations.nacional import NacionalClient
-from app.models import Emergencia, EstadoEmergencia, Lote, Usuario
+from app.models import Emergencia, EstadoEmergencia, Lote, OfertaItem, Usuario
 from app.schemas.lotes import LoteIn
 
 TAREA_REVISAR = "Revisar Informacion"
@@ -61,6 +62,8 @@ def borrar_lote(db: Session, emergencia: Emergencia, lote_id: int) -> None:
     lote = next((lote for lote in emergencia.lotes if lote.id == lote_id), None)
     if lote is None:
         raise LoteError("Ese lote no pertenece a esta emergencia.")
+    if db.scalar(select(OfertaItem.id).where(OfertaItem.lote_id == lote.id).limit(1)) is not None:
+        raise LoteError("Ese lote ya tiene ofertas en su historial (ronda anterior): no se puede borrar.")
     db.delete(lote)
     db.commit()
 

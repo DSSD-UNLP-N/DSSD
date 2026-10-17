@@ -11,6 +11,8 @@ from app.db import get_db
 from app.integrations.nacional import NacionalClient, NacionalError, get_nacional
 from app.models import Emergencia, Oferta, Rol, Usuario
 from app.schemas.api import (
+    AdjudicarIn,
+    DecisionIn,
     EmergenciaOut,
     LoginIn,
     LoteOut,
@@ -32,6 +34,7 @@ from app.services.emergencias import (
     registrar_emergencia,
     tarea_ong_en_bonita,
 )
+from app.services.ciclo import CicloError, adjudicar, decidir
 from app.services.ofertas import OfertaError, publicar_oferta
 from app.services.lotes import (
     LoteError,
@@ -146,12 +149,54 @@ def api_detalle(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ):
-    emergencia = _require_visible(db, user, emergencia_id)
+    return _detalle_out(_require_visible(db, user, emergencia_id), user, settings)
+
+
+def _detalle_out(emergencia: Emergencia, user: Usuario, settings: Settings) -> EmergenciaOut:
     out = _emergencia_out(emergencia)
     out.tarea_bonita = tarea_ong_en_bonita(settings, emergencia, user)
     if emergencia.evaluacion and user.rol is not Rol.ONG:
         out.evaluacion = Evaluacion.model_validate_json(emergencia.evaluacion)
     return out
+
+
+@router.post("/emergencias/{emergencia_id}/decision", response_model=EmergenciaOut)
+def api_decidir(
+    emergencia_id: int,
+    body: DecisionIn,
+    user: Usuario = Depends(require_role(Rol.COORDINADOR)),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    nacional: NacionalClient = Depends(get_nacional),
+):
+    """Con la cobertura incompleta: PARCIAL sigue con lo reservado; REFORMULAR libera todo y empieza otra ronda."""
+    emergencia = _require_visible(db, user, emergencia_id)
+    try:
+        decidir(db, settings, nacional, emergencia=emergencia, coordinador=user, decision=body.decision)
+    except CicloError as exc:
+        db.rollback()
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    except NacionalError as exc:
+        db.rollback()
+        raise HTTPException(status_code=503, detail=NACIONAL_CAIDO) from exc
+    return _detalle_out(_load_emergencia(db, emergencia_id), user, settings)
+
+
+@router.post("/emergencias/{emergencia_id}/adjudicar", response_model=EmergenciaOut)
+def api_adjudicar(
+    emergencia_id: int,
+    body: AdjudicarIn,
+    user: Usuario = Depends(require_role(Rol.MUNICIPIO)),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    """El Municipio elige entre las ofertas validadas. Bonita confirma lo elegido y libera lo demás."""
+    emergencia = _require_visible(db, user, emergencia_id)
+    try:
+        adjudicar(settings, emergencia=emergencia, municipal=user, cuits=body.cuits)
+    except CicloError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    return _detalle_out(_load_emergencia(db, emergencia_id), user, settings)
 
 
 NACIONAL_CAIDO = "El Sistema Nacional no responde; probá de nuevo en un momento."
@@ -234,6 +279,7 @@ def _oferta_out(o: Oferta) -> OfertaOut:
         version_actual=o.version_actual,
         items=items,
         retirada=not items,
+        estado=o.estado,
     )
 
 

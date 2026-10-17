@@ -541,6 +541,7 @@ export function DetallePage() {
   const [ok, setOk] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [tipos, setTipos] = useState<TipoRecurso[]>([]);
+  const [elegidas, setElegidas] = useState<string[]>([]);
 
   const reload = useCallback(async () => {
     const [em, m, of] = await Promise.all([api.getEmergencia(id), api.meta(), api.listOfertas(id)]);
@@ -590,6 +591,39 @@ export function DetallePage() {
       });
       form.reset();
       setOk("Lote agregado");
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function decidir(decision: "PARCIAL" | "REFORMULAR") {
+    setBusy(true);
+    setError(null);
+    setOk(null);
+    try {
+      await api.decidir(id, decision);
+      setOk(decision === "PARCIAL" ? "Seguís con la cobertura parcial: el Municipio adjudica." : "Convocatoria reformulada: cargá los lotes y publicá de nuevo.");
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function adjudicar() {
+    setBusy(true);
+    setError(null);
+    setOk(null);
+    try {
+      await api.adjudicar(id, elegidas);
+      setOk("Adjudicación enviada: Bonita confirma las reservas elegidas y libera las demás.");
+      setElegidas([]);
+      // El pase a "En ejecución" lo hace Bonita en unos segundos.
+      await new Promise((r) => setTimeout(r, 4000));
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error");
@@ -741,11 +775,56 @@ export function DetallePage() {
           )}
         </div>
 
-        {user!.rol !== "ONG" && e.estado === "EN_EVALUACION" && (
+        {user!.rol !== "ONG" && (e.estado === "EN_EVALUACION" || e.evaluacion) && (
           <>
             <h2 className="section-title">Evaluación de las ofertas</h2>
             <EvaluacionPanel e={e} />
           </>
+        )}
+
+        {user!.rol === "COORDINADOR" && e.estado === "EN_EVALUACION" && e.evaluacion && !e.evaluacion.cobertura_completa && (
+          <div className="panel" style={{ marginBottom: "1.35rem" }} data-testid="decision">
+            <h3>La cobertura no alcanza: ¿cómo seguimos?</h3>
+            <p>
+              <strong>Cobertura parcial:</strong> se sigue con lo reservado y el Municipio elige entre las ofertas.
+              <br />
+              <strong>Reformular:</strong> se libera todo el stock reservado, se retiran las ofertas y se vuelve a cargar
+              lotes y publicar (ronda {e.evaluacion.ronda + 1}).
+            </p>
+            <div className="actions">
+              <button className="btn btn-primary" disabled={busy} onClick={() => void decidir("PARCIAL")} data-testid="decidir-parcial">
+                Seguir con cobertura parcial
+              </button>{" "}
+              <button className="btn btn-ghost" disabled={busy} onClick={() => void decidir("REFORMULAR")} data-testid="decidir-reformular">
+                Reformular la convocatoria
+              </button>
+            </div>
+          </div>
+        )}
+
+        {user!.rol === "MUNICIPIO" && e.estado === "ADJUDICACION" && e.evaluacion && (
+          <div className="panel" style={{ marginBottom: "1.35rem" }} data-testid="adjudicacion">
+            <h3>Adjudicar ofertas</h3>
+            <p>Elegí a qué ONGs aceptás. Lo elegido queda comprometido; el resto se libera.</p>
+            {e.evaluacion.ongs.filter((o) => o.estado === "RESERVADA").map((o) => (
+              <label key={o.cuit} className="lote-row" style={{ cursor: "pointer" }} data-testid={`elegir-${o.cuit}`}>
+                <span>
+                  <input
+                    type="checkbox"
+                    checked={elegidas.includes(o.cuit)}
+                    onChange={(ev) =>
+                      setElegidas((prev) => (ev.target.checked ? [...prev, o.cuit] : prev.filter((c) => c !== o.cuit)))
+                    }
+                  />{" "}
+                  <strong>{o.ong ?? o.cuit}</strong>{" "}
+                  {o.items.map((i) => `${i.reservado} × ${i.tipo_recurso} (${i.nivel} → ${i.asignacion_sugerida})`).join(", ")}
+                </span>
+              </label>
+            ))}
+            <button className="btn btn-primary" disabled={busy || elegidas.length === 0} onClick={() => void adjudicar()} data-testid="adjudicar">
+              Adjudicar a {elegidas.length} {elegidas.length === 1 ? "ONG" : "ONGs"}
+            </button>
+          </div>
         )}
 
         {user!.rol === "COORDINADOR" && e.estado === "REGISTRADA" && (
@@ -859,6 +938,8 @@ export function DetallePage() {
                 <div key={o.id} style={{ marginBottom: "0.75rem" }}>
                   <strong>{o.ong_nombre}</strong> <span className="badge muted">v{o.version_actual}</span>
                   {o.retirada && <span className="badge muted">retirada</span>}
+                  {o.estado === "ADJUDICADA" && <span className="badge ok">adjudicada</span>}
+                  {o.estado === "NO_ADJUDICADA" && <span className="badge muted">no adjudicada</span>}
                   {e.lotes.map((l) => {
                     const c = cantidadOfrecida(o, l.id);
                     return c ? (

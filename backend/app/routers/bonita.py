@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import require_bonita_key
 from app.db import get_db
-from app.schemas.evaluacion import EventoEvaluacion
-from app.services.evaluacion import ConsolidadoError, consolidar_ofertas, guardar_evaluacion
+from app.schemas.evaluacion import Evento
+from app.services.evaluacion import ConsolidadoError, consolidar_ofertas, guardar_evaluacion, registrar_adjudicacion
 
 router = APIRouter(prefix="/api/bonita", dependencies=[Depends(require_bonita_key)])
 
@@ -22,10 +22,13 @@ def consolidado_de_ofertas(emergencia_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/emergencias/{emergencia_id}/eventos", status_code=status.HTTP_204_NO_CONTENT)
-def evento_de_bonita(emergencia_id: int, evento: EventoEvaluacion, db: Session = Depends(get_db)):
-    """Bonita avisa que evaluó las ofertas y manda el resultado de la API Nacional tal cual."""
+def evento_de_bonita(emergencia_id: int, evento: Evento, db: Session = Depends(get_db)):
+    """Bonita avisa lo que hizo: evaluó las ofertas (EVALUACION) o resolvió las reservas (ADJUDICACION)."""
     try:
-        existe = guardar_evaluacion(db, emergencia_id, evento.resultado)
+        if evento.tipo == "EVALUACION":
+            existe = guardar_evaluacion(db, emergencia_id, evento.resultado)
+        else:
+            existe = registrar_adjudicacion(db, emergencia_id, evento.adjudicadas, evento.no_adjudicadas)
     except ConsolidadoError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not existe:

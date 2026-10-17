@@ -1,8 +1,8 @@
 """Resultado de la evaluación, con el mismo formato que devuelve `POST /evaluaciones` de la API Nacional
 (entrega-3/contratos.md, punto 3.1). Bonita lo reenvía tal cual a la app en un evento."""
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class LoteCobertura(BaseModel):
@@ -45,3 +45,14 @@ class Evaluacion(BaseModel):
 class EventoEvaluacion(BaseModel):
     tipo: Literal["EVALUACION"]
     resultado: Evaluacion
+
+
+class EventoAdjudicacion(BaseModel):
+    """Bonita avisa que confirmó las reservas elegidas por el Municipio y liberó las demás."""
+    tipo: Literal["ADJUDICACION"]
+    adjudicadas: list[str]  # CUIT de las ONGs elegidas
+    no_adjudicadas: list[str]  # CUIT de las demás ONGs evaluadas
+
+
+Evento = Annotated[EventoEvaluacion | EventoAdjudicacion, Field(discriminator="tipo")]
+

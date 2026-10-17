@@ -1,9 +1,9 @@
 from datetime import datetime, timezone
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
-from app.models import EstadoEmergencia, Gravedad, Rol, TipoLote
+from app.models import EstadoEmergencia, EstadoOferta, Gravedad, Rol, TipoLote
 from app.schemas.evaluacion import Evaluacion
 
 
@@ -68,6 +68,15 @@ class EmergenciaOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class DecisionIn(BaseModel):
+    # PARCIAL: seguir con lo reservado. REFORMULAR: liberar todo y volver a cargar lotes (ronda siguiente).
+    decision: Literal["PARCIAL", "REFORMULAR"]
+
+
+class AdjudicarIn(BaseModel):
+    cuits: list[str] = Field(min_length=1)  # las ONGs elegidas
+
+
 class PublicarIn(BaseModel):
     ventana_fin: datetime
 
@@ -100,5 +109,6 @@ class OfertaOut(BaseModel):
     version_actual: int
     items: list[OfertaItemOut]
     retirada: bool = False  # la versión vigente no tiene ítems
+    estado: EstadoOferta = EstadoOferta.PRESENTADA
 
     model_config = ConfigDict(from_attributes=True)

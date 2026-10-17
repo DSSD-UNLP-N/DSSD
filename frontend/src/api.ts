@@ -93,6 +93,7 @@ export type Oferta = {
   version_actual: number;
   items: { lote_id: number; recurso: string; cantidad: number; version: number }[];
   retirada: boolean;
+  estado: "PRESENTADA" | "ADJUDICADA" | "NO_ADJUDICADA" | "FINALIZADA";
 };
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -167,6 +168,16 @@ export const api = {
     request<Emergencia>(`/api/emergencias/${id}/publicar`, {
       method: "POST",
       body: JSON.stringify({ ventana_fin }),
+    }),
+  decidir: (id: number, decision: "PARCIAL" | "REFORMULAR") =>
+    request<Emergencia>(`/api/emergencias/${id}/decision`, {
+      method: "POST",
+      body: JSON.stringify({ decision }),
+    }),
+  adjudicar: (id: number, cuits: string[]) =>
+    request<Emergencia>(`/api/emergencias/${id}/adjudicar`, {
+      method: "POST",
+      body: JSON.stringify({ cuits }),
     }),
   listOfertas: (id: number) => request<Oferta[]>(`/api/emergencias/${id}/ofertas`),
   createOferta: (
