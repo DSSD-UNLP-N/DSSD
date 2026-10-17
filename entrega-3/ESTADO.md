@@ -6,9 +6,11 @@ Rama `modelado-tomas-e-3`, [PR #10](https://github.com/FrancoCirielli16/DSSD/pul
 ## Hecho (y cómo se probó)
 - WP0 contratos, WP1 consolidado de ofertas + estados nuevos + tope, WP2 reserva todo-o-nada en la API Nacional,
   WP5 decisión del Coordinador y adjudicación del Municipio, conectores de Bonita para evaluar, avisar y resolver reservas.
-- **Parada 1** (evaluación con reserva) 26/26 y **Parada 2** (decisión, adjudicación, ronda 2) 34/34, con Bonita real.
-  Las corrió Claude con el script; **Tomás todavía no las corrió a mano** (guía paso a paso: `prueba-manual-parada-2.md`).
-- Tests: backend 188 pasan / 2 se saltean, API Nacional 93 / 3. `verificar_despliegue.py` local 53/53.
+- **Parada 1** (evaluación con reserva) 26/26 y **Parada 2** (decisión, adjudicación, ronda 2) 34/34 por API, con Bonita real.
+- **Parada 2 por la interfaz real (17/10):** `backend/scripts/ui_parada2.py` 46/46 (dos casos: parcial y reformular), con capturas
+  de cada paso. Guía con imágenes: `guia-parada-2.html` ([publicada](https://claude.ai/artifact/K47xuvWUCXUHAwvfTv643L), privada).
+  **Tomás todavía no la recorrió a mano.**
+- Tests: backend 188 pasan / 2 se saltean (16 s), API Nacional 93 / 3. `verificar_despliegue.py` local 53/53.
 - `.bos` actual con los 5 conectores: `entrega41_20261017_1311.bos`.
 
 ## Falta
@@ -22,7 +24,8 @@ Rama `modelado-tomas-e-3`, [PR #10](https://github.com/FrancoCirielli16/DSSD/pul
 ```
 python scripts/verificar_todo.py                                              # tests backend + nacional + tipos del front
 python backend/scripts/escenario_evaluacion.py                                # Parada 1 (Bonita real)
-python backend/scripts/escenario_adjudicacion.py                              # Parada 2 (Bonita real)
+python backend/scripts/escenario_adjudicacion.py                              # Parada 2 por API (Bonita real)
+python backend/scripts/ui_parada2.py                                          # Parada 2 por la interfaz, con capturas (~15 min)
 python backend/scripts/escenario_tope.py                                      # tope de ofertas
 PYTHONIOENCODING=utf-8 python nacional/scripts/verificar_despliegue.py http://localhost:8002
 ```
