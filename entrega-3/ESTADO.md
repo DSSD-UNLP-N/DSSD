@@ -24,7 +24,9 @@ Rama `modelado-tomas-e-3`, [PR #10](https://github.com/FrancoCirielli16/DSSD/pul
 - **Checkpoints de la Parada 3** (cada uno se prueba y se commitea antes del siguiente):
   1. ✅ WP3 en la API Nacional (tests + servidor real + `verificar_despliegue`).
   2. ✅ WP6 backend: evento `CIERRE`, notificaciones, `finalizar`, monitorear, validar cierre. Tests + `verificar_todo.py` + app y Bonita reales.
-  3. WP6 front: campana y botones. Script de Playwright con capturas de las pantallas nuevas.
+  3. ✅ WP6 front: campana de avisos y botones de cada rol. `backend/scripts/ui_ejecucion.py` (Playwright + Bonita real, con
+     capturas): monitorear, finalizar, validar cierre y aviso en la campana, 24/25 (la falla era de espera del script, ya corregida;
+     falta recorrerlo entero otra vez con un caso nuevo).
   4. Conector de cierre en Bonita (Tomás, Studio) + `escenario_cierre.py` con Bonita real: caso hasta `RESUELTA` y stock de vuelta.
   5. Parada 3 por la interfaz (`ui_parada3.py`, como la de la Parada 2) y su guía con capturas.
 - WP9 recorrido completo de punta a punta, WP7 Render con el código nuevo, WP8 Docker Compose + Postgres, WP10 entrega,
