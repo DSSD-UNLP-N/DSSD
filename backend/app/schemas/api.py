@@ -47,6 +47,30 @@ class LoteOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class OngEjecucionOut(BaseModel):
+    cuit: str | None
+    nombre: str
+    estado: EstadoOferta  # ADJUDICADA mientras trabaja, FINALIZADA cuando informó que terminó
+
+
+class EjecucionOut(BaseModel):
+    """Cómo va la ejecución de una emergencia adjudicada. La ONG solo ve su propia fila."""
+    monitoreo_iniciado: bool
+    cierre_validado: bool
+    todas_finalizadas: bool
+    ongs: list[OngEjecucionOut]
+
+
+class NotificacionOut(BaseModel):
+    id: int
+    emergencia_id: int
+    texto: str
+    creada_en: UtcDatetime
+    leida: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class EmergenciaOut(BaseModel):
     id: int
     tipo: str
@@ -64,6 +88,8 @@ class EmergenciaOut(BaseModel):
     tarea_bonita: str | None = None
     # Cobertura y ofertas validadas por la API Nacional; solo el detalle la trae, y no para la ONG.
     evaluacion: Evaluacion | None = None
+    # Ejecución y cierre; solo el detalle, y solo desde que la emergencia está en ejecución.
+    ejecucion: EjecucionOut | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -34,7 +34,7 @@ def _evaluacion(e: Emergencia) -> Evaluacion | None:
     return Evaluacion.model_validate_json(e.evaluacion) if e.evaluacion else None
 
 
-def _completar_en_bonita(settings: Settings, case_id: int | None, tarea: str, username: str,
+def completar_en_bonita(settings: Settings, case_id: int | None, tarea: str, username: str,
                          variables: dict[str, str]) -> None:
     """Setea las variables del caso y completa la tarea con el usuario del rol (mismo username que en la app)."""
     if case_id is None:
@@ -80,7 +80,7 @@ def decidir(db: Session, settings: Settings, nacional: NacionalClient, *, emerge
         for o in ev.ongs:
             if o.referencia:
                 nacional.liberar(o.referencia)
-    _completar_en_bonita(settings, emergencia.bonita_case_id, TAREA_EVALUAR, coordinador.username,
+    completar_en_bonita(settings, emergencia.bonita_case_id, TAREA_EVALUAR, coordinador.username,
                          {"decisionCoordinador": decision})
 
     if decision == "PARCIAL":
@@ -107,5 +107,5 @@ def adjudicar(settings: Settings, *, emergencia: Emergencia, municipal: Usuario,
     if invalidas:
         raise CicloError(
             f"No se puede adjudicar a {', '.join(invalidas)}: no tiene una oferta validada con stock reservado.", 400)
-    _completar_en_bonita(settings, emergencia.bonita_case_id, TAREA_ADJUDICAR, municipal.username,
+    completar_en_bonita(settings, emergencia.bonita_case_id, TAREA_ADJUDICAR, municipal.username,
                          {"ongsAdjudicadas": json.dumps(cuits)})

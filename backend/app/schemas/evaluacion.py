@@ -54,5 +54,11 @@ class EventoAdjudicacion(BaseModel):
     no_adjudicadas: list[str]  # CUIT de las demás ONGs evaluadas
 
 
-Evento = Annotated[EventoEvaluacion | EventoAdjudicacion, Field(discriminator="tipo")]
+class EventoCierre(BaseModel):
+    """Bonita avisa que liberó en la API Nacional lo de cada ONG adjudicada: la emergencia queda resuelta."""
+    tipo: Literal["CIERRE"]
+    cuits: list[str] = Field(min_length=1)  # CUIT de las ONGs cuyo cierre se informó
+
+
+Evento = Annotated[EventoEvaluacion | EventoAdjudicacion | EventoCierre, Field(discriminator="tipo")]
 

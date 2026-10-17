@@ -116,3 +116,23 @@ def registrar_adjudicacion(db: Session, emergencia_id: int, adjudicadas: list[st
     e.estado = EstadoEmergencia.EN_EJECUCION
     db.commit()
     return True
+
+
+def registrar_cierre(db: Session, emergencia_id: int, cuits: list[str]) -> bool:
+    """Bonita ya liberó en la API Nacional lo de cada ONG adjudicada: la emergencia queda RESUELTA y cada ONG recibe
+    el aviso del cierre. False si no existe. Repetir el evento no vuelve a avisar."""
+    e = db.get(Emergencia, emergencia_id)
+    if e is None:
+        return False
+    if e.estado is EstadoEmergencia.RESUELTA:
+        return True
+    if e.estado is not EstadoEmergencia.EN_EJECUCION:
+        raise ConsolidadoError(f"La emergencia está en {e.estado.value}: no espera un cierre")
+    ofertas = db.scalars(select(Oferta).where(Oferta.emergencia_id == e.id).options(selectinload(Oferta.ong)))
+    for o in ofertas:
+        if o.ong.cuit in cuits:
+            texto = f"La emergencia #{e.id} se cerró y se liberaron los recursos que habías comprometido."
+            db.add(Notificacion(ong_id=o.ong_id, emergencia_id=e.id, texto=texto))
+    e.estado = EstadoEmergencia.RESUELTA
+    db.commit()
+    return True
