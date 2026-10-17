@@ -1,7 +1,7 @@
 import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { api, type Emergencia, type Meta, type Oferta, type Rol, type TipoRecurso } from "./api";
+import { api, type Emergencia, type Meta, type Notificacion, type Oferta, type Rol, type TipoRecurso } from "./api";
 import { useAuth } from "./auth";
 import { FlowBubbles } from "./FlowBubbles";
 import { PageHeader } from "./PageHeader";
@@ -126,6 +126,103 @@ function EvaluacionPanel({ e }: { e: Emergencia }) {
   );
 }
 
+function NotificationBell() {
+  const [notifs, setNotifs] = useState<Notificacion[]>([]);
+  const [open, setOpen] = useState(false);
+
+  const refresh = useCallback(() => {
+    api.listNotificaciones().then(setNotifs).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    refresh();
+    const t = setInterval(refresh, 30000);
+    return () => clearInterval(t);
+  }, [refresh]);
+
+  const unread = notifs.filter((n) => !n.leida).length;
+
+  async function markRead(id: number) {
+    await api.marcarLeida(id).catch(() => {});
+    setNotifs((prev) => prev.map((n) => (n.id === id ? { ...n, leida: true } : n)));
+  }
+
+  return (
+    <div style={{ position: "relative" }}>
+      <button
+        className="btn btn-ghost light"
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label="Notificaciones"
+        style={{ position: "relative" }}
+      >
+        🔔
+        {unread > 0 && (
+          <span
+            style={{
+              position: "absolute",
+              top: 2,
+              right: 2,
+              background: "#c2410c",
+              color: "#fff",
+              borderRadius: "50%",
+              fontSize: 10,
+              width: 16,
+              height: 16,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              lineHeight: 1,
+            }}
+          >
+            {unread}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div
+          style={{
+            position: "absolute",
+            right: 0,
+            top: "100%",
+            background: "#fff",
+            border: "1px solid #e5e7eb",
+            borderRadius: 8,
+            boxShadow: "0 4px 16px rgba(0,0,0,.12)",
+            minWidth: 280,
+            maxWidth: 360,
+            zIndex: 100,
+            padding: "0.5rem 0",
+          }}
+        >
+          {notifs.length === 0 ? (
+            <div style={{ padding: "0.75rem 1rem", color: "#6b7280", fontSize: 14 }}>Sin notificaciones</div>
+          ) : (
+            notifs.map((n) => (
+              <div
+                key={n.id}
+                style={{
+                  padding: "0.6rem 1rem",
+                  borderBottom: "1px solid #f3f4f6",
+                  background: n.leida ? "#fff" : "#fef9ec",
+                  cursor: n.leida ? "default" : "pointer",
+                  fontSize: 13,
+                }}
+                onClick={() => !n.leida && void markRead(n.id)}
+              >
+                <div style={{ fontWeight: n.leida ? 400 : 600 }}>{n.texto}</div>
+                <div style={{ color: "#9ca3af", fontSize: 11, marginTop: 2 }}>
+                  Emergencia #{n.emergencia_id}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Shell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   return (
@@ -138,6 +235,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <div className="topbar-meta">
             <span className="role-chip">{ROL_LABEL[user.rol]}</span>
             <span>{user.nombre}</span>
+            {user.rol === "ONG" && <NotificationBell />}
             <button className="btn btn-ghost light" type="button" onClick={() => void logout()}>
               Salir
             </button>
@@ -682,6 +780,53 @@ export function DetallePage() {
     await enviarOferta(items, (o) => `Oferta enviada (versión ${o.version_actual})`);
   }
 
+  async function completarMonitoreo() {
+    setBusy(true);
+    setError(null);
+    setOk(null);
+    try {
+      const updated = await api.monitoreo(id);
+      setE(updated);
+      setOk("Monitoreo completado. Las ONGs ya pueden marcar sus actividades como finalizadas.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function finalizarActividad() {
+    setBusy(true);
+    setError(null);
+    setOk(null);
+    try {
+      const updated = await api.finalizar(id);
+      setE(updated);
+      setOk("Actividades marcadas como finalizadas.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function validarCierre() {
+    setBusy(true);
+    setError(null);
+    setOk(null);
+    try {
+      const updated = await api.validarCierre(id);
+      setE(updated);
+      setOk("Cierre validado. Bonita libera los recursos y la emergencia quedará Resuelta en instantes.");
+      await new Promise((r) => setTimeout(r, 5000));
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const miOferta = user!.rol === "ONG" ? ofertas[0] : undefined;
 
   // Retirar = reenviar la oferta sin ese lote (versión nueva); sin ningún lote, la oferta queda retirada.
@@ -824,6 +969,77 @@ export function DetallePage() {
             <button className="btn btn-primary" disabled={busy || elegidas.length === 0} onClick={() => void adjudicar()} data-testid="adjudicar">
               Adjudicar a {elegidas.length} {elegidas.length === 1 ? "ONG" : "ONGs"}
             </button>
+          </div>
+        )}
+
+        {/* ─── Monitoreo de ejecución (coordinador) ─────────────────────── */}
+        {user!.rol === "COORDINADOR" && e.estado === "EN_EJECUCION" && (
+          <div className="panel" style={{ marginBottom: "1.35rem" }}>
+            <h3>Seguimiento de la ejecución</h3>
+            {(e.ongs_adjudicadas?.length ?? 0) > 0 ? (
+              <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "1rem" }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: "left", padding: "0.35rem 0.5rem", borderBottom: "1px solid #e5e7eb" }}>ONG</th>
+                    <th style={{ textAlign: "left", padding: "0.35rem 0.5rem", borderBottom: "1px solid #e5e7eb" }}>Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {e.ongs_adjudicadas!.map((o) => (
+                    <tr key={o.ong_id}>
+                      <td style={{ padding: "0.35rem 0.5rem" }}>{o.ong_nombre}</td>
+                      <td style={{ padding: "0.35rem 0.5rem" }}>
+                        {o.estado_oferta === "FINALIZADA"
+                          ? <span className="badge ok">Finalizada</span>
+                          : <span className="badge muted">En ejecución</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="hint">No hay ONGs adjudicadas registradas.</p>
+            )}
+            {!e.monitoreo_completado && (
+              <button className="btn btn-primary" disabled={busy} onClick={() => void completarMonitoreo()}>
+                Completar monitoreo de despliegue
+              </button>
+            )}
+            {e.monitoreo_completado && (
+              <>
+                <p className="hint" style={{ marginBottom: "0.75rem" }}>Monitoreo completado. Esperando que todas las ONGs finalicen.</p>
+                <button
+                  className="btn btn-primary"
+                  disabled={busy || !(e.ongs_adjudicadas?.every((o) => o.estado_oferta === "FINALIZADA") ?? false)}
+                  onClick={() => void validarCierre()}
+                >
+                  Validar cierre bilateral
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ─── Finalizar actividades (ONG) ───────────────────────────────── */}
+        {user!.rol === "ONG" && e.estado === "EN_EJECUCION" && miOferta?.estado === "ADJUDICADA" && (
+          <div className="panel" style={{ marginBottom: "1.35rem" }}>
+            <h3>Informar finalización de actividades</h3>
+            {e.monitoreo_completado ? (
+              <>
+                <p>El coordinador completó el monitoreo. Podés marcar tus actividades como finalizadas cuando hayas terminado.</p>
+                <button className="btn btn-primary" disabled={busy} onClick={() => void finalizarActividad()}>
+                  Marcar actividad finalizada
+                </button>
+              </>
+            ) : (
+              <p className="hint">Esperando que el coordinador complete el monitoreo de despliegue.</p>
+            )}
+          </div>
+        )}
+
+        {user!.rol === "ONG" && e.estado === "EN_EJECUCION" && miOferta?.estado === "FINALIZADA" && (
+          <div className="alert ok" style={{ marginBottom: "1.35rem" }}>
+            Tus actividades fueron marcadas como finalizadas.
           </div>
         )}
 

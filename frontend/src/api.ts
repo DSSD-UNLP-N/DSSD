@@ -46,6 +46,8 @@ export type Emergencia = {
   lotes: Lote[];
   tarea_bonita?: string | null;
   evaluacion?: Evaluacion | null;
+  monitoreo_completado?: boolean;
+  ongs_adjudicadas?: OngEjecucion[];
 };
 
 export type Evaluacion = {
@@ -94,6 +96,21 @@ export type Oferta = {
   items: { lote_id: number; recurso: string; cantidad: number; version: number }[];
   retirada: boolean;
   estado: "PRESENTADA" | "ADJUDICADA" | "NO_ADJUDICADA" | "FINALIZADA";
+};
+
+export type Notificacion = {
+  id: number;
+  emergencia_id: number;
+  texto: string;
+  creada_en: string;
+  leida: boolean;
+};
+
+export type OngEjecucion = {
+  ong_id: number;
+  ong_nombre: string;
+  cuit: string | null;
+  estado_oferta: "ADJUDICADA" | "FINALIZADA";
 };
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -188,4 +205,13 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ items }),
     }),
+  listNotificaciones: () => request<Notificacion[]>("/api/notificaciones"),
+  marcarLeida: (id: number) =>
+    request<void>(`/api/notificaciones/${id}/leida`, { method: "POST" }),
+  monitoreo: (id: number) =>
+    request<Emergencia>(`/api/emergencias/${id}/monitoreo`, { method: "POST" }),
+  finalizar: (id: number) =>
+    request<Emergencia>(`/api/emergencias/${id}/finalizar`, { method: "POST" }),
+  validarCierre: (id: number) =>
+    request<Emergencia>(`/api/emergencias/${id}/validar-cierre`, { method: "POST" }),
 };
