@@ -4,6 +4,7 @@ import os
 os.environ["DATABASE_URL"] = "sqlite://"
 os.environ["JWT_SECRET"] = "test-secret"
 os.environ["BONITA_BASE_URL"] = "http://bonita.test/bonita"  # nunca pegarle a un Bonita real en los tests
+os.environ["NACIONAL_BASE_URL"] = "http://nacional.test"  # nunca pegarle a una API Nacional real en los tests
 os.environ["SHOW_DEMO_USERS"] = "false"  # que el .env local de cada uno no cambie lo que ven los tests
 
 import pytest  # noqa: E402
@@ -13,6 +14,7 @@ from sqlalchemy.orm import sessionmaker  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
 from app.db import Base, get_db  # noqa: E402
+from app.integrations.nacional import NacionalError, get_nacional  # noqa: E402
 from app.main import app  # noqa: E402
 from app.seed import DEMO_PASSWORD, seed  # noqa: E402
 
@@ -48,13 +50,119 @@ def seeded(session_factory):
     return session_factory
 
 
+class FakeNacional:
+    """Sustituye al Sistema Nacional en los tests; el cliente HTTP real se prueba en test_nacional_client.py."""
+
+    TIPOS = [
+        {"codigo": "PARAMEDICO", "nombre": "Paramédico", "categoria": "PERSONAL", "unidad": "personas",
+         "certificacion_requerida": "SALUD_PREHOSP"},
+        {"codigo": "RACION_ALIMENTO", "nombre": "Ración de alimento", "categoria": "INSUMO", "unidad": "raciones",
+         "certificacion_requerida": None},
+        {"codigo": "AGUA_POTABLE", "nombre": "Agua potable", "categoria": "INSUMO", "unidad": "litros",
+         "certificacion_requerida": None},
+    ]
+
+    def __init__(self):
+        self.caido = False
+        # Disponible por (CUIT de la ONG, tipo de recurso): lo mismo que cargan los seeds.
+        self.inventario = {
+            ("30-54666544-5", "PARAMEDICO"): 4,
+            ("30-54666544-5", "RACION_ALIMENTO"): 5000,
+            ("30-68522415-9", "PARAMEDICO"): 6,
+        }
+        self.validaciones = []  # (gravedad, items) de cada llamada a validar()
+        self.liberadas = []  # referencia de cada llamada a liberar()
+        self.login_calls = []
+        self.registration_calls = []
+
+    @staticmethod
+    def _token(username, role, cuit=None):
+        from datetime import datetime, timedelta, timezone
+
+        import jwt
+
+        now = datetime.now(timezone.utc)
+        return jwt.encode(
+            {
+                "sub": username,
+                "username": username,
+                "rol": role,
+                "cuit": cuit,
+                "iat": now,
+                "exp": now + timedelta(minutes=60),
+            },
+            "test-secret",
+            algorithm="HS256",
+        )
+
+    def login(self, username, password):
+        self._verificar()
+        self.login_calls.append((username, password))
+        roles = {
+            "operador.municipal": ("MUNICIPIO", None),
+            "operador.municipal2": ("MUNICIPIO", None),
+            "coordinador.regional": ("COORDINADOR", None),
+            "ong.cruzroja": ("ONG", "30-54666544-5"),
+            "ong.bomberos": ("ONG", "30-68522415-9"),
+            "auditor": ("AUDITOR", None),
+            "sin.municipio": ("MUNICIPIO", None),
+        }
+        role, cuit = roles[username]
+        return {"access_token": self._token(username, role, cuit), "token_type": "bearer"}
+
+    def registrar_ong(self, datos):
+        self._verificar()
+        self.registration_calls.append(datos)
+        return {
+            "access_token": self._token(datos["username"], "ONG", datos["cuit"]),
+            "token_type": "bearer",
+        }
+
+    def _verificar(self):
+        if self.caido:
+            raise NacionalError("Sistema Nacional caído (simulado)")
+
+    def liberar(self, referencia):
+        self._verificar()
+        self.liberadas.append(referencia)
+        return {"referencia": referencia, "estado": "LIBERADA", "liberado": []}
+
+    def tipos_recurso(self):
+        self._verificar()
+        return self.TIPOS
+
+    def validar(self, gravedad, items):
+        """Como la API real: suma lo pedido por (ONG, recurso) y compara con lo disponible."""
+        self._verificar()
+        self.validaciones.append((gravedad, items))
+        pedido = {}
+        for i in items:
+            clave = (i["cuit"], i["tipo_recurso"])
+            pedido[clave] = pedido.get(clave, 0) + i["cantidad"]
+        tipos = {t["codigo"]: t for t in self.TIPOS}
+        resultados = [
+            {"cuit": cuit, "tipo_recurso": codigo, "nombre_recurso": tipos[codigo]["nombre"],
+             "unidad": tipos[codigo]["unidad"], "solicitado": n, "disponible": self.inventario.get((cuit, codigo), 0),
+             "alcanza": n <= self.inventario.get((cuit, codigo), 0), "nivel": "PLENA",
+             "riesgo_permitido": "CRITICO", "asignacion_sugerida": "PRINCIPAL", "observaciones": []}
+            for (cuit, codigo), n in pedido.items()
+        ]
+        return {"alcanza_todo": all(r["alcanza"] for r in resultados), "resultados": resultados}
+
+
 @pytest.fixture
-def client(seeded):
+def nacional():
+    return FakeNacional()
+
+
+@pytest.fixture
+def client(seeded, nacional):
     def _get_db():
         with seeded() as session:
             yield session
 
     app.dependency_overrides[get_db] = _get_db
+    app.dependency_overrides[get_nacional] = lambda: nacional
     with TestClient(app, follow_redirects=False) as c:
         yield c
     app.dependency_overrides.clear()

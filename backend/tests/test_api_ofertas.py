@@ -42,6 +42,15 @@ def _items(lotes, *cantidades):
     return {"items": [{"lote_id": l, "recurso": "x", "cantidad": c} for l, c in zip(lotes, cantidades)]}
 
 
+def test_solo_ong_puede_crear_ofertas(api_login, abierta):
+    eid, lotes = abierta
+    response = api_login("coordinador.regional").post(
+        f"/api/emergencias/{eid}/ofertas",
+        json=_items(lotes, 1, 1),
+    )
+    assert response.status_code == 403
+
+
 def test_una_oferta_cubre_varios_lotes_y_cada_envio_es_una_version(api_login, abierta):
     eid, lotes = abierta
     c = api_login("ong.cruzroja")

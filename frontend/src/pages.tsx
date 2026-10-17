@@ -1,7 +1,7 @@
 import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { api, type Emergencia, type Meta, type Oferta, type Rol } from "./api";
+import { api, type Emergencia, type Meta, type Oferta, type Rol, type TipoRecurso } from "./api";
 import { useAuth } from "./auth";
 import { FlowBubbles } from "./FlowBubbles";
 import { PageHeader } from "./PageHeader";
@@ -56,7 +56,74 @@ function formatFecha(iso: string | null) {
 function estadoBadge(estado: Emergencia["estado"]) {
   if (estado === "CONVOCATORIA") return <span className="badge signal">Convocatoria abierta</span>;
   if (estado === "CERRADA") return <span className="badge muted">Ventana cerrada</span>;
+  if (estado === "EN_EVALUACION") return <span className="badge muted">En evaluación</span>;
+  if (estado === "ADJUDICACION") return <span className="badge signal">Adjudicación</span>;
+  if (estado === "EN_EJECUCION") return <span className="badge signal">En ejecución</span>;
+  if (estado === "RESUELTA") return <span className="badge muted">Resuelta</span>;
   return <span className="badge ok">Registrada</span>;
+}
+
+function EvaluacionPanel({ e }: { e: Emergencia }) {
+  const ev = e.evaluacion;
+  if (!ev) {
+    return (
+      <div className="panel" style={{ marginBottom: "1.35rem" }} data-testid="evaluacion-pendiente">
+        <div className="empty" style={{ padding: "1.25rem" }}>
+          <p>Evaluando las ofertas con el Sistema Nacional… Refrescá en unos segundos.</p>
+        </div>
+      </div>
+    );
+  }
+  const lote = (id: number) => e.lotes.find((l) => l.id === id);
+  return (
+    <div data-testid="evaluacion" style={{ marginBottom: "1.35rem" }}>
+      <div className="panel" style={{ marginBottom: "0.75rem" }}>
+        <div className="lote-row">
+          <span>
+            <strong>Cobertura</strong> · ronda {ev.ronda}
+          </span>
+          <span className={`badge ${ev.cobertura_completa ? "ok" : "signal"}`} data-testid="cobertura-total">
+            {ev.porcentaje_cobertura}% {ev.cobertura_completa ? "· lotes cubiertos" : "· no alcanza"}
+          </span>
+        </div>
+        {ev.lotes.map((l) => (
+          <div className="lote-row" key={l.lote_id} data-testid={`cobertura-lote-${l.lote_id}`}>
+            <span>
+              #{l.lote_id} {lote(l.lote_id)?.recurso ?? l.tipo_recurso ?? "Lote"} · reservado {l.reservado} de{" "}
+              {l.pedido}
+            </span>
+            <span className={`badge ${l.cubierto ? "ok" : "muted"}`}>{l.porcentaje}%</span>
+          </div>
+        ))}
+      </div>
+      <div className="panel">
+        {ev.ongs.length === 0 && (
+          <div className="empty" style={{ padding: "1.25rem" }}>
+            <p>Ninguna ONG ofreció recursos.</p>
+          </div>
+        )}
+        {ev.ongs.map((o) => (
+          <div key={o.cuit} data-testid={`evaluacion-ong-${o.cuit}`} style={{ padding: "0.75rem 1rem" }}>
+            <div className="lote-row" style={{ padding: 0 }}>
+              <strong>{o.ong ?? o.cuit}</strong>
+              <span className={`badge ${o.estado === "NO_RESERVADA" ? "muted" : "ok"}`}>
+                {o.estado === "NO_RESERVADA" ? "Sin reservar: rehacer la oferta" : "Reservada"}
+              </span>
+            </div>
+            {o.items.map((i) => (
+              <div key={i.lote_id} style={{ fontSize: "0.9em", opacity: 0.85, paddingTop: "0.25rem" }}>
+                #{i.lote_id} {i.tipo_recurso}: ofreció {i.ofrecido}, reservado {i.reservado} · {i.nivel} →{" "}
+                {i.asignacion_sugerida}
+                {i.observaciones.map((t) => (
+                  <div key={t}>· {t}</div>
+                ))}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export function Shell({ children }: { children: ReactNode }) {
@@ -263,14 +330,16 @@ export function EmergenciasPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    void Promise.all([api.listEmergencias(), api.meta()])
+    const emergencias =
+      user!.rol === "ONG" ? api.listConvocatoriasAbiertas() : api.listEmergencias();
+    void Promise.all([emergencias, api.meta()])
       .then(([list, m]) => {
         setItems(list);
         setMeta(m);
       })
       .catch((err) => setError(String(err.message || err)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [user]);
 
   return (
     <Shell>
@@ -473,6 +542,8 @@ export function DetallePage() {
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [tipos, setTipos] = useState<TipoRecurso[]>([]);
+  const [elegidas, setElegidas] = useState<string[]>([]);
 
   const reload = useCallback(async () => {
     const [em, m, of] = await Promise.all([api.getEmergencia(id), api.meta(), api.listOfertas(id)]);
@@ -484,6 +555,16 @@ export function DetallePage() {
   useEffect(() => {
     void reload().catch((err) => setError(String(err.message || err)));
   }, [reload]);
+
+  // El catálogo de recursos (Sistema Nacional) solo hace falta para cargar lotes.
+  const cargaLotes = user?.rol === "COORDINADOR" && e?.estado === "REGISTRADA";
+  useEffect(() => {
+    if (!cargaLotes) return;
+    api
+      .tiposRecurso()
+      .then(setTipos)
+      .catch((err) => setError(err instanceof Error ? err.message : "Error"));
+  }, [cargaLotes]);
 
   if (!e) {
     return (
@@ -505,13 +586,46 @@ export function DetallePage() {
     setOk(null);
     try {
       await api.createLote(id, {
-        recurso: String(fd.get("recurso")),
+        tipo_recurso: String(fd.get("tipo_recurso")),
+        detalle: String(fd.get("detalle") ?? "").trim() || undefined,
         cantidad: Number(fd.get("cantidad")),
-        unidad: String(fd.get("unidad")),
         tipo: String(fd.get("tipo")),
       });
       form.reset();
       setOk("Lote agregado");
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function decidir(decision: "PARCIAL" | "REFORMULAR") {
+    setBusy(true);
+    setError(null);
+    setOk(null);
+    try {
+      await api.decidir(id, decision);
+      setOk(decision === "PARCIAL" ? "Seguís con la cobertura parcial: el Municipio adjudica." : "Convocatoria reformulada: cargá los lotes y publicá de nuevo.");
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function adjudicar() {
+    setBusy(true);
+    setError(null);
+    setOk(null);
+    try {
+      await api.adjudicar(id, elegidas);
+      setOk("Adjudicación enviada: Bonita confirma las reservas elegidas y libera las demás.");
+      setElegidas([]);
+      // El pase a "En ejecución" lo hace Bonita en unos segundos.
+      await new Promise((r) => setTimeout(r, 4000));
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error");
@@ -538,23 +652,16 @@ export function DetallePage() {
     }
   }
 
-  async function oferta(ev: FormEvent<HTMLFormElement>) {
-    ev.preventDefault();
-    if (!e) return;
-    const fd = new FormData(ev.currentTarget);
-    const items = e.lotes
-      .map((l) => ({ lote_id: l.id, recurso: l.recurso, cantidad: Number(fd.get(`lote_${l.id}`) || 0) }))
-      .filter((i) => i.cantidad > 0);
-    if (!items.length) {
-      setError("Indicá cuánto ofrecés para al menos un lote.");
-      return;
-    }
+  async function enviarOferta(
+    items: { lote_id: number; recurso: string; cantidad: number }[],
+    mensaje: (o: Oferta) => string,
+  ) {
     setBusy(true);
     setError(null);
     setOk(null);
     try {
       const o = await api.createOferta(id, items);
-      setOk(`Oferta enviada (versión ${o.version_actual})`);
+      setOk(mensaje(o));
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error");
@@ -563,8 +670,35 @@ export function DetallePage() {
     }
   }
 
-  const ventanaAbierta = !!e.ventana_ofertas_fin && new Date(e.ventana_ofertas_fin) > new Date();
+  async function oferta(ev: FormEvent<HTMLFormElement>) {
+    ev.preventDefault();
+    if (!e) return;
+    const fd = new FormData(ev.currentTarget);
+    const items = e.lotes
+      .map((l) => ({ lote_id: l.id, recurso: l.recurso, cantidad: Number(fd.get(`lote_${l.id}`) || 0) }))
+      .filter((i) => i.cantidad > 0);
+    if (!items.length) {
+      setError("Indicá cuánto ofrecés para al menos un lote (o usá «Retirar mi oferta»).");
+      return;
+    }
+    await enviarOferta(items, (o) => `Oferta enviada (versión ${o.version_actual})`);
+  }
+
   const miOferta = user!.rol === "ONG" ? ofertas[0] : undefined;
+
+  // Retirar = reenviar la oferta sin ese lote (versión nueva); sin ningún lote, la oferta queda retirada.
+  const itemsVigentes = (miOferta && !miOferta.retirada ? miOferta.items : []).map(({ lote_id, recurso, cantidad }) => ({
+    lote_id,
+    recurso,
+    cantidad,
+  }));
+  const retirarLote = (loteId: number) =>
+    enviarOferta(
+      itemsVigentes.filter((i) => i.lote_id !== loteId),
+      (o) => (o.retirada ? "Retiraste tu oferta" : `Retiraste tu oferta a ese lote (versión ${o.version_actual})`),
+    );
+
+  const ventanaAbierta = !!e.ventana_ofertas_fin && new Date(e.ventana_ofertas_fin) > new Date();
   const cantidadOfrecida = (o: Oferta | undefined, loteId: number) =>
     o?.items.find((i) => i.lote_id === loteId)?.cantidad;
 
@@ -643,21 +777,82 @@ export function DetallePage() {
           )}
         </div>
 
+        {user!.rol !== "ONG" && (e.estado === "EN_EVALUACION" || e.evaluacion) && (
+          <>
+            <h2 className="section-title">Evaluación de las ofertas</h2>
+            <EvaluacionPanel e={e} />
+          </>
+        )}
+
+        {user!.rol === "COORDINADOR" && e.estado === "EN_EVALUACION" && e.evaluacion && !e.evaluacion.cobertura_completa && (
+          <div className="panel" style={{ marginBottom: "1.35rem" }} data-testid="decision">
+            <h3>La cobertura no alcanza: ¿cómo seguimos?</h3>
+            <p>
+              <strong>Cobertura parcial:</strong> se sigue con lo reservado y el Municipio elige entre las ofertas.
+              <br />
+              <strong>Reformular:</strong> se libera todo el stock reservado, se retiran las ofertas y se vuelve a cargar
+              lotes y publicar (ronda {e.evaluacion.ronda + 1}).
+            </p>
+            <div className="actions">
+              <button className="btn btn-primary" disabled={busy} onClick={() => void decidir("PARCIAL")} data-testid="decidir-parcial">
+                Seguir con cobertura parcial
+              </button>{" "}
+              <button className="btn btn-ghost" disabled={busy} onClick={() => void decidir("REFORMULAR")} data-testid="decidir-reformular">
+                Reformular la convocatoria
+              </button>
+            </div>
+          </div>
+        )}
+
+        {user!.rol === "MUNICIPIO" && e.estado === "ADJUDICACION" && e.evaluacion && (
+          <div className="panel" style={{ marginBottom: "1.35rem" }} data-testid="adjudicacion">
+            <h3>Adjudicar ofertas</h3>
+            <p>Elegí a qué ONGs aceptás. Lo elegido queda comprometido; el resto se libera.</p>
+            {e.evaluacion.ongs.filter((o) => o.estado === "RESERVADA").map((o) => (
+              <label key={o.cuit} className="lote-row" style={{ cursor: "pointer" }} data-testid={`elegir-${o.cuit}`}>
+                <span>
+                  <input
+                    type="checkbox"
+                    checked={elegidas.includes(o.cuit)}
+                    onChange={(ev) =>
+                      setElegidas((prev) => (ev.target.checked ? [...prev, o.cuit] : prev.filter((c) => c !== o.cuit)))
+                    }
+                  />{" "}
+                  <strong>{o.ong ?? o.cuit}</strong>{" "}
+                  {o.items.map((i) => `${i.reservado} × ${i.tipo_recurso} (${i.nivel} → ${i.asignacion_sugerida})`).join(", ")}
+                </span>
+              </label>
+            ))}
+            <button className="btn btn-primary" disabled={busy || elegidas.length === 0} onClick={() => void adjudicar()} data-testid="adjudicar">
+              Adjudicar a {elegidas.length} {elegidas.length === 1 ? "ONG" : "ONGs"}
+            </button>
+          </div>
+        )}
+
         {user!.rol === "COORDINADOR" && e.estado === "REGISTRADA" && (
           <div className="cards two" style={{ marginBottom: "1.35rem" }}>
             <form className="panel" onSubmit={addLote}>
               <h3>Agregar lote</h3>
               <div className="field">
-                <label>Recurso</label>
-                <input name="recurso" placeholder="Paramédicos, raciones…" required />
+                <label>Tipo de recurso</label>
+                <select name="tipo_recurso" required defaultValue="">
+                  <option value="" disabled>
+                    Elegí un recurso…
+                  </option>
+                  {tipos.map((t) => (
+                    <option key={t.codigo} value={t.codigo}>
+                      {t.nombre} ({t.unidad})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>Detalle (opcional)</label>
+                <input name="detalle" maxLength={80} placeholder="con equipo de trauma…" />
               </div>
               <div className="field">
                 <label>Cantidad</label>
                 <input name="cantidad" type="number" min={1} defaultValue={5} required />
-              </div>
-              <div className="field">
-                <label>Unidad</label>
-                <input name="unidad" defaultValue="personas" required />
               </div>
               <div className="field">
                 <label>Tipo</label>
@@ -692,8 +887,17 @@ export function DetallePage() {
 
         {user!.rol === "ONG" && e.estado === "CONVOCATORIA" && ventanaAbierta && (
           <form className="panel" style={{ maxWidth: 620, marginBottom: "1.35rem" }} onSubmit={oferta}>
-            <h3>{miOferta ? `Modificar oferta (vas por la versión ${miOferta.version_actual})` : "Cargar oferta"}</h3>
-            <p className="hint">Cada envío reemplaza la oferta completa y queda como una versión nueva. Dejá en 0 lo que no ofrecés.</p>
+            <h3>
+              {itemsVigentes.length
+                ? `Modificar oferta (vas por la versión ${miOferta!.version_actual})`
+                : miOferta
+                  ? `Cargar oferta (retiraste la anterior, versión ${miOferta.version_actual})`
+                  : "Cargar oferta"}
+            </h3>
+            <p className="hint">
+              Cada envío reemplaza la oferta completa y queda como una versión nueva. Dejá en 0 lo que no ofrecés. No podés
+              ofrecer más de lo que tenés disponible, sumando tus ofertas en todas las convocatorias abiertas.
+            </p>
             {e.lotes.map((l) => (
               <div className="field" key={`${l.id}-${miOferta?.version_actual ?? 0}`}>
                 <label>
@@ -703,13 +907,28 @@ export function DetallePage() {
                   name={`lote_${l.id}`}
                   type="number"
                   min={0}
-                  defaultValue={cantidadOfrecida(miOferta, l.id) ?? 0}
+                  defaultValue={(!miOferta?.retirada && cantidadOfrecida(miOferta, l.id)) || 0}
                 />
+                {!!itemsVigentes.find((i) => i.lote_id === l.id) && (
+                  <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void retirarLote(l.id)}>
+                    Retirar de este lote
+                  </button>
+                )}
               </div>
             ))}
             <button className="btn btn-primary" disabled={busy}>
               Enviar oferta
             </button>
+            {itemsVigentes.length > 0 && (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={busy}
+                onClick={() => void enviarOferta([], () => "Retiraste tu oferta")}
+              >
+                Retirar mi oferta
+              </button>
+            )}
           </form>
         )}
 
@@ -720,6 +939,9 @@ export function DetallePage() {
               {ofertas.map((o) => (
                 <div key={o.id} style={{ marginBottom: "0.75rem" }}>
                   <strong>{o.ong_nombre}</strong> <span className="badge muted">v{o.version_actual}</span>
+                  {o.retirada && <span className="badge muted">retirada</span>}
+                  {o.estado === "ADJUDICADA" && <span className="badge ok">adjudicada</span>}
+                  {o.estado === "NO_ADJUDICADA" && <span className="badge muted">no adjudicada</span>}
                   {e.lotes.map((l) => {
                     const c = cantidadOfrecida(o, l.id);
                     return c ? (

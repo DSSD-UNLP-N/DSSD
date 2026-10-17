@@ -61,6 +61,21 @@ def test_ong_no_puede_listar_emergencias_pero_si_ver_convocatorias(login, emerge
     assert c.get(f"/api/emergencias/{ajena}").status_code == 200
 
 
+def test_ong_lista_convocatorias_abiertas_en_ruta_propia(client, login, emergencias):
+    _, convocatoria_abierta = emergencias
+    assert client.get("/api/emergencias/convocatorias/abiertas").status_code == 401
+
+    response = login("ong.bomberos").get("/api/emergencias/convocatorias/abiertas")
+
+    assert response.status_code == 200
+    assert [emergencia["id"] for emergencia in response.json()] == [convocatoria_abierta]
+
+
+def test_solo_ong_puede_usar_lista_de_convocatorias_abiertas(login):
+    response = login("coordinador.regional").get("/api/emergencias/convocatorias/abiertas")
+    assert response.status_code == 403
+
+
 def test_detalle_muestra_datos_caso_y_lotes(login, emergencias):
     _, ajena = emergencias
     d = login("coordinador.regional").get(f"/api/emergencias/{ajena}").json()

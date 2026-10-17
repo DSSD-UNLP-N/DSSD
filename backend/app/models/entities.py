@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -38,7 +38,18 @@ class Gravedad(str, enum.Enum):
 class EstadoEmergencia(str, enum.Enum):
     REGISTRADA = "REGISTRADA"      # alta hecha, caso Bonita instanciado
     CONVOCATORIA = "CONVOCATORIA"  # lotes publicados, ventana abierta
-    CERRADA = "CERRADA"
+    CERRADA = "CERRADA"            # ventana vencida; la app todavía no se la entregó a Bonita
+    EN_EVALUACION = "EN_EVALUACION"  # Bonita pidió el consolidado; la reserva vive en la API Nacional
+    ADJUDICACION = "ADJUDICACION"    # el Coordinador decidió PARCIAL; el Municipio elige ofertas
+    EN_EJECUCION = "EN_EJECUCION"    # adjudicado; las ONGs trabajan
+    RESUELTA = "RESUELTA"            # cierre bilateral validado, recursos liberados
+
+
+class EstadoOferta(str, enum.Enum):
+    PRESENTADA = "PRESENTADA"        # cargada por la ONG; todavía no se decidió
+    ADJUDICADA = "ADJUDICADA"
+    NO_ADJUDICADA = "NO_ADJUDICADA"
+    FINALIZADA = "FINALIZADA"        # la ONG informó que terminó
 
 
 class TipoLote(str, enum.Enum):
@@ -93,6 +104,10 @@ class Emergencia(Base):
     bonita_case_id: Mapped[int | None] = mapped_column(Integer, unique=True)
     # Ventana real de recepción de ofertas; la fija el Coordinador al publicar.
     ventana_ofertas_fin: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Sube cuando el Coordinador elige REFORMULAR; entra en la referencia de cada adjudicación.
+    ronda: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    # Resultado de la evaluación (JSON tal como lo devuelve la API Nacional); lo manda Bonita en un evento.
+    evaluacion: Mapped[str | None] = mapped_column(Text)
     creada_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     municipio: Mapped[Municipio] = relationship()
@@ -110,6 +125,9 @@ class Lote(Base):
     recurso: Mapped[str] = mapped_column(String(120))
     cantidad: Mapped[int] = mapped_column(Integer)
     unidad: Mapped[str] = mapped_column(String(30))  # personas, raciones, litros…
+    # Código del catálogo del Sistema Nacional (PARAMEDICO…). Nullable: los lotes anteriores al
+    # catálogo no lo tienen y no se validan contra el inventario.
+    tipo_recurso: Mapped[str | None] = mapped_column(String(40))
     tipo: Mapped[TipoLote] = mapped_column(
         _enum(TipoLote), default=TipoLote.PRINCIPAL, server_default=TipoLote.PRINCIPAL.value
     )
@@ -127,6 +145,9 @@ class Oferta(Base):
     emergencia_id: Mapped[int] = mapped_column(ForeignKey("emergencia.id"))
     ong_id: Mapped[int] = mapped_column(ForeignKey("ong.id"))
     version_actual: Mapped[int] = mapped_column(Integer, default=1)
+    estado: Mapped[EstadoOferta] = mapped_column(
+        _enum(EstadoOferta), default=EstadoOferta.PRESENTADA, server_default=EstadoOferta.PRESENTADA.value
+    )
     creada_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     emergencia: Mapped[Emergencia] = relationship(back_populates="ofertas")
@@ -150,3 +171,16 @@ class OfertaItem(Base):
 
     oferta: Mapped[Oferta] = relationship(back_populates="items")
     lote: Mapped[Lote] = relationship()
+
+
+class Notificacion(Base):
+    """Aviso para una ONG (adjudicación, cierre…). La app no manda mails: se lee en la propia app."""
+
+    __tablename__ = "notificacion"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ong_id: Mapped[int] = mapped_column(ForeignKey("ong.id"))
+    emergencia_id: Mapped[int] = mapped_column(ForeignKey("emergencia.id"))
+    texto: Mapped[str] = mapped_column(String(300))
+    creada_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    leida: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")

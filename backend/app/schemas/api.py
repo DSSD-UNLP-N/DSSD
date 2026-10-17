@@ -1,9 +1,10 @@
 from datetime import datetime, timezone
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
 
-from app.models import EstadoEmergencia, Gravedad, Rol, TipoLote
+from app.models import EstadoEmergencia, EstadoOferta, Gravedad, Rol, TipoLote
+from app.schemas.evaluacion import Evaluacion
 
 
 # SQLite descarta la zona y lo que se guarda siempre es UTC: sin esto el navegador lee la hora
@@ -53,9 +54,18 @@ class TokenOut(BaseModel):
     user: UsuarioOut
 
 
+class TipoRecursoOut(BaseModel):
+    codigo: str
+    nombre: str
+    categoria: str
+    unidad: str
+    certificacion_requerida: str | None = None
+
+
 class LoteOut(BaseModel):
     id: int
     recurso: str
+    tipo_recurso: str | None = None
     cantidad: int
     unidad: str
     tipo: TipoLote
@@ -78,8 +88,19 @@ class EmergenciaOut(BaseModel):
     lotes: list[LoteOut] = []
     # Tarea que Bonita tiene pendiente para quien consulta; solo el detalle la completa.
     tarea_bonita: str | None = None
+    # Cobertura y ofertas validadas por la API Nacional; solo el detalle la trae, y no para la ONG.
+    evaluacion: Evaluacion | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DecisionIn(BaseModel):
+    # PARCIAL: seguir con lo reservado. REFORMULAR: liberar todo y volver a cargar lotes (ronda siguiente).
+    decision: Literal["PARCIAL", "REFORMULAR"]
+
+
+class AdjudicarIn(BaseModel):
+    cuits: list[str] = Field(min_length=1)  # las ONGs elegidas
 
 
 class PublicarIn(BaseModel):
@@ -93,7 +114,8 @@ class OfertaItemIn(BaseModel):
 
 
 class OfertaIn(BaseModel):
-    items: list[OfertaItemIn] = Field(min_length=1)
+    # Cada envío es la oferta completa. Lista vacía = retirar la oferta (queda como versión nueva sin ítems).
+    items: list[OfertaItemIn]
 
 
 class OfertaItemOut(BaseModel):
@@ -112,5 +134,7 @@ class OfertaOut(BaseModel):
     ong_nombre: str
     version_actual: int
     items: list[OfertaItemOut]
+    retirada: bool = False  # la versión vigente no tiene ítems
+    estado: EstadoOferta = EstadoOferta.PRESENTADA
 
     model_config = ConfigDict(from_attributes=True)

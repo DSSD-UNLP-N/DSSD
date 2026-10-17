@@ -16,9 +16,18 @@ type TokenResponse = {
 export type Lote = {
   id: number;
   recurso: string;
+  tipo_recurso: string | null;
   cantidad: number;
   unidad: string;
   tipo: "PRINCIPAL" | "APOYO";
+};
+
+export type TipoRecurso = {
+  codigo: string;
+  nombre: string;
+  categoria: string;
+  unidad: string;
+  certificacion_requerida: string | null;
 };
 
 export type Emergencia = {
@@ -27,7 +36,14 @@ export type Emergencia = {
   nivel_gravedad: "BAJO" | "MEDIO" | "ALTO" | "CRITICO";
   zona_afectada: string;
   descripcion: string;
-  estado: "REGISTRADA" | "CONVOCATORIA" | "CERRADA";
+  estado:
+    | "REGISTRADA"
+    | "CONVOCATORIA"
+    | "CERRADA"
+    | "EN_EVALUACION"
+    | "ADJUDICACION"
+    | "EN_EJECUCION"
+    | "RESUELTA";
   bonita_case_id: number | null;
   ventana_ofertas_fin: string | null;
   creada_en: string;
@@ -35,6 +51,38 @@ export type Emergencia = {
   municipio_provincia: string | null;
   lotes: Lote[];
   tarea_bonita?: string | null;
+  evaluacion?: Evaluacion | null;
+};
+
+export type Evaluacion = {
+  emergencia_id: number;
+  ronda: number;
+  cobertura_completa: boolean;
+  porcentaje_cobertura: number;
+  lotes: {
+    lote_id: number;
+    tipo_recurso: string | null;
+    pedido: number;
+    reservado: number;
+    porcentaje: number;
+    cubierto: boolean;
+  }[];
+  ongs: {
+    cuit: string;
+    ong: string | null;
+    referencia: string | null;
+    estado: "RESERVADA" | "ADJUDICADA" | "NO_RESERVADA";
+    items: {
+      lote_id: number;
+      tipo_recurso: string;
+      ofrecido: number;
+      reservado: number;
+      nivel: "PLENA" | "PARCIAL" | "SUPERVISADA";
+      riesgo_permitido: string | null;
+      asignacion_sugerida: "PRINCIPAL" | "APOYO";
+      observaciones: string[];
+    }[];
+  }[];
 };
 
 export type Meta = {
@@ -50,6 +98,8 @@ export type Oferta = {
   ong_nombre: string;
   version_actual: number;
   items: { lote_id: number; recurso: string; cantidad: number; version: number }[];
+  retirada: boolean;
+  estado: "PRESENTADA" | "ADJUDICADA" | "NO_ADJUDICADA" | "FINALIZADA";
 };
 
 let accessToken: string | null = null;
@@ -138,6 +188,8 @@ export const api = {
     }
   },
   listEmergencias: () => request<Emergencia[]>("/api/emergencias"),
+  listConvocatoriasAbiertas: () =>
+    request<Emergencia[]>("/api/emergencias/convocatorias/abiertas"),
   getEmergencia: (id: number) => request<Emergencia>(`/api/emergencias/${id}`),
   createEmergencia: (body: {
     tipo: string;
@@ -149,9 +201,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  tiposRecurso: () => request<TipoRecurso[]>("/api/tipos-recurso"),
   createLote: (
     id: number,
-    body: { recurso: string; cantidad: number; unidad: string; tipo: string },
+    body: { tipo_recurso: string; detalle?: string; cantidad: number; tipo: string },
   ) =>
     request<Lote>(`/api/emergencias/${id}/lotes`, {
       method: "POST",
@@ -163,6 +216,16 @@ export const api = {
     request<Emergencia>(`/api/emergencias/${id}/publicar`, {
       method: "POST",
       body: JSON.stringify({ ventana_fin }),
+    }),
+  decidir: (id: number, decision: "PARCIAL" | "REFORMULAR") =>
+    request<Emergencia>(`/api/emergencias/${id}/decision`, {
+      method: "POST",
+      body: JSON.stringify({ decision }),
+    }),
+  adjudicar: (id: number, cuits: string[]) =>
+    request<Emergencia>(`/api/emergencias/${id}/adjudicar`, {
+      method: "POST",
+      body: JSON.stringify({ cuits }),
     }),
   listOfertas: (id: number) => request<Oferta[]>(`/api/emergencias/${id}/ofertas`),
   createOferta: (

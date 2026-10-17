@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -7,11 +6,21 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import Settings, get_settings
 from app.core.deps import require_role
-from app.core.security import create_access_token, hash_password, verify_password
+from app.core.security import hash_password, verify_password
 from app.core.labels import ROL_LABEL, TIPO_LABEL
 from app.db import get_db
-from app.models import Emergencia, Oferta, OfertaItem, Ong, Rol, Usuario
+from app.models import Emergencia, EstadoEmergencia, Oferta, OfertaItem, Ong, Rol, Usuario
+from app.integrations.nacional import (
+    NacionalClient,
+    NacionalError,
+    NacionalLoginEndpointMissing,
+    NacionalLoginRejected,
+    get_nacional,
+)
+from app.models import Emergencia, Oferta, Rol, Usuario
 from app.schemas.api import (
+    AdjudicarIn,
+    DecisionIn,
     EmergenciaOut,
     LoginIn,
     LoteOut,
@@ -21,9 +30,11 @@ from app.schemas.api import (
     PublicarIn,
     RegisterOngIn,
     TokenOut,
+    TipoRecursoOut,
     UsuarioOut,
 )
 from app.schemas.emergencias import EmergenciaIn
+from app.schemas.evaluacion import Evaluacion
 from app.schemas.lotes import LoteIn, PublicacionIn
 from app.seed import DEMO_PASSWORD, DEMO_USERS
 from app.services.emergencias import (
@@ -33,6 +44,8 @@ from app.services.emergencias import (
     registrar_emergencia,
     tarea_ong_en_bonita,
 )
+from app.services.ciclo import CicloError, adjudicar, decidir
+from app.services.ofertas import OfertaError, publicar_oferta
 from app.services.lotes import (
     LoteError,
     PublicacionError,
@@ -91,17 +104,8 @@ def meta(settings: Settings = Depends(get_settings)):
     return {"tipos": TIPO_LABEL, "roles": ROL_LABEL, "demo": demo}
 
 
-def _token_response(user: Usuario, settings: Settings) -> TokenOut:
-    return TokenOut(
-        access_token=create_access_token(
-            user.id,
-            user.username,
-            user.rol.value,
-            settings.jwt_secret,
-            settings.jwt_expiration_minutes,
-        ),
-        user=user,
-    )
+def _token_response(user: Usuario, access_token: str) -> TokenOut:
+    return TokenOut(access_token=access_token, user=user)
 
 
 @national_auth_router.post("/login", response_model=TokenOut)
@@ -109,10 +113,21 @@ def _token_response(user: Usuario, settings: Settings) -> TokenOut:
 def api_login(
     body: LoginIn,
     db: Session = Depends(get_db),
-    settings: Settings = Depends(get_settings),
+    nacional: NacionalClient = Depends(get_nacional),
 ):
     user = _authenticate_user(db, body.username, body.password)
-    return _token_response(user, settings)
+    try:
+        token = nacional.login(user.username, body.password)["access_token"]
+    except NacionalLoginRejected as exc:
+        raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos") from exc
+    except NacionalLoginEndpointMissing as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="La API Nacional desplegada no tiene disponible POST /login; hay que actualizar su despliegue.",
+        ) from exc
+    except NacionalError as exc:
+        raise HTTPException(status_code=503, detail=NACIONAL_CAIDO) from exc
+    return _token_response(user, token)
 
 
 def _authenticate_user(db: Session, username: str, password: str) -> Usuario:
@@ -127,7 +142,7 @@ def _authenticate_user(db: Session, username: str, password: str) -> Usuario:
 def api_register_ong(
     body: RegisterOngIn,
     db: Session = Depends(get_db),
-    settings: Settings = Depends(get_settings),
+    nacional: NacionalClient = Depends(get_nacional),
 ):
     username = body.username
     ong_name = body.ong_nombre
@@ -138,6 +153,13 @@ def api_register_ong(
         raise HTTPException(status_code=409, detail="La ONG ya está registrada")
     if cuit and db.scalar(select(Ong.id).where(Ong.cuit == cuit)):
         raise HTTPException(status_code=409, detail="El CUIT ya está registrado")
+    if not cuit:
+        raise HTTPException(status_code=422, detail="El CUIT es obligatorio para registrar la ONG en el Sistema Nacional")
+
+    try:
+        token = nacional.registrar_ong(body.model_dump())["access_token"]
+    except NacionalError as exc:
+        raise HTTPException(status_code=503, detail=NACIONAL_CAIDO) from exc
 
     try:
         ong = Ong(nombre=ong_name, cuit=cuit)
@@ -156,7 +178,7 @@ def api_register_ong(
         db.rollback()
         raise HTTPException(status_code=409, detail="La ONG o el usuario ya están registrados") from exc
     db.refresh(user)
-    return _token_response(user, settings)
+    return _token_response(user, token)
 
 
 @router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -199,6 +221,24 @@ def api_crear(
     return _emergencia_out(full or emergencia)
 
 
+@router.get("/emergencias/convocatorias/abiertas", response_model=list[EmergenciaOut])
+def api_listar_convocatorias_abiertas(
+    user: Usuario = Depends(require_role(Rol.ONG)),
+    db: Session = Depends(get_db),
+):
+    convocatorias = [
+        emergencia
+        for emergencia in emergencias_visibles(db, user)
+        if emergencia.estado is EstadoEmergencia.CONVOCATORIA
+    ]
+    out: list[EmergenciaOut] = []
+    for emergencia in convocatorias:
+        full = _load_emergencia(db, emergencia.id)
+        if full:
+            out.append(_emergencia_out(full))
+    return out
+
+
 @router.get("/emergencias/{emergencia_id}", response_model=EmergenciaOut)
 def api_detalle(
     emergencia_id: int,
@@ -206,10 +246,69 @@ def api_detalle(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ):
-    emergencia = _require_visible(db, user, emergencia_id)
+    return _detalle_out(_require_visible(db, user, emergencia_id), user, settings)
+
+
+def _detalle_out(emergencia: Emergencia, user: Usuario, settings: Settings) -> EmergenciaOut:
     out = _emergencia_out(emergencia)
     out.tarea_bonita = tarea_ong_en_bonita(settings, emergencia, user)
+    if emergencia.evaluacion and user.rol is not Rol.ONG:
+        out.evaluacion = Evaluacion.model_validate_json(emergencia.evaluacion)
     return out
+
+
+@router.post("/emergencias/{emergencia_id}/decision", response_model=EmergenciaOut)
+def api_decidir(
+    emergencia_id: int,
+    body: DecisionIn,
+    user: Usuario = Depends(require_role(Rol.COORDINADOR)),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    nacional: NacionalClient = Depends(get_nacional),
+):
+    """Con la cobertura incompleta: PARCIAL sigue con lo reservado; REFORMULAR libera todo y empieza otra ronda."""
+    emergencia = _require_visible(db, user, emergencia_id)
+    try:
+        decidir(db, settings, nacional, emergencia=emergencia, coordinador=user, decision=body.decision)
+    except CicloError as exc:
+        db.rollback()
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    except NacionalError as exc:
+        db.rollback()
+        raise HTTPException(status_code=503, detail=NACIONAL_CAIDO) from exc
+    return _detalle_out(_load_emergencia(db, emergencia_id), user, settings)
+
+
+@router.post("/emergencias/{emergencia_id}/adjudicar", response_model=EmergenciaOut)
+def api_adjudicar(
+    emergencia_id: int,
+    body: AdjudicarIn,
+    user: Usuario = Depends(require_role(Rol.MUNICIPIO)),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    """El Municipio elige entre las ofertas validadas. Bonita confirma lo elegido y libera lo demás."""
+    emergencia = _require_visible(db, user, emergencia_id)
+    try:
+        adjudicar(settings, emergencia=emergencia, municipal=user, cuits=body.cuits)
+    except CicloError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    return _detalle_out(_load_emergencia(db, emergencia_id), user, settings)
+
+
+NACIONAL_CAIDO = "El Sistema Nacional no responde; probá de nuevo en un momento."
+
+
+@router.get("/tipos-recurso", response_model=list[TipoRecursoOut])
+def api_tipos_recurso(
+    user: Usuario = Depends(require_role()),
+    nacional: NacionalClient = Depends(get_nacional),
+):
+    """Catálogo de recursos del Sistema Nacional, para elegir el tipo de cada lote."""
+    try:
+        return nacional.tipos_recurso()
+    except NacionalError as exc:
+        raise HTTPException(status_code=503, detail=NACIONAL_CAIDO) from exc
 
 
 @router.post("/emergencias/{emergencia_id}/lotes", response_model=LoteOut, status_code=201)
@@ -218,12 +317,15 @@ def api_crear_lote(
     body: LoteIn,
     user: Usuario = Depends(require_role(Rol.COORDINADOR)),
     db: Session = Depends(get_db),
+    nacional: NacionalClient = Depends(get_nacional),
 ):
     emergencia = _require_visible(db, user, emergencia_id)
     try:
-        lote = agregar_lote(db, emergencia, body)
+        lote = agregar_lote(db, emergencia, body, nacional)
     except LoteError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except NacionalError as exc:
+        raise HTTPException(status_code=503, detail=NACIONAL_CAIDO) from exc
     return lote
 
 
@@ -231,10 +333,12 @@ def api_crear_lote(
 def api_borrar_lote(
     emergencia_id: int,
     lote_id: int,
-    user: Usuario = Depends(require_role(Rol.COORDINADOR)),
+    user: Usuario = Depends(require_role(Rol.ONG)),
     db: Session = Depends(get_db),
 ):
-    emergencia = _require_visible(db, user, emergencia_id)
+    emergencia = _load_emergencia(db, emergencia_id)
+    if emergencia is None:
+        raise HTTPException(status_code=404, detail="Emergencia no encontrada")
     try:
         borrar_lote(db, emergencia, lote_id)
     except LoteError as exc:
@@ -265,13 +369,16 @@ def api_publicar(
 
 
 def _oferta_out(o: Oferta) -> OfertaOut:
+    items = [OfertaItemOut.model_validate(i) for i in o.items if i.version == o.version_actual]
     return OfertaOut(
         id=o.id,
         emergencia_id=o.emergencia_id,
         ong_id=o.ong_id,
         ong_nombre=o.ong.nombre,
         version_actual=o.version_actual,
-        items=[OfertaItemOut.model_validate(i) for i in o.items if i.version == o.version_actual],
+        items=items,
+        retirada=not items,
+        estado=o.estado,
     )
 
 
@@ -295,49 +402,15 @@ def api_crear_oferta(
     body: OfertaIn,
     user: Usuario = Depends(require_role(Rol.ONG)),
     db: Session = Depends(get_db),
+    nacional: NacionalClient = Depends(get_nacional),
 ):
     """Cada envío es la oferta completa: una versión nueva con todos sus ítems (T-12)."""
-    from app.models import EstadoEmergencia
-
     emergencia = _require_visible(db, user, emergencia_id)
-    if emergencia.estado is EstadoEmergencia.CERRADA:
-        raise HTTPException(status_code=400, detail="La ventana de ofertas ya cerró")
-    if emergencia.estado is not EstadoEmergencia.CONVOCATORIA:
-        raise HTTPException(status_code=400, detail="La convocatoria no está abierta")
-    fin = emergencia.ventana_ofertas_fin
-    if fin is not None and fin.replace(tzinfo=fin.tzinfo or timezone.utc) <= datetime.now(timezone.utc):
-        raise HTTPException(status_code=400, detail="La ventana de ofertas ya cerró")
-    if user.ong_id is None:
-        raise HTTPException(status_code=400, detail="Tu usuario no tiene ONG asignada")
-
-    lote_ids = {l.id for l in emergencia.lotes}
-    pedidos = [item.lote_id for item in body.items]
-    if len(set(pedidos)) != len(pedidos):
-        raise HTTPException(status_code=400, detail="Hay lotes repetidos en la oferta")
-    for lote_id in pedidos:
-        if lote_id not in lote_ids:
-            raise HTTPException(status_code=400, detail=f"Lote {lote_id} inválido")
-
-    oferta = db.scalar(
-        select(Oferta).where(Oferta.emergencia_id == emergencia_id, Oferta.ong_id == user.ong_id)
-    )
-    if oferta is None:
-        oferta = Oferta(emergencia_id=emergencia_id, ong_id=user.ong_id, version_actual=1)
-        db.add(oferta)
-        db.flush()
-    else:
-        oferta.version_actual += 1
-
-    for item in body.items:
-        db.add(
-            OfertaItem(
-                oferta_id=oferta.id,
-                version=oferta.version_actual,
-                lote_id=item.lote_id,
-                recurso=item.recurso,
-                cantidad=item.cantidad,
-            )
-        )
-    db.commit()
-    db.refresh(oferta)
+    try:
+        oferta = publicar_oferta(db, nacional, emergencia=emergencia, ong=user.ong, items=body.items)
+    except OfertaError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except NacionalError as exc:
+        db.rollback()
+        raise HTTPException(status_code=503, detail=NACIONAL_CAIDO) from exc
     return _oferta_out(oferta)

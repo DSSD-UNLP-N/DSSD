@@ -1,10 +1,11 @@
 from fastapi import FastAPI
 
 from app.core.config import get_settings
-from app.routers import api
+from app.routers import api, bonita
 
 settings = get_settings()
 
 app = FastAPI(title=settings.app_name)
 app.include_router(api.router)
 app.include_router(api.national_auth_router)
+app.include_router(bonita.router)

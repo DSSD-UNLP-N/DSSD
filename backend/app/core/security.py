@@ -30,6 +30,7 @@ def create_access_token(
     role: str,
     secret_key: str,
     expires_minutes: int,
+    cuit: str | None = None,
 ) -> str:
     now = datetime.now(timezone.utc)
     return jwt.encode(
@@ -37,12 +38,20 @@ def create_access_token(
             "sub": str(user_id),
             "username": username,
             "rol": role,
+            "cuit": cuit,
             "iat": now,
             "exp": now + timedelta(minutes=expires_minutes),
         },
         secret_key,
         algorithm="HS256",
     )
+
+
+def get_token_claims(token: str, secret_key: str) -> dict | None:
+    try:
+        return jwt.decode(token, secret_key, algorithms=["HS256"])
+    except (InvalidTokenError, TypeError, ValueError):
+        return None
 
 
 def get_token_user_id(token: str, secret_key: str) -> int | None:

@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 import responses
 
 from app.core.config import get_settings
-from app.models import Emergencia
+from app.models import Emergencia, Gravedad, Usuario
 
 BASE = get_settings().bonita_base_url
 BASE_PATH = urlparse(BASE).path  # "/bonita"
@@ -63,6 +63,73 @@ def test_alta_crea_emergencia_instancia_y_completa_registrar(login, seeded):
 
 
 @responses.activate
+def test_alta_limpia_la_asociacion_bonita_obsoleta_si_reutiliza_case_id(login, seeded):
+    case_id = "4242"
+    with seeded() as s:
+        operador = s.query(Usuario).filter_by(username="operador.municipal").one()
+        anterior = Emergencia(
+            municipio_id=operador.municipio_id,
+            tipo="inundacion",
+            nivel_gravedad=Gravedad.ALTO,
+            zona_afectada="Centro",
+            descripcion="Emergencia anterior",
+            bonita_case_id=int(case_id),
+        )
+        s.add(anterior)
+        s.commit()
+        emergencia_nueva_id = anterior.id + 1
+
+    _mock_alta_ok(case_id=case_id)
+    responses.add(
+        responses.GET,
+        f"{BASE}/API/bpm/caseVariable",
+        json=[{"name": "emergenciaId", "value": str(emergencia_nueva_id)}],
+    )
+
+    response = login("operador.municipal").post(ALTA, json=DATOS)
+
+    assert response.status_code == 201
+    assert response.json()["bonita_case_id"] == int(case_id)
+    with seeded() as s:
+        emergencias = s.query(Emergencia).order_by(Emergencia.id).all()
+        assert len(emergencias) == 2
+        assert emergencias[0].bonita_case_id is None
+        assert emergencias[1].bonita_case_id == int(case_id)
+
+
+@responses.activate
+def test_alta_no_limpia_asociacion_si_el_caso_no_corresponde_a_la_emergencia(login, seeded):
+    case_id = "4242"
+    with seeded() as s:
+        operador = s.query(Usuario).filter_by(username="operador.municipal").one()
+        s.add(Emergencia(
+            municipio_id=operador.municipio_id,
+            tipo="inundacion",
+            nivel_gravedad=Gravedad.ALTO,
+            zona_afectada="Centro",
+            descripcion="Emergencia anterior",
+            bonita_case_id=int(case_id),
+        ))
+        s.commit()
+
+    _mock_alta_ok(case_id=case_id)
+    responses.add(
+        responses.GET,
+        f"{BASE}/API/bpm/caseVariable",
+        json=[{"name": "emergenciaId", "value": "9999"}],
+    )
+    responses.add(responses.DELETE, f"{BASE}/API/bpm/case/{case_id}", status=200)
+
+    response = login("operador.municipal").post(ALTA, json=DATOS)
+
+    assert response.status_code == 502
+    with seeded() as s:
+        emergencias = s.query(Emergencia).all()
+        assert len(emergencias) == 1
+        assert emergencias[0].bonita_case_id == int(case_id)
+
+
+@responses.activate
 def test_el_alta_se_hace_con_el_usuario_que_la_pidio_y_no_con_el_tecnico(login, seeded):
     """Bonita registra iniciador y ejecutor: cada operador tiene que figurar con su nombre."""
     _mock_alta_ok()
@@ -97,19 +164,60 @@ def test_si_bonita_no_responde_a_tiempo_no_queda_emergencia_a_medias(login, seed
         assert s.query(Emergencia).count() == 0
 
 
-@responses.activate
-def test_si_no_aparece_la_tarea_registrar_no_queda_emergencia_a_medias(login, seeded):
+def _mock_caso_sin_tarea(case_id="1"):
+    """El caso se crea pero 'Registrar Emergencia' nunca aparece."""
     responses.add(responses.POST, f"{BASE}/loginservice", status=204,
                   headers={"Set-Cookie": "X-Bonita-API-Token=tok; Path=/"})
     responses.add(responses.GET, f"{BASE}/API/bpm/process", json=[{"id": "555"}])
-    responses.add(responses.POST, f"{BASE}/API/bpm/process/555/instantiation", json={"caseId": "1"})
-    responses.add(responses.GET, f"{BASE}/API/bpm/humanTask", json=[])  # nunca aparece
+    responses.add(responses.POST, f"{BASE}/API/bpm/process/555/instantiation", json={"caseId": case_id})
+    responses.add(responses.GET, f"{BASE}/API/bpm/humanTask", json=[])
+
+
+@responses.activate
+def test_si_no_aparece_la_tarea_registrar_no_queda_emergencia_a_medias(login, seeded):
+    _mock_caso_sin_tarea()
+    responses.add(responses.DELETE, f"{BASE}/API/bpm/case/1", status=200)
 
     r = login("operador.municipal").post(ALTA, json=DATOS)
 
     assert r.status_code == 502
     with seeded() as s:
         assert s.query(Emergencia).count() == 0
+
+
+@responses.activate
+def test_si_el_alta_falla_despues_de_crear_el_caso_se_borra_en_bonita(login, seeded):
+    """Sin esto quedaba un caso huérfano trabado en 'Registrar Emergencia' (visto en Studio el 12/10),
+    con un emergenciaId que SQLite reusa para la emergencia siguiente."""
+    _mock_caso_sin_tarea(case_id="77")
+    responses.add(responses.DELETE, f"{BASE}/API/bpm/case/77", status=200)
+
+    login("operador.municipal").post(ALTA, json=DATOS)
+
+    borrados = [c for c in responses.calls if c.request.method == "DELETE"]
+    assert [urlparse(c.request.url).path[len(BASE_PATH):] for c in borrados] == ["/API/bpm/case/77"]
+    # lo borra el usuario técnico: un operador no tiene permiso para borrar casos
+    logins = [c.request.body for c in responses.calls if c.request.url.endswith("/loginservice")]
+    assert "username=walter.bates" in logins[-1]
+
+
+@responses.activate
+def test_si_tampoco_se_puede_borrar_el_caso_la_respuesta_es_la_misma(login, seeded):
+    _mock_caso_sin_tarea()
+    responses.add(responses.DELETE, f"{BASE}/API/bpm/case/1", status=500)
+
+    r = login("operador.municipal").post(ALTA, json=DATOS)
+
+    assert r.status_code == 502 and "probá de nuevo" in r.json()["detail"]
+    with seeded() as s:
+        assert s.query(Emergencia).count() == 0
+
+
+@responses.activate
+def test_si_falla_antes_de_crear_el_caso_no_se_borra_nada(login, seeded):
+    responses.add(responses.POST, f"{BASE}/loginservice", status=401)
+    login("operador.municipal").post(ALTA, json=DATOS)
+    assert not [c for c in responses.calls if c.request.method == "DELETE"]
 
 
 def _campos_con_error(r) -> set[str]:
