@@ -143,6 +143,7 @@ notificaciones y actualiza estados.
 | **WP9** | Pruebas end to end: script `escenario_completo.py`, `e2e_ui.py` ampliado, guía manual (sección 6) | **Tomás** | WP1–WP6 | 6 |
 | **WP10** | Entrega: README de instalación, guion de demo, video de respaldo, prueba en limpio en otra PC | **Fabrizio** + todos | WP7, WP8 | 4 |
 | WP11 | JWT (un token por usuario; emite la API Nacional; Bonita con cuenta de servicio). Base: rama `franco_v` | Franco V. (cuando se retome) | — | 8 |
+| WP12 | Bonita con parámetros por entorno (`nacionalBaseUrl`, `appBaseUrl`, `bonitaApiKey`; Local y Production) para pasar a la nube sin editar conectores. **Al final**, con todo probado en local | Tomás (tiene Studio) | WP1–WP6, WP7, WP9 | 1 |
 
 ### Cronograma
 

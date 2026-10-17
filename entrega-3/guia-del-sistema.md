@@ -431,6 +431,7 @@ Las tareas del plan se llaman **WP** (*work package*).
 | WP9 | Pruebas de punta a punta | FALTA |
 | WP10 | README, guion de demo, video, prueba en una máquina limpia | FALTA |
 | WP11 | JWT | POSTERGADO |
+| WP12 | Bonita con parámetros por entorno, para apuntar a la nube sin editar conectores | FALTA (al final, con todo probado en local; hoy los conectores llevan `localhost` fijo) |
 
 **Primera parada de pruebas (la próxima):** tres usuarios ofertan, vence el plazo y, sin tocar nada, Bonita trae las
 ofertas, la API Nacional reserva el stock y el Coordinador ve la cobertura en pantalla. Para eso falta, en Bonita

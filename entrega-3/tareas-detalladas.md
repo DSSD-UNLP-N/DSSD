@@ -297,3 +297,37 @@ recorrido completo anda con Bonita en el host.
 4. Base: la rama `franco_v` (JWT en la app local) sirve como punto de partida.
 
 **Estimación**: 8 h.
+
+---
+
+## WP12 — Bonita con parámetros por entorno (local y nube). Se hace AL FINAL
+
+**Cuándo**: recién cuando todo el flujo (WP1 a WP6, WP9) esté probado en local con resultado exitoso, y antes de la
+prueba contra la nube (M14). Decisión del 17/10: hasta entonces los conectores llevan las URL fijas de `localhost`.
+
+**Para qué**: pasar de local a la nube sin editar a mano cada conector. Hoy los conectores que llaman a la API Nacional
+(`evaluarOfertas` y los de confirmar, liberar y cierres) tienen `http://localhost:8002` escrito adentro; la consigna
+pide la API en la nube (Render), así que para la demo final hay que apuntarlos a su URL pública. Los que llaman a la
+app local (`localhost:8001`) no cambian de lugar, pero conviene que también lean la URL de un parámetro.
+
+**Qué hay que hacer** (en Bonita Studio)
+1. Crear los parámetros del proceso (configuración del proceso → Parámetros): `nacionalBaseUrl`
+   (`http://localhost:8002`), `appBaseUrl` (`http://localhost:8001`) y `bonitaApiKey` (`rescuesync-dev-key`).
+2. En cada conector, reemplazar la URL fija por una expresión con el parámetro, p. ej.
+   `nacionalBaseUrl + "/evaluaciones"` o `appBaseUrl + "/api/bonita/emergencias/${emergenciaId}/eventos"`, y la cabecera
+   `X-Api-Key` por `bonitaApiKey`.
+3. Definir los valores por entorno: **Local** con `localhost` y **Production** con la URL de Render
+   (`https://sistema-nacional-latest.onrender.com`). Verificar si el valor también se puede cambiar desde el portal en la
+   edición Community; si no, alcanza con cambiarlo en Studio.
+4. Reexportar el `.bos` y repetir en la nube el escenario completo (M14): `nacional/scripts/verificar_despliegue.py`
+   contra Render y los escenarios de `backend/scripts/` con Bonita apuntando a la URL pública.
+
+**Terminado cuando**
+- Con el entorno Local, todos los escenarios siguen pasando igual que antes del cambio.
+- Cambiando solo el valor de `nacionalBaseUrl`, el mismo proceso desplegado le habla a Render, sin tocar ningún conector.
+
+**Cuidados**: Render gratis tarda de 45 a 60 s en despertar (los conectores ya tienen timeout de 60 s: despertar la API
+con `/health` antes de la demo). Cada **Ejecutar** en Studio borra los casos.
+
+**Depende de**: WP1 a WP6 y WP9 probados en local; WP7 (la API desplegada con el código nuevo). **Estimación**: 1 h.
+
