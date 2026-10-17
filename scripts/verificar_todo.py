@@ -35,7 +35,7 @@ with ThreadPoolExecutor() as pool:
     resultados = list(pool.map(correr, PIEZAS.items()))
 
 for nombre, codigo, lineas in resultados:
-    resumen = lineas[-1] if lineas else "(sin salida)"
+    resumen = lineas[-1] if lineas and not lineas[-1].startswith(">") else "sin errores"
     print(f"[{'OK   ' if codigo == 0 else 'FALLA'}] {nombre}: {resumen}")
     if codigo != 0:
         print("\n".join("    " + l for l in lineas[-40:]))

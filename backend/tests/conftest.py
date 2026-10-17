@@ -13,12 +13,17 @@ from sqlalchemy import create_engine  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
+from app.core import security  # noqa: E402
 from app.db import Base, get_db  # noqa: E402
 from app.integrations.nacional import NacionalError, get_nacional  # noqa: E402
 from app.main import app  # noqa: E402
 from app.seed import DEMO_PASSWORD, seed  # noqa: E402
 
 PASSWORD = DEMO_PASSWORD
+
+# El PBKDF2 real tarda ~0,3 s por hash y `seeded` lo paga 6 veces por test (y cada login una más): era la mayor
+# parte del tiempo de la suite. El hash guarda sus iteraciones, así que verificar también usa este valor chico.
+security._ITERATIONS = 1_000
 
 
 @pytest.fixture(autouse=True)
