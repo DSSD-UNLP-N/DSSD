@@ -125,14 +125,16 @@ def test_cada_ong_finaliza_y_al_terminar_todas_se_completa_la_tarea_de_bonita(lo
     assert _estado_oferta(seeded, en_ejecucion, CRUZ_ROJA) is EstadoOferta.FINALIZADA
     assert not _tarea_completada()  # todavía falta Bomberos
     logins_antes = len(_logins("ong.cruzroja"))
+    logins_antes_bomberos = len(_logins("ong.bomberos"))
 
     ultima = login("ong.bomberos").post(f"/api/emergencias/{en_ejecucion}/finalizar")
 
     assert ultima.status_code == 200 and ultima.json()["ejecucion"]["todas_finalizadas"] is True
     assert _estado_oferta(seeded, en_ejecucion, BOMBEROS) is EstadoOferta.FINALIZADA
     assert _tarea_completada()
-    # Bomberos no existe en la organización de Bonita: la tarea la completa el representante que sí está
-    assert len(_logins("ong.cruzroja")) == logins_antes + 1
+    # la tarea la completa con su propio usuario la ONG que terminó última
+    assert len(_logins("ong.bomberos")) > logins_antes_bomberos
+    assert len(_logins("ong.cruzroja")) == logins_antes
 
 
 @responses.activate

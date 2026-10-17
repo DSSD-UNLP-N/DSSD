@@ -3,7 +3,7 @@ cierre bilateral. Cada paso reemplaza a una tarea humana de Bonita (como en `cic
 
   Monitorear Ejecucion del Despliegue  -> Coordinador            (`monitorear`)
   Confirmar Finalizacion de Actividades -> ONG, versión simple:   una sola tarea, la completa la app cuando todas las
-                                           ONGs adjudicadas finalizaron (`finalizar`)
+                                           ONGs adjudicadas finalizaron, con el usuario de la que finalizó última (`finalizar`)
   Validar Cierre Operativo Bilateral    -> Coordinador            (`validar_cierre`)
 
 Lo que sigue (liberar en la API Nacional y avisar con el evento CIERRE) lo hace Bonita sola con su conector.
@@ -81,7 +81,7 @@ def finalizar(db: Session, settings: Settings, *, emergencia: Emergencia, usuari
         return
     propia.estado = EstadoOferta.FINALIZADA
     if all(o.estado is EstadoOferta.FINALIZADA for o in ofertas):
-        completar_en_bonita(settings, emergencia.bonita_case_id, TAREA_FINALIZAR, settings.bonita_ong_username, {})
+        completar_en_bonita(settings, emergencia.bonita_case_id, TAREA_FINALIZAR, usuario.username, {})
     db.commit()
 
 

@@ -264,7 +264,7 @@ Todo esto va en **una sola migración** de la app (WP1) para que dos tareas no c
 2. ~~Recorte de reserva~~ **Resuelto (16/10):** sin recorte. Si el stock no alcanza para la oferta, esa ONG queda `NO_RESERVADA` y rehace la oferta.
 3. **Quién llama a `/liberar` al REFORMULAR**: la app (propuesta, porque el caso vuelve atrás por el modelo) o Bonita.
 4. ~~Multi-instancia de "Confirmar Finalizacion"~~ **Resuelto (17/10):** versión simple. La app completa la tarea cuando
-   todas las ONGs adjudicadas finalizaron, con el representante `ong.cruzroja` (`bonita_ong_username`), el único de una ONG que
-   existe en la organización de Bonita. Probado con Bonita real: el motor crea una sola instancia aunque el diagrama la marque
-   multi-instancia sin configurar.
+   todas las ONGs adjudicadas finalizaron, con el usuario de la ONG que finalizó última (existe en Bonita con el mismo
+   username). Probado con Bonita real: el motor crea una sola instancia aunque el diagrama la marque multi-instancia sin
+   configurar.
 5. **Clave compartida** `X-Api-Key`: solo para el tramo Bonita ↔ app; hasta que llegue JWT, la API Nacional no pide nada.

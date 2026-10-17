@@ -19,9 +19,6 @@ class Settings(BaseSettings):
     # bonita_username/password de arriba es el usuario técnico (walter.bates), para instanciar
     # y setear variables; estos son para completar tareas humanas (hay que ser miembro del actor).
     bonita_test_password: str = "bpm"
-    # Miembro del actor ONG en Bonita que completa "Confirmar Finalizacion" cuando todas las ONGs adjudicadas
-    # terminaron: la organización solo tiene a este representante (las demás ONGs existen solo en la app).
-    bonita_ong_username: str = "ong.cruzroja"
     # La primera llamada tras un rato sin uso tarda varios segundos (arranque en frío del motor).
     bonita_timeout_seconds: float = 10.0
     # Sistema Nacional (nacional/): catálogo de recursos y validación de ofertas.
