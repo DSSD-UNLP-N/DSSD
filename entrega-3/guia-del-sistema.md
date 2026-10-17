@@ -400,8 +400,8 @@ suspendida** con 800 raciones. En total 11 tipos de recurso y 4 certificaciones.
 - Validación: `POST /validaciones` (solo responde, no guarda nada).
 - **Reserva (HECHO):** `POST /evaluaciones`, `POST /adjudicaciones/{referencia}/confirmar`,
   `POST /adjudicaciones/{referencia}/liberar`.
-- Cierre: `POST /cierres`, `GET /cierres/{id}`, `GET /ongs/{cuit}/cierres` (hoy libera lo que le pasen; **FALTA**
-  atarlo a la referencia, WP3).
+- **Cierre (HECHO):** `POST /cierres` con `{cuit, referencia}` (libera exactamente lo que comprometió esa referencia
+  `ADJUDICADA` y la pasa a `CERRADA`), `GET /cierres/{id}`, `GET /ongs/{cuit}/cierres`.
 - Heredado: `POST /adjudicaciones` (compromiso directo con ids internos, de la etapa anterior).
 
 ### Bonita (lo que la app le pide)
@@ -423,7 +423,7 @@ Las tareas del plan se llaman **WP** (*work package*).
 | WP2 | API Nacional: evaluar con reserva (todo o nada), confirmar, liberar | HECHO (falta probar la concurrencia en Postgres) |
 | Evento `EVALUACION` | La app guarda el resultado y el Coordinador ve la cobertura | HECHO |
 | WP4 (conectores de Bonita) | Evaluar y avisar a la app (HECHO); resolver las reservas y avisar la adjudicación (HECHO); falta el de cierre (`Liberar Recursos y Notificar Cierre`) | PARCIAL |
-| WP3 | `POST /cierres` atado a la referencia | FALTA |
+| WP3 | `POST /cierres` atado a la referencia | HECHO (tests y servidor real; falta probarlo con Bonita en la Parada 3) |
 | WP5 | El Coordinador decide (parcial o reformular) y el Municipio adjudica, con el evento `ADJUDICACION` | HECHO y probado con Bonita real (Parada 2) |
 | WP6 | Notificaciones, finalizar actividad, monitoreo, cierre bilateral, multi-instancia | FALTA |
 | WP7 | Deploy final de la API Nacional en Render con Postgres | FALTA (hoy la nube corre código viejo) |
@@ -517,6 +517,6 @@ Probada con Bonita real (`backend/scripts/escenario_adjudicacion.py`, 34/34):
   publica de nuevo, las ONGs ofrecen, la evaluación de la ronda 2 (referencia `emg-ID-r2-CUIT`) cubre todo, va directo a
   adjudicación y el Municipio adjudica.
 
-Lo que sigue (Parada 3, el flujo completo): `POST /cierres` atado a la referencia, "Marcar actividad finalizada" de cada ONG,
-monitoreo y cierre bilateral del Coordinador, el conector de "Liberar Recursos y Notificar Cierre" y el evento `CIERRE`,
-las notificaciones en pantalla y la multi-instancia de "Confirmar Finalización".
+Lo que sigue (Parada 3, el flujo completo): "Marcar actividad finalizada" de cada ONG, monitoreo y cierre bilateral del
+Coordinador, el conector de "Liberar Recursos y Notificar Cierre" y el evento `CIERRE`, las notificaciones en pantalla y la
+multi-instancia de "Confirmar Finalización". `POST /cierres` ya está atado a la referencia.

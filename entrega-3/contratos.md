@@ -169,9 +169,9 @@ la pasa a `CERRADA` y guarda el cierre. Response `201` con el cierre actual de l
 `referencia`, `informado_en`, `items[] {tipo_recurso, nombre, unidad, cantidad_liberada, cantidad_total,
 cantidad_comprometida, disponible}`). Repetido → `200` con el mismo cierre, sin restar. Si no estaba `ADJUDICADA` → `409`.
 
-> Cambio respecto de hoy: `/cierres` recibe `{cuit, referencia, items}` y libera lo que le piden; pasa a recibir solo
-> la referencia y liberar lo que realmente se comprometió (WP3). Hasta que WP3 esté mergeado conviene que Bonita no lo
-> use.
+> Hecho (WP3, 17/10): antes `/cierres` recibía `{cuit, referencia, items}` y liberaba lo que le pedían; ahora recibe solo
+> la referencia y libera lo que realmente se comprometió. Un cuerpo con `items` se ignora el campo extra, pero ya no
+> sirve para nada: Bonita manda solo `{cuit, referencia}`. `404` si la ONG o la referencia no existen o no son de esa ONG.
 
 ### 3.5 Transiciones de una reserva
 

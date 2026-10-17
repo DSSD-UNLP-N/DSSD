@@ -32,7 +32,7 @@ lee la misma variable; si exportás una en la terminal, la leen los dos.
 | GET | `/recursos/disponibilidad?tipo_recurso=` | Disponibilidad global (solo ONGs habilitadas) con desglose por ONG |
 | POST | `/validaciones` | Valida cantidades y competencia; **no guarda nada** |
 | POST | `/adjudicaciones` | Compromete inventario de forma atómica e idempotente |
-| POST | `/cierres` | Informa el fin de una actividad y libera lo bloqueado (`cantidad_comprometida`) |
+| POST | `/cierres` | Cierra una adjudicación (`{cuit, referencia}`) y libera exactamente lo que tenía comprometido |
 | GET | `/cierres/{id}` | Un cierre ya informado |
 | GET | `/ongs/{cuit}/cierres` | Cierres de una ONG |
 
@@ -51,15 +51,18 @@ abiertas y rechaza si no alcanza. Más adelante lo puede usar Bonita al vencer e
 
 ### `POST /cierres`
 
-Informa al sistema central que la ONG terminó una actividad y libera los recursos que tenía bloqueados.
-Resta `cantidad_comprometida` (el bloqueo, servicio 4, es quien la suma). No toca `cantidad_total`.
+Informa que la ONG terminó la actividad de una adjudicación y libera lo que esa referencia tenía bloqueado. No se
+indican ítems: se resta de `cantidad_comprometida` exactamente lo que la referencia comprometió (con las filas de
+inventario bloqueadas) y la referencia pasa de `ADJUDICADA` a `CERRADA`. No toca `cantidad_total`.
 
 ```json
-{ "cuit": "30-54666544-5", "referencia": "emergencia-12", "items": [{ "tipo_recurso": "PARAMEDICO", "cantidad": 2 }] }
+{ "cuit": "30-54666544-5", "referencia": "emg-12-r1-30-54666544-5" }
 ```
 
 - 201 con lo liberado y el inventario que queda (`comprometida` / `disponible`).
-- 409 si se pide liberar más de lo bloqueado, si el tipo no está en el inventario, o si esa `referencia` ya se informó para la misma ONG. Si un ítem falla, no se libera ninguno.
+- Repetirlo → 200 con el mismo cierre, sin restar de nuevo.
+- 404 si la ONG o la referencia no existen, o la referencia es de otra ONG. 409 si la referencia no está `ADJUDICADA`
+  (reservada sin confirmar, o liberada).
 
 ### `POST /adjudicaciones`
 

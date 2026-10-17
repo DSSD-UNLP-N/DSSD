@@ -10,12 +10,20 @@ Rama `modelado-tomas-e-3`, [PR #10](https://github.com/FrancoCirielli16/DSSD/pul
 - **Parada 2 por la interfaz real (17/10):** `backend/scripts/ui_parada2.py` 46/46 (dos casos: parcial y reformular), con capturas
   de cada paso. Guía con imágenes: `guia-parada-2.html` ([publicada](https://claude.ai/artifact/K47xuvWUCXUHAwvfTv643L), privada).
   **Tomás todavía no la recorrió a mano.**
-- Tests: backend 188 pasan / 2 se saltean (16 s), API Nacional 93 / 3. `verificar_despliegue.py` local 53/53.
+- **WP3 (17/10):** `POST /cierres` con `{cuit, referencia}` libera exactamente lo que comprometió esa referencia `ADJUDICADA` y la pasa a
+  `CERRADA`; idempotente (200), 404 si la ONG o la referencia no existen, 409 si no está adjudicada. Probado: tests, servidor real 13/13.
+- Tests: backend 188 pasan / 2 se saltean (16 s), API Nacional 95 / 3. `verificar_despliegue.py` local 59/59 (con el bloque de cierre).
 - `.bos` actual con los 5 conectores: `entrega41_20261017_1311.bos`.
 
 ## Falta
-- **Parada 3 (cierre):** WP3 `POST /cierres` por referencia, WP6 ONG marca finalizada + monitoreo + cierre bilateral + notificaciones
-  + multi-instancia de "Confirmar Finalizacion" + conector "Liberar Recursos y Notificar Cierre" y evento `CIERRE`.
+- **Parada 3 (cierre):** WP6 ONG marca finalizada + monitoreo + cierre bilateral + notificaciones + evento `CIERRE`
+  + multi-instancia de "Confirmar Finalizacion" + conector "Liberar Recursos y Notificar Cierre".
+- **Checkpoints de la Parada 3** (cada uno se prueba y se commitea antes del siguiente):
+  1. ✅ WP3 en la API Nacional (tests + servidor real + `verificar_despliegue`).
+  2. WP6 backend: evento `CIERRE`, notificaciones, `finalizar`, monitorear, validar cierre. Tests + `verificar_todo.py` + prueba por HTTP de la app real.
+  3. WP6 front: campana y botones. Script de Playwright con capturas de las pantallas nuevas.
+  4. Conector de cierre en Bonita (Tomás, Studio) + `escenario_cierre.py` con Bonita real: caso hasta `RESUELTA` y stock de vuelta.
+  5. Parada 3 por la interfaz (`ui_parada3.py`, como la de la Parada 2) y su guía con capturas.
 - WP9 recorrido completo de punta a punta, WP7 Render con el código nuevo, WP8 Docker Compose + Postgres, WP10 entrega,
   WP11 JWT (postergado), WP12 parámetros de Bonita (al final).
 - Plan de la nube y de Local vs Production: `plan-nube-docker-entrega.md`.
