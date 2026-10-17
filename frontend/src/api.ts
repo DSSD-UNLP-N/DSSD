@@ -46,6 +46,23 @@ export type Emergencia = {
   lotes: Lote[];
   tarea_bonita?: string | null;
   evaluacion?: Evaluacion | null;
+  ejecucion?: Ejecucion | null;
+};
+
+// Cómo va la ejecución de una emergencia adjudicada; la ONG solo trae su propia fila.
+export type Ejecucion = {
+  monitoreo_iniciado: boolean;
+  cierre_validado: boolean;
+  todas_finalizadas: boolean;
+  ongs: { cuit: string | null; nombre: string; estado: "ADJUDICADA" | "FINALIZADA" }[];
+};
+
+export type Notificacion = {
+  id: number;
+  emergencia_id: number;
+  texto: string;
+  creada_en: string;
+  leida: boolean;
 };
 
 export type Evaluacion = {
@@ -179,6 +196,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ cuits }),
     }),
+  monitorear: (id: number) => request<Emergencia>(`/api/emergencias/${id}/monitorear`, { method: "POST" }),
+  finalizar: (id: number) => request<Emergencia>(`/api/emergencias/${id}/finalizar`, { method: "POST" }),
+  validarCierre: (id: number) => request<Emergencia>(`/api/emergencias/${id}/validar-cierre`, { method: "POST" }),
+  notificaciones: () => request<Notificacion[]>("/api/notificaciones"),
+  marcarLeida: (id: number) => request<Notificacion>(`/api/notificaciones/${id}/leida`, { method: "POST" }),
   listOfertas: (id: number) => request<Oferta[]>(`/api/emergencias/${id}/ofertas`),
   createOferta: (
     id: number,

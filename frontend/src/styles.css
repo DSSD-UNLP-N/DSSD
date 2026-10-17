@@ -67,6 +67,33 @@ button, input, select, textarea { font: inherit; }
   display: flex; align-items: center; gap: 0.65rem;
   color: rgba(246,243,236,0.78); font-size: 0.88rem;
 }
+.campana { position: relative; }
+.campana-boton {
+  position: relative; cursor: pointer;
+  padding: 0.3rem 0.6rem; border-radius: var(--radius-sm);
+  background: transparent; color: #f6f3ec;
+  border: 1px solid rgba(246,243,236,0.28); font-size: 0.82rem; font-weight: 650;
+}
+.campana-boton:hover { background: rgba(246,243,236,0.1); }
+.campana-contador {
+  margin-left: 0.4rem; min-width: 1.2rem; padding: 0.05rem 0.4rem;
+  border-radius: 999px; background: var(--signal); color: #071f1b;
+  font-size: 0.72rem; font-weight: 800;
+}
+.campana-lista {
+  position: absolute; right: 0; top: calc(100% + 0.5rem); z-index: 40;
+  width: min(22rem, calc(100vw - 2rem)); max-height: 22rem; overflow: auto;
+  background: #fff; color: var(--ink); border: 1px solid var(--line-strong);
+  border-radius: var(--radius); box-shadow: var(--shadow); padding: 0.4rem;
+}
+.aviso {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  padding: 0.65rem 0.7rem; border: 0; border-radius: var(--radius-sm);
+  background: transparent; color: var(--ink-soft); font-size: 0.86rem; line-height: 1.35;
+}
+.aviso:hover { background: rgba(14, 34, 30, 0.05); }
+.aviso.nuevo { color: var(--ink); font-weight: 650; background: rgba(224, 137, 18, 0.1); }
+.aviso small { display: block; margin-top: 0.2rem; font-weight: 500; opacity: 0.7; }
 .role-chip {
   display: inline-flex; align-items: center;
   padding: 0.28rem 0.7rem;

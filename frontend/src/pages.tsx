@@ -1,7 +1,7 @@
 import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { api, type Emergencia, type Meta, type Oferta, type Rol, type TipoRecurso } from "./api";
+import { api, type Emergencia, type Meta, type Notificacion, type Oferta, type Rol, type TipoRecurso } from "./api";
 import { useAuth } from "./auth";
 import { FlowBubbles } from "./FlowBubbles";
 import { PageHeader } from "./PageHeader";
@@ -126,6 +126,61 @@ function EvaluacionPanel({ e }: { e: Emergencia }) {
   );
 }
 
+function Campana() {
+  const navigate = useNavigate();
+  const [avisos, setAvisos] = useState<Notificacion[]>([]);
+  const [abierta, setAbierta] = useState(false);
+
+  const cargar = useCallback(() => {
+    api.notificaciones().then(setAvisos).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    cargar();
+    const t = setInterval(cargar, 15000);
+    return () => clearInterval(t);
+  }, [cargar]);
+
+  const sinLeer = avisos.filter((a) => !a.leida).length;
+
+  async function abrir(a: Notificacion) {
+    setAbierta(false);
+    if (!a.leida) await api.marcarLeida(a.id).catch(() => undefined);
+    cargar();
+    navigate(`/emergencias/${a.emergencia_id}`);
+  }
+
+  return (
+    <div className="campana">
+      <button className="campana-boton" type="button" onClick={() => setAbierta((v) => !v)} data-testid="campana">
+        Avisos
+        {sinLeer > 0 && (
+          <span className="campana-contador" data-testid="campana-contador">
+            {sinLeer}
+          </span>
+        )}
+      </button>
+      {abierta && (
+        <div className="campana-lista" data-testid="campana-lista">
+          {avisos.length === 0 && <div className="empty" style={{ padding: "1rem" }}><p>No tenés avisos.</p></div>}
+          {avisos.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              className={`aviso${a.leida ? "" : " nuevo"}`}
+              onClick={() => void abrir(a)}
+              data-testid={`aviso-${a.id}`}
+            >
+              {a.texto}
+              <small>{formatFecha(a.creada_en)}</small>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Shell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   return (
@@ -136,6 +191,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </Link>
         {user && (
           <div className="topbar-meta">
+            {user.rol === "ONG" && <Campana />}
             <span className="role-chip">{ROL_LABEL[user.rol]}</span>
             <span>{user.nombre}</span>
             <button className="btn btn-ghost light" type="button" onClick={() => void logout()}>
@@ -632,6 +688,23 @@ export function DetallePage() {
     }
   }
 
+  async function avanzar(paso: () => Promise<Emergencia>, mensaje: string, esperarABonita = false) {
+    setBusy(true);
+    setError(null);
+    setOk(null);
+    try {
+      await paso();
+      setOk(mensaje);
+      // El pase a "Resuelta" lo hace Bonita en unos segundos, cuando libera los recursos.
+      if (esperarABonita) await new Promise((r) => setTimeout(r, 4000));
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function publicar(ev: FormEvent<HTMLFormElement>) {
     ev.preventDefault();
     const fd = new FormData(ev.currentTarget);
@@ -930,6 +1003,92 @@ export function DetallePage() {
           </form>
         )}
 
+        {e.ejecucion && (
+          <>
+            <h2 className="section-title">Ejecución y cierre</h2>
+            <div className="panel" style={{ marginBottom: "1.35rem" }} data-testid="ejecucion">
+              {e.ejecucion.ongs.length === 0 && user!.rol === "ONG" && (
+                <p style={{ margin: 0 }}>Tu oferta no fue seleccionada en esta emergencia.</p>
+              )}
+              {e.ejecucion.ongs.map((o) => (
+                <div className="lote-row" key={o.cuit ?? o.nombre} data-testid={`ejecucion-ong-${o.cuit}`}>
+                  <strong>{o.nombre}</strong>
+                  <span className={`badge ${o.estado === "FINALIZADA" ? "ok" : "signal"}`}>
+                    {o.estado === "FINALIZADA" ? "Actividad finalizada" : "En ejecución"}
+                  </span>
+                </div>
+              ))}
+              {e.estado === "RESUELTA" && (
+                <p data-testid="resuelta" style={{ marginBottom: 0 }}>
+                  Emergencia resuelta: los recursos de las ONGs volvieron a su inventario en el Sistema Nacional.
+                </p>
+              )}
+              {e.estado === "EN_EJECUCION" && user!.rol === "COORDINADOR" && (
+                <div style={{ marginTop: "0.85rem" }}>
+                  {!e.ejecucion.monitoreo_iniciado && (
+                    <>
+                      <p>Empezá a monitorear el despliegue: desde ahí cada ONG puede marcar su actividad como finalizada.</p>
+                      <button
+                        className="btn btn-primary"
+                        disabled={busy}
+                        data-testid="monitorear"
+                        onClick={() => void avanzar(() => api.monitorear(id), "Monitoreo iniciado: las ONGs ya pueden finalizar.")}
+                      >
+                        Monitorear ejecución
+                      </button>
+                    </>
+                  )}
+                  {e.ejecucion.monitoreo_iniciado && !e.ejecucion.todas_finalizadas && (
+                    <p data-testid="esperando-ongs" style={{ marginBottom: 0 }}>
+                      Esperando que todas las ONGs marquen su actividad como finalizada.
+                    </p>
+                  )}
+                  {e.ejecucion.todas_finalizadas && !e.ejecucion.cierre_validado && (
+                    <>
+                      <p>Todas las ONGs terminaron. Al validar el cierre se liberan los recursos en el Sistema Nacional.</p>
+                      <button
+                        className="btn btn-primary"
+                        disabled={busy}
+                        data-testid="validar-cierre"
+                        onClick={() =>
+                          void avanzar(() => api.validarCierre(id), "Cierre validado: Bonita libera los recursos.", true)
+                        }
+                      >
+                        Validar cierre bilateral
+                      </button>
+                    </>
+                  )}
+                  {e.ejecucion.cierre_validado && (
+                    <p data-testid="cierre-en-proceso" style={{ marginBottom: 0 }}>
+                      Cierre validado: Bonita está liberando los recursos en el Sistema Nacional. Refrescá en unos segundos.
+                    </p>
+                  )}
+                </div>
+              )}
+              {e.estado === "EN_EJECUCION" && user!.rol === "ONG" && e.ejecucion.ongs.length > 0 && (
+                <div style={{ marginTop: "0.85rem" }}>
+                  {!e.ejecucion.monitoreo_iniciado && (
+                    <p style={{ marginBottom: 0 }}>El Centro Coordinador todavía no empezó el monitoreo de la ejecución.</p>
+                  )}
+                  {e.ejecucion.monitoreo_iniciado && e.ejecucion.ongs[0].estado === "ADJUDICADA" && (
+                    <button
+                      className="btn btn-primary"
+                      disabled={busy}
+                      data-testid="finalizar"
+                      onClick={() => void avanzar(() => api.finalizar(id), "Marcaste tu actividad como finalizada.")}
+                    >
+                      Marcar actividad finalizada
+                    </button>
+                  )}
+                  {e.ejecucion.ongs[0].estado === "FINALIZADA" && (
+                    <p style={{ marginBottom: 0 }}>Marcaste tu actividad como finalizada. Falta el cierre del Coordinador.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
         {ofertas.length > 0 && (
           <>
             <h2 className="section-title">{user!.rol === "ONG" ? "Mi oferta vigente" : "Ofertas recibidas"}</h2>
@@ -940,6 +1099,7 @@ export function DetallePage() {
                   {o.retirada && <span className="badge muted">retirada</span>}
                   {o.estado === "ADJUDICADA" && <span className="badge ok">adjudicada</span>}
                   {o.estado === "NO_ADJUDICADA" && <span className="badge muted">no adjudicada</span>}
+                  {o.estado === "FINALIZADA" && <span className="badge ok">finalizada</span>}
                   {e.lotes.map((l) => {
                     const c = cantidadOfrecida(o, l.id);
                     return c ? (
