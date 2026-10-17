@@ -1,7 +1,7 @@
 """estados de la evaluación/adjudicación/ejecución, ronda, estado de la oferta y notificaciones
 
 Una sola migración para todo el cierre de la Entrega 3 (ver entrega-3/contratos.md): estados
-nuevos de emergencia, `emergencia.ronda`, `oferta.estado` y la tabla `notificacion`.
+nuevos de emergencia, `emergencia.ronda`, `emergencia.evaluacion`, `oferta.estado` y la tabla `notificacion`.
 
 Revision ID: 0005
 Revises: 0004
@@ -27,6 +27,7 @@ def upgrade() -> None:
         batch.drop_constraint('estadoemergencia', type_='check')
         batch.create_check_constraint('estadoemergencia', f"estado IN ({ESTADOS_NUEVOS})")
         batch.add_column(sa.Column('ronda', sa.Integer(), nullable=False, server_default='1'))
+        batch.add_column(sa.Column('evaluacion', sa.Text(), nullable=True))
     with op.batch_alter_table('oferta') as batch:
         batch.add_column(sa.Column('estado', sa.String(length=20), nullable=False, server_default='PRESENTADA'))
         batch.create_check_constraint('estadooferta', f"estado IN ({ESTADOS_OFERTA})")
@@ -52,6 +53,7 @@ def downgrade() -> None:
         "WHERE estado IN ('EN_EVALUACION', 'ADJUDICACION', 'EN_EJECUCION', 'RESUELTA')"
     )
     with op.batch_alter_table('emergencia') as batch:
+        batch.drop_column('evaluacion')
         batch.drop_column('ronda')
         batch.drop_constraint('estadoemergencia', type_='check')
         batch.create_check_constraint('estadoemergencia', f"estado IN ({ESTADOS_VIEJOS})")

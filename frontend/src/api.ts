@@ -45,6 +45,38 @@ export type Emergencia = {
   municipio_provincia: string | null;
   lotes: Lote[];
   tarea_bonita?: string | null;
+  evaluacion?: Evaluacion | null;
+};
+
+export type Evaluacion = {
+  emergencia_id: number;
+  ronda: number;
+  cobertura_completa: boolean;
+  porcentaje_cobertura: number;
+  lotes: {
+    lote_id: number;
+    tipo_recurso: string | null;
+    pedido: number;
+    reservado: number;
+    porcentaje: number;
+    cubierto: boolean;
+  }[];
+  ongs: {
+    cuit: string;
+    ong: string | null;
+    referencia: string | null;
+    estado: "RESERVADA" | "ADJUDICADA" | "NO_RESERVADA";
+    items: {
+      lote_id: number;
+      tipo_recurso: string;
+      ofrecido: number;
+      reservado: number;
+      nivel: "PLENA" | "PARCIAL" | "SUPERVISADA";
+      riesgo_permitido: string | null;
+      asignacion_sugerida: "PRINCIPAL" | "APOYO";
+      observaciones: string[];
+    }[];
+  }[];
 };
 
 export type Meta = {

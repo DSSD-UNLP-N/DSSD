@@ -4,6 +4,7 @@ from typing import Annotated
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
 from app.models import EstadoEmergencia, Gravedad, Rol, TipoLote
+from app.schemas.evaluacion import Evaluacion
 
 
 # SQLite descarta la zona y lo que se guarda siempre es UTC: sin esto el navegador lee la hora
@@ -61,6 +62,8 @@ class EmergenciaOut(BaseModel):
     lotes: list[LoteOut] = []
     # Tarea que Bonita tiene pendiente para quien consulta; solo el detalle la completa.
     tarea_bonita: str | None = None
+    # Cobertura y ofertas validadas por la API Nacional; solo el detalle la trae, y no para la ONG.
+    evaluacion: Evaluacion | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

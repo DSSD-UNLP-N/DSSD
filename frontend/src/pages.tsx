@@ -63,6 +63,69 @@ function estadoBadge(estado: Emergencia["estado"]) {
   return <span className="badge ok">Registrada</span>;
 }
 
+function EvaluacionPanel({ e }: { e: Emergencia }) {
+  const ev = e.evaluacion;
+  if (!ev) {
+    return (
+      <div className="panel" style={{ marginBottom: "1.35rem" }} data-testid="evaluacion-pendiente">
+        <div className="empty" style={{ padding: "1.25rem" }}>
+          <p>Evaluando las ofertas con el Sistema Nacional… Refrescá en unos segundos.</p>
+        </div>
+      </div>
+    );
+  }
+  const lote = (id: number) => e.lotes.find((l) => l.id === id);
+  return (
+    <div data-testid="evaluacion" style={{ marginBottom: "1.35rem" }}>
+      <div className="panel" style={{ marginBottom: "0.75rem" }}>
+        <div className="lote-row">
+          <span>
+            <strong>Cobertura</strong> · ronda {ev.ronda}
+          </span>
+          <span className={`badge ${ev.cobertura_completa ? "ok" : "signal"}`} data-testid="cobertura-total">
+            {ev.porcentaje_cobertura}% {ev.cobertura_completa ? "· lotes cubiertos" : "· no alcanza"}
+          </span>
+        </div>
+        {ev.lotes.map((l) => (
+          <div className="lote-row" key={l.lote_id} data-testid={`cobertura-lote-${l.lote_id}`}>
+            <span>
+              #{l.lote_id} {lote(l.lote_id)?.recurso ?? l.tipo_recurso ?? "Lote"} · reservado {l.reservado} de{" "}
+              {l.pedido}
+            </span>
+            <span className={`badge ${l.cubierto ? "ok" : "muted"}`}>{l.porcentaje}%</span>
+          </div>
+        ))}
+      </div>
+      <div className="panel">
+        {ev.ongs.length === 0 && (
+          <div className="empty" style={{ padding: "1.25rem" }}>
+            <p>Ninguna ONG ofreció recursos.</p>
+          </div>
+        )}
+        {ev.ongs.map((o) => (
+          <div key={o.cuit} data-testid={`evaluacion-ong-${o.cuit}`} style={{ padding: "0.75rem 1rem" }}>
+            <div className="lote-row" style={{ padding: 0 }}>
+              <strong>{o.ong ?? o.cuit}</strong>
+              <span className={`badge ${o.estado === "NO_RESERVADA" ? "muted" : "ok"}`}>
+                {o.estado === "NO_RESERVADA" ? "Sin reservar: rehacer la oferta" : "Reservada"}
+              </span>
+            </div>
+            {o.items.map((i) => (
+              <div key={i.lote_id} style={{ fontSize: "0.9em", opacity: 0.85, paddingTop: "0.25rem" }}>
+                #{i.lote_id} {i.tipo_recurso}: ofreció {i.ofrecido}, reservado {i.reservado} · {i.nivel} →{" "}
+                {i.asignacion_sugerida}
+                {i.observaciones.map((t) => (
+                  <div key={t}>· {t}</div>
+                ))}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function Shell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   return (
@@ -677,6 +740,13 @@ export function DetallePage() {
             ))
           )}
         </div>
+
+        {user!.rol !== "ONG" && e.estado === "EN_EVALUACION" && (
+          <>
+            <h2 className="section-title">Evaluación de las ofertas</h2>
+            <EvaluacionPanel e={e} />
+          </>
+        )}
 
         {user!.rol === "COORDINADOR" && e.estado === "REGISTRADA" && (
           <div className="cards two" style={{ marginBottom: "1.35rem" }}>

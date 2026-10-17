@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import Emergencia, EstadoEmergencia, Oferta, OfertaItem
+from app.schemas.evaluacion import Evaluacion
 from app.services.emergencias import cerrar_ventanas_vencidas
 
 
@@ -63,3 +64,23 @@ def consolidar_ofertas(db: Session, emergencia_id: int) -> dict | None:
 
 def _vigentes(oferta: Oferta) -> list[OfertaItem]:
     return [i for i in oferta.items if i.version == oferta.version_actual]
+
+
+def guardar_evaluacion(db: Session, emergencia_id: int, resultado: Evaluacion) -> bool:
+    """Guarda lo que Bonita recibió de la API Nacional. False si la emergencia no existe.
+
+    Solo vale mientras la emergencia espera la decisión (EN_EVALUACION) y para su ronda actual; repetir el
+    mismo evento deja el mismo resultado."""
+    e = db.get(Emergencia, emergencia_id)
+    if e is None:
+        return False
+    if e.estado is not EstadoEmergencia.EN_EVALUACION:
+        raise ConsolidadoError(f"La emergencia está en {e.estado.value}: ya no espera una evaluación")
+    if resultado.emergencia_id != e.id or resultado.ronda != e.ronda:
+        raise ConsolidadoError(
+            f"La evaluación es de la emergencia {resultado.emergencia_id} ronda {resultado.ronda}, "
+            f"y esta es la {e.id} ronda {e.ronda}"
+        )
+    e.evaluacion = resultado.model_dump_json()
+    db.commit()
+    return True

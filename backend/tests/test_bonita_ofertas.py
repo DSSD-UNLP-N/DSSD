@@ -113,3 +113,86 @@ def test_en_evaluacion_la_ong_ya_no_puede_ofertar(client, seeded, vencida):
     r = client.post(f"/api/emergencias/{vencida[0]}/ofertas",
                     json={"items": [{"lote_id": vencida[1], "recurso": "p", "cantidad": 1}]})
     assert r.status_code == 400 and "cerró" in r.json()["detail"]
+
+
+# --- POST /api/bonita/emergencias/{id}/eventos (EVALUACION) ---
+
+def _evaluacion(emergencia_id, lote_id, ronda=1):
+    """Lo que la API Nacional devuelve en POST /evaluaciones (contratos.md, 3.1)."""
+    return {
+        "emergencia_id": emergencia_id, "ronda": ronda, "cobertura_completa": False, "porcentaje_cobertura": 40.0,
+        "lotes": [{"lote_id": lote_id, "tipo_recurso": "PARAMEDICO", "pedido": 10, "reservado": 4,
+                   "porcentaje": 40.0, "cubierto": False}],
+        "ongs": [{"cuit": CRUZ_ROJA, "ong": "Cruz Roja Argentina", "referencia": f"emg-{emergencia_id}-r1-{CRUZ_ROJA}",
+                  "estado": "RESERVADA",
+                  "items": [{"lote_id": lote_id, "tipo_recurso": "PARAMEDICO", "ofrecido": 4, "reservado": 4,
+                             "nivel": "PARCIAL", "riesgo_permitido": "MEDIO", "asignacion_sugerida": "APOYO",
+                             "observaciones": ["SALUD_PREHOSP vigente hasta riesgo MEDIO; la emergencia es ALTO"]}]}],
+    }
+
+
+@pytest.fixture
+def en_evaluacion(client, vencida):
+    client.get(f"/api/bonita/emergencias/{vencida[0]}/ofertas", headers=CLAVE)  # Bonita pide el consolidado
+    return vencida
+
+
+def _evento(client, emergencia_id, resultado, clave=CLAVE):
+    return client.post(f"/api/bonita/emergencias/{emergencia_id}/eventos", headers=clave,
+                       json={"tipo": "EVALUACION", "resultado": resultado})
+
+
+def _ver(client, username, emergencia_id):
+    client.post("/api/auth/logout")
+    assert client.post("/api/auth/login", json={"username": username, "password": PASSWORD}).status_code == 200
+    return client.get(f"/api/emergencias/{emergencia_id}").json()
+
+
+def test_el_evento_sin_clave_es_401(client, en_evaluacion):
+    emergencia_id, lote = en_evaluacion
+    assert _evento(client, emergencia_id, _evaluacion(emergencia_id, lote), clave={}).status_code == 401
+
+
+def test_el_evento_guarda_la_evaluacion_y_el_coordinador_la_ve(client, en_evaluacion):
+    emergencia_id, lote = en_evaluacion
+    resultado = _evaluacion(emergencia_id, lote)
+
+    assert _evento(client, emergencia_id, resultado).status_code == 204
+
+    assert _ver(client, "coordinador.regional", emergencia_id)["evaluacion"] == resultado
+    assert _ver(client, "operador.municipal", emergencia_id)["evaluacion"] == resultado
+    assert _ver(client, "auditor", emergencia_id)["evaluacion"] == resultado
+
+
+def test_la_ong_no_ve_la_evaluacion_y_antes_del_evento_no_hay(client, en_evaluacion):
+    emergencia_id, lote = en_evaluacion
+    assert _ver(client, "coordinador.regional", emergencia_id)["evaluacion"] is None
+    _evento(client, emergencia_id, _evaluacion(emergencia_id, lote))
+    assert _ver(client, "ong.cruzroja", emergencia_id)["evaluacion"] is None
+
+
+def test_repetir_el_evento_deja_el_mismo_resultado(client, en_evaluacion):
+    emergencia_id, lote = en_evaluacion
+    resultado = _evaluacion(emergencia_id, lote)
+    assert _evento(client, emergencia_id, resultado).status_code == 204
+    assert _evento(client, emergencia_id, resultado).status_code == 204
+    assert _ver(client, "coordinador.regional", emergencia_id)["evaluacion"] == resultado
+
+
+def test_el_evento_es_409_si_la_emergencia_no_espera_evaluacion(client, vencida):
+    emergencia_id, lote = vencida  # sigue CONVOCATORIA: Bonita todavía no pidió el consolidado
+    assert _evento(client, emergencia_id, _evaluacion(emergencia_id, lote)).status_code == 409
+
+
+def test_el_evento_de_otra_emergencia_o_ronda_es_409(client, en_evaluacion):
+    emergencia_id, lote = en_evaluacion
+    assert _evento(client, emergencia_id, _evaluacion(emergencia_id + 1, lote)).status_code == 409
+    assert _evento(client, emergencia_id, _evaluacion(emergencia_id, lote, ronda=2)).status_code == 409
+
+
+def test_el_evento_de_una_emergencia_inexistente_es_404_y_uno_mal_formado_es_422(client, en_evaluacion):
+    emergencia_id, lote = en_evaluacion
+    assert _evento(client, 9999, _evaluacion(9999, lote)).status_code == 404
+    r = client.post(f"/api/bonita/emergencias/{emergencia_id}/eventos", headers=CLAVE,
+                    json={"tipo": "OTRO", "resultado": {}})
+    assert r.status_code == 422

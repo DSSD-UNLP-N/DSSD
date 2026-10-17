@@ -106,6 +106,8 @@ class Emergencia(Base):
     ventana_ofertas_fin: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Sube cuando el Coordinador elige REFORMULAR; entra en la referencia de cada adjudicación.
     ronda: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    # Resultado de la evaluación (JSON tal como lo devuelve la API Nacional); lo manda Bonita en un evento.
+    evaluacion: Mapped[str | None] = mapped_column(Text)
     creada_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     municipio: Mapped[Municipio] = relationship()

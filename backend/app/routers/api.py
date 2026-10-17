@@ -22,6 +22,7 @@ from app.schemas.api import (
     UsuarioOut,
 )
 from app.schemas.emergencias import EmergenciaIn
+from app.schemas.evaluacion import Evaluacion
 from app.schemas.lotes import LoteIn, PublicacionIn
 from app.seed import DEMO_PASSWORD, DEMO_USERS
 from app.services.emergencias import (
@@ -148,6 +149,8 @@ def api_detalle(
     emergencia = _require_visible(db, user, emergencia_id)
     out = _emergencia_out(emergencia)
     out.tarea_bonita = tarea_ong_en_bonita(settings, emergencia, user)
+    if emergencia.evaluacion and user.rol is not Rol.ONG:
+        out.evaluacion = Evaluacion.model_validate_json(emergencia.evaluacion)
     return out
 
 
