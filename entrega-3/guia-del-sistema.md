@@ -425,7 +425,7 @@ Las tareas del plan se llaman **WP** (*work package*).
 | WP4 (conectores de Bonita) | Evaluar y avisar a la app (HECHO); resolver las reservas y avisar la adjudicación (HECHO); falta el de cierre (`Liberar Recursos y Notificar Cierre`) | PARCIAL |
 | WP3 | `POST /cierres` atado a la referencia | HECHO (tests y servidor real; falta probarlo con Bonita en la Parada 3) |
 | WP5 | El Coordinador decide (parcial o reformular) y el Municipio adjudica, con el evento `ADJUDICACION` | HECHO y probado con Bonita real (Parada 2) |
-| WP6 | Notificaciones, finalizar actividad, monitoreo, cierre bilateral, multi-instancia | FALTA |
+| WP6 | Notificaciones, finalizar actividad, monitoreo, cierre bilateral, evento `CIERRE` | Backend HECHO y probado con Bonita real; falta la pantalla (campana y botones) |
 | WP7 | Deploy final de la API Nacional en Render con Postgres | FALTA (hoy la nube corre código viejo) |
 | WP8 | Docker Compose con Postgres, backend y frontend | FALTA |
 | WP9 | Pruebas de punta a punta | FALTA |

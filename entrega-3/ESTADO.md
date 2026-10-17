@@ -12,15 +12,18 @@ Rama `modelado-tomas-e-3`, [PR #10](https://github.com/FrancoCirielli16/DSSD/pul
   **Tomás todavía no la recorrió a mano.**
 - **WP3 (17/10):** `POST /cierres` con `{cuit, referencia}` libera exactamente lo que comprometió esa referencia `ADJUDICADA` y la pasa a
   `CERRADA`; idempotente (200), 404 si la ONG o la referencia no existen, 409 si no está adjudicada. Probado: tests, servidor real 13/13.
-- Tests: backend 188 pasan / 2 se saltean (16 s), API Nacional 95 / 3. `verificar_despliegue.py` local 59/59 (con el bloque de cierre).
+- **WP6 backend (17/10):** evento `CIERRE` (→ `RESUELTA` + aviso a las ONGs), `GET /api/notificaciones` + `POST .../leida`,
+  `POST /api/emergencias/{id}/monitorear`, `/finalizar` (ONG) y `/validar-cierre`, y `ejecucion` en el detalle. Migración 0006.
+  Probado con Bonita real sobre los casos 22/23: monitorear, finalizar y validar avanzan las tareas y el caso termina.
+- Tests: backend 205 pasan / 2 se saltean (16 s), API Nacional 95 / 3. `verificar_despliegue.py` local 59/59 (con el bloque de cierre).
 - `.bos` actual con los 5 conectores: `entrega41_20261017_1311.bos`.
 
 ## Falta
-- **Parada 3 (cierre):** WP6 ONG marca finalizada + monitoreo + cierre bilateral + notificaciones + evento `CIERRE`
-  + multi-instancia de "Confirmar Finalizacion" + conector "Liberar Recursos y Notificar Cierre".
+- **Parada 3 (cierre):** pantallas de WP6 (campana de avisos, Monitorear, Marcar finalizada, Validar cierre) + conector
+  "Liberar Recursos y Notificar Cierre" en Bonita. "Confirmar Finalizacion" ya funciona como está (una sola instancia).
 - **Checkpoints de la Parada 3** (cada uno se prueba y se commitea antes del siguiente):
   1. ✅ WP3 en la API Nacional (tests + servidor real + `verificar_despliegue`).
-  2. WP6 backend: evento `CIERRE`, notificaciones, `finalizar`, monitorear, validar cierre. Tests + `verificar_todo.py` + prueba por HTTP de la app real.
+  2. ✅ WP6 backend: evento `CIERRE`, notificaciones, `finalizar`, monitorear, validar cierre. Tests + `verificar_todo.py` + app y Bonita reales.
   3. WP6 front: campana y botones. Script de Playwright con capturas de las pantallas nuevas.
   4. Conector de cierre en Bonita (Tomás, Studio) + `escenario_cierre.py` con Bonita real: caso hasta `RESUELTA` y stock de vuelta.
   5. Parada 3 por la interfaz (`ui_parada3.py`, como la de la Parada 2) y su guía con capturas.

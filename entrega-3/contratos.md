@@ -210,8 +210,10 @@ El detalle de la evaluación **no** se guarda en una variable de Bonita: viaja e
 | Publicar convocatoria | Coordinador | Completa "Revisar…" y "Publicar…", setea `ventanaOfertasISO` | Hecho |
 | **Decidir** (`POST /api/emergencias/{id}/decision`) | Coordinador | Setea `decisionCoordinador` = `PARCIAL` \| `REFORMULAR` y completa "Evaluar Cobertura…". REFORMULAR antes libera en la API Nacional las referencias de la ronda | Hecho |
 | **Adjudicar** (`POST /api/emergencias/{id}/adjudicar`) | Municipio | Setea `ongsAdjudicadas` (lista JSON de CUIT) y completa "Adjudicar Ofertas"; solo se puede elegir entre las ONGs `RESERVADA` | Hecho |
-| **Finalizar** (`POST /api/emergencias/{id}/finalizar`) | ONG | Completa su instancia de "Confirmar Finalizacion…" (o, en la versión simple, la completa la app cuando todas terminaron) | WP6 |
-| **Monitorear** y **Validar cierre** | Coordinador | Completa "Monitorear Ejecucion…" y "Validar Cierre Operativo Bilateral" | WP6 |
+| **Monitorear** (`POST /api/emergencias/{id}/monitorear`) | Coordinador | Completa "Monitorear Ejecucion del Despliegue"; desde ahí las ONGs pueden finalizar | Hecho |
+| **Finalizar** (`POST /api/emergencias/{id}/finalizar`) | ONG | Marca su oferta `FINALIZADA`; cuando terminaron **todas** las adjudicadas, la app completa "Confirmar Finalizacion de Actividades" (versión simple, una sola tarea) | Hecho |
+| **Validar cierre** (`POST /api/emergencias/{id}/validar-cierre`) | Coordinador | Con todas finalizadas, completa "Validar Cierre Operativo Bilateral"; Bonita libera en la API Nacional y manda el evento `CIERRE` | Hecho |
+| **Avisos** (`GET /api/notificaciones`, `POST /api/notificaciones/{id}/leida`) | ONG | Solo app local: las notificaciones de adjudicación y de cierre | Hecho |
 
 Cada tarea la ejecuta el usuario del rol correspondiente (mismo username en Bonita), como hoy.
 
@@ -253,6 +255,8 @@ Todo esto va en **una sola migración** de la app (WP1) para que dos tareas no c
 1. **Cobertura**: promedio simple por lote, todos los lotes cuentan (propuesta). ¿Alcanza o se pondera/excluye apoyo?
 2. ~~Recorte de reserva~~ **Resuelto (16/10):** sin recorte. Si el stock no alcanza para la oferta, esa ONG queda `NO_RESERVADA` y rehace la oferta.
 3. **Quién llama a `/liberar` al REFORMULAR**: la app (propuesta, porque el caso vuelve atrás por el modelo) o Bonita.
-4. **Multi-instancia** de "Confirmar Finalizacion": versión simple (una tarea que la app completa cuando todas las ONGs
-   adjudicadas finalizaron) o configurarla con cardinalidad `ongsAdjudicadas`.
+4. ~~Multi-instancia de "Confirmar Finalizacion"~~ **Resuelto (17/10):** versión simple. La app completa la tarea cuando
+   todas las ONGs adjudicadas finalizaron, con el representante `ong.cruzroja` (`bonita_ong_username`), el único de una ONG que
+   existe en la organización de Bonita. Probado con Bonita real: el motor crea una sola instancia aunque el diagrama la marque
+   multi-instancia sin configurar.
 5. **Clave compartida** `X-Api-Key`: solo para el tramo Bonita ↔ app; hasta que llegue JWT, la API Nacional no pide nada.
