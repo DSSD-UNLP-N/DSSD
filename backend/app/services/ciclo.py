@@ -58,21 +58,6 @@ def _completar_en_bonita(settings: Settings, case_id: int | None, tarea: str, us
         raise CicloError("No se pudo avanzar el caso en Bonita; probá de nuevo en un momento.", 502) from exc
 
 
-def _completar_en_bonita_como_admin(settings: Settings, case_id: int | None, tarea: str) -> None:
-    """Completa la tarea con el usuario administrador de Bonita (para tareas que la app cierra sola)."""
-    if case_id is None:
-        raise CicloError("La emergencia no tiene caso en Bonita.", 409)
-    try:
-        admin = BonitaClient(settings.bonita_base_url, settings.bonita_timeout_seconds)
-        admin.login(settings.bonita_username, settings.bonita_password)
-        pendiente = admin.wait_for_task(case_id, tarea)
-        if pendiente is None:
-            raise CicloError(f"El caso {case_id} no está esperando la tarea '{tarea}' en Bonita.", 409)
-        admin.complete_task_as_self(pendiente["id"])
-    except (BonitaError, requests.RequestException) as exc:
-        raise CicloError("No se pudo avanzar el caso en Bonita; probá de nuevo en un momento.", 502) from exc
-
-
 def _retirar_ofertas(db: Session, emergencia: Emergencia) -> None:
     """Retira las ofertas de la ronda (versión nueva sin ítems): el historial queda."""
     ofertas = db.scalars(select(Oferta).where(Oferta.emergencia_id == emergencia.id).options(selectinload(Oferta.items)))
@@ -158,7 +143,8 @@ def _todas_finalizadas(db: Session, emergencia: Emergencia) -> bool:
     return bool(adjudicadas) and all(o.estado is EstadoOferta.FINALIZADA for o in adjudicadas)
 
 
-def finalizar_oferta(db: Session, settings: Settings, *, emergencia: Emergencia, ong: Ong) -> None:
+def finalizar_oferta(db: Session, settings: Settings, *, emergencia: Emergencia, ong: Ong,
+                     usuario: Usuario) -> None:
     """La ONG informa que terminó sus actividades: oferta → FINALIZADA.
     Si todas las ONGs adjudicadas finalizaron, la app completa "Confirmar Finalizacion de Actividades" en Bonita."""
     if emergencia.estado is not EstadoEmergencia.EN_EJECUCION:
@@ -179,9 +165,9 @@ def finalizar_oferta(db: Session, settings: Settings, *, emergencia: Emergencia,
     oferta.estado = EstadoOferta.FINALIZADA
     db.flush()
     # Bonita: si todas finalizaron, completar "Confirmar Finalizacion de Actividades" una sola vez.
-    # Versión simple: tarea común completada por el admin de la app.
+    # Versión simple: tarea común; la completa el usuario de la ONG que finaliza última (actor del carril ONG).
     if _todas_finalizadas(db, emergencia):
-        _completar_en_bonita_como_admin(settings, emergencia.bonita_case_id, TAREA_CONFIRMAR)
+        _completar_en_bonita(settings, emergencia.bonita_case_id, TAREA_CONFIRMAR, usuario.username, {})
     db.commit()
 
 

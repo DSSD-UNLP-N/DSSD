@@ -402,7 +402,7 @@ def api_finalizar(
     if user.ong is None:
         raise HTTPException(status_code=403, detail="Tu perfil no está asociado a una ONG")
     try:
-        finalizar_oferta(db, settings, emergencia=emergencia, ong=user.ong)
+        finalizar_oferta(db, settings, emergencia=emergencia, ong=user.ong, usuario=user)
     except CicloError as exc:
         raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
     return _detalle_out(_load_emergencia(db, emergencia_id), user, settings, db)
