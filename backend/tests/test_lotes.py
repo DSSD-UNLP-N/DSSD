@@ -237,5 +237,5 @@ def test_al_publicar_las_ongs_ven_la_emergencia(login, emergencia, seeded):
     login("coordinador.regional").post(_publicar(emergencia), json={"ventana_fin": _futuro()})
 
     ong = login("ong.cruzroja")
-    assert emergencia in [e["id"] for e in ong.get("/api/emergencias").json()]
+    assert ong.get("/api/emergencias").status_code == 403
     assert ong.get(f"/api/emergencias/{emergencia}").json()["estado"] == "CONVOCATORIA"

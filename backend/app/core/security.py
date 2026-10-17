@@ -24,10 +24,22 @@ def verify_password(password: str, stored: str) -> bool:
     return hmac.compare_digest(candidate, digest)
 
 
-def create_access_token(user_id: int, secret_key: str, expires_minutes: int) -> str:
+def create_access_token(
+    user_id: int,
+    username: str,
+    role: str,
+    secret_key: str,
+    expires_minutes: int,
+) -> str:
     now = datetime.now(timezone.utc)
     return jwt.encode(
-        {"sub": str(user_id), "iat": now, "exp": now + timedelta(minutes=expires_minutes)},
+        {
+            "sub": str(user_id),
+            "username": username,
+            "rol": role,
+            "iat": now,
+            "exp": now + timedelta(minutes=expires_minutes),
+        },
         secret_key,
         algorithm="HS256",
     )

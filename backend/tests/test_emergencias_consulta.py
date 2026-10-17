@@ -53,11 +53,12 @@ def test_coordinador_y_auditor_ven_todas(login, emergencias, usuario):
         assert c.get(f"/api/emergencias/{eid}").status_code == 200
 
 
-def test_ong_ve_solo_convocatorias_abiertas(login, emergencias):
+def test_ong_no_puede_listar_emergencias_pero_si_ver_convocatorias(login, emergencias):
     propia, ajena = emergencias
     c = login("ong.bomberos")
-    assert _ids(c) == [ajena]
+    assert c.get("/api/emergencias").status_code == 403
     assert c.get(f"/api/emergencias/{propia}").status_code == 404
+    assert c.get(f"/api/emergencias/{ajena}").status_code == 200
 
 
 def test_detalle_muestra_datos_caso_y_lotes(login, emergencias):
@@ -127,4 +128,4 @@ def test_a_otros_perfiles_y_al_listado_no_se_les_consulta_bonita(login, emergenc
     for usuario in ("coordinador.regional", "auditor"):
         r = login(usuario).get(f"/api/emergencias/{ajena}")
         assert r.status_code == 200 and r.json()["tarea_bonita"] is None
-    assert login("ong.bomberos").get("/api/emergencias").status_code == 200
+    assert login("coordinador.regional").get("/api/emergencias").status_code == 200

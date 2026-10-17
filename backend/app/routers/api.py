@@ -42,6 +42,7 @@ from app.services.lotes import (
 )
 
 router = APIRouter(prefix="/api")
+national_auth_router = APIRouter()
 
 
 def _load_emergencia(db: Session, emergencia_id: int) -> Emergencia | None:
@@ -93,12 +94,17 @@ def meta(settings: Settings = Depends(get_settings)):
 def _token_response(user: Usuario, settings: Settings) -> TokenOut:
     return TokenOut(
         access_token=create_access_token(
-            user.id, settings.jwt_secret, settings.jwt_expiration_minutes
+            user.id,
+            user.username,
+            user.rol.value,
+            settings.jwt_secret,
+            settings.jwt_expiration_minutes,
         ),
         user=user,
     )
 
 
+@national_auth_router.post("/login", response_model=TokenOut)
 @router.post("/auth/login", response_model=TokenOut)
 def api_login(
     body: LoginIn,
@@ -116,6 +122,7 @@ def _authenticate_user(db: Session, username: str, password: str) -> Usuario:
     return user
 
 
+@national_auth_router.post("/ongs", response_model=TokenOut, status_code=201)
 @router.post("/auth/register-ong", response_model=TokenOut, status_code=201)
 def api_register_ong(
     body: RegisterOngIn,
@@ -165,7 +172,7 @@ def api_me(user: Usuario = Depends(require_role())):
 
 @router.get("/emergencias", response_model=list[EmergenciaOut])
 def api_listar(
-    user: Usuario = Depends(require_role()),
+    user: Usuario = Depends(require_role(Rol.MUNICIPIO, Rol.COORDINADOR, Rol.AUDITOR)),
     db: Session = Depends(get_db),
 ):
     items = emergencias_visibles(db, user)

@@ -82,9 +82,15 @@ pass `demo1234`): `operador.municipal`, `coordinador.regional`, `ong.cruzroja`, 
 `POST /api/auth/login` devuelve `access_token`, `token_type` y `user`.
 Es el único endpoint de inicio de sesión: recibe un JSON con `username` y
 `password`, valida las credenciales contra la base de datos y devuelve el JWT
-como token bearer. En Swagger UI (`/docs`), ejecutar este endpoint con **Try it
+como token bearer. El JWT identifica al usuario con `sub` y los claims
+`username`, `rol`, `iat` y `exp`; los permisos de cada petición se vuelven a
+comprobar contra el usuario vigente en la base. En Swagger UI (`/docs`), ejecutar este endpoint con **Try it
 out**, copiar `access_token` de la respuesta y pegarlo en **Authorize** para
 usar las rutas protegidas.
+La API expone también los paths de autenticación del contrato nacional:
+`POST /login` para iniciar sesión y `POST /ongs` para registrar una ONG con su
+cuenta. Las rutas `/api/auth/login` y `/api/auth/register-ong` se mantienen por
+compatibilidad con clientes existentes.
 `POST /api/auth/register-ong` recibe `ong_nombre`, `cuit` (opcional), `nombre`
 del representante, `username` y `password`; crea la ONG y su primer usuario con
 rol `ONG` y devuelve un JWT. El login responde 401 si las credenciales son
@@ -103,6 +109,9 @@ def lotes(user: Usuario = Depends(require_role(Rol.COORDINADOR))): ...
 ```
 
 Sin token o con token inválido: `/api/*` → 401 JSON. Rol incorrecto: 403.
+`GET /api/emergencias` está permitido a `MUNICIPIO`, `COORDINADOR` y
+`AUDITOR`; `POST /api/emergencias` solo a `MUNICIPIO`. El rol se resuelve
+desde la cuenta actual en la base de datos al validar cada token.
 El logout es stateless: el cliente descarta el token y este deja de servir al
 expirar; no se mantiene una lista de revocación en el servidor.
 

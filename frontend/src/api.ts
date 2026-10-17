@@ -107,9 +107,24 @@ export const api = {
   meta: () => request<Meta>("/api/meta"),
   me: () => request<Usuario>("/api/auth/me"),
   login: async (username: string, password: string) => {
-    const response = await request<TokenResponse>("/api/auth/login", {
+    const response = await request<TokenResponse>("/login", {
       method: "POST",
       body: JSON.stringify({ username, password }),
+    });
+    window.sessionStorage.setItem("access_token", response.access_token);
+    accessToken = response.access_token;
+    return response.user;
+  },
+  registerOng: async (body: {
+    ong_nombre: string;
+    cuit?: string;
+    nombre: string;
+    username: string;
+    password: string;
+  }) => {
+    const response = await request<TokenResponse>("/ongs", {
+      method: "POST",
+      body: JSON.stringify(body),
     });
     window.sessionStorage.setItem("access_token", response.access_token);
     accessToken = response.access_token;

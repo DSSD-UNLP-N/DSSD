@@ -59,6 +59,9 @@ def test_login_de_usuario_inexistente(client):
 
 
 def test_login_emite_jwt_y_autoriza_rutas(client):
+    import jwt
+    from app.core.config import get_settings
+
     response = client.post(
         "/api/auth/login",
         json={"username": "ong.cruzroja", "password": "demo1234"},
@@ -67,10 +70,39 @@ def test_login_emite_jwt_y_autoriza_rutas(client):
     payload = response.json()
     assert payload["token_type"] == "bearer"
     assert payload["user"]["username"] == "ong.cruzroja"
+    claims = jwt.decode(
+        payload["access_token"],
+        get_settings().jwt_secret,
+        algorithms=["HS256"],
+    )
+    assert claims["username"] == "ong.cruzroja"
+    assert claims["rol"] == "ONG"
+    assert claims["exp"] > claims["iat"]
     assert client.get(
         "/api/auth/me",
         headers={"Authorization": f"Bearer {payload['access_token']}"},
     ).json()["username"] == "ong.cruzroja"
+
+
+def test_api_nacional_login_y_registro_ong(client):
+    login_response = client.post(
+        "/login",
+        json={"username": "ong.cruzroja", "password": "demo1234"},
+    )
+    assert login_response.status_code == 200
+    assert login_response.json()["user"]["rol"] == "ONG"
+
+    register_response = client.post(
+        "/ongs",
+        json={
+            "ong_nombre": "Rescate Nacional",
+            "nombre": "Representante",
+            "username": "representante.rescate",
+            "password": "clave-segura-123",
+        },
+    )
+    assert register_response.status_code == 201
+    assert register_response.json()["user"]["rol"] == "ONG"
 
 
 def test_login_rechaza_credenciales_invalidas(client):
