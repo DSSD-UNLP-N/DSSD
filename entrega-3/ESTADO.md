@@ -1,62 +1,74 @@
 # Estado vivo de la Entrega 3
 
-Se actualiza en cada checkpoint. Última actualización: **17/10/2026**. Entrega: **jueves 22/10**.
-Rama `modelado-tomas-e-3`, [PR #10](https://github.com/FrancoCirielli16/DSSD/pull/10) a `dev` abierto.
+Última actualización: **17/10/2026 (noche)**. Entrega: **jueves 22/10**.
+Rama `modelado-tomas-e-3`. El [PR #10](https://github.com/FrancoCirielli16/DSSD/pull/10) ya está mergeado a `dev`; todo lo posterior
+(cierre, ejecución, conectores, scripts, docs) está commiteado en la rama y **sin pushear**.
+
+**En una línea:** el flujo completo funciona en local con Bonita real, de la emergencia al cierre y la liberación del stock.
+Falta JWT, el deploy en la nube, Docker Compose, la entrega (README, video, prueba en limpio) y las variantes de prueba.
+La tabla de paquetes de trabajo con responsables y horas está en [`plan-cierre-entrega.md`](plan-cierre-entrega.md) (sección «Estado al 17/10»).
 
 ## Hecho (y cómo se probó)
-- WP0 contratos, WP1 consolidado de ofertas + estados nuevos + tope, WP2 reserva todo-o-nada en la API Nacional,
-  WP5 decisión del Coordinador y adjudicación del Municipio, conectores de Bonita para evaluar, avisar y resolver reservas.
-- **Parada 1** (evaluación con reserva) 26/26 y **Parada 2** (decisión, adjudicación, ronda 2) 34/34 por API, con Bonita real.
-- **Parada 2 por la interfaz real (17/10):** `backend/scripts/ui_parada2.py` 46/46 (dos casos: parcial y reformular), con capturas
-  de cada paso. Guía con imágenes: `guia-parada-2.html` ([publicada](https://claude.ai/artifact/K47xuvWUCXUHAwvfTv643L), privada).
-  **Tomás todavía no la recorrió a mano.**
-- **WP3 (17/10):** `POST /cierres` con `{cuit, referencia}` libera exactamente lo que comprometió esa referencia `ADJUDICADA` y la pasa a
-  `CERRADA`; idempotente (200), 404 si la ONG o la referencia no existen, 409 si no está adjudicada. Probado: tests, servidor real 13/13.
-- **WP6 backend (17/10):** evento `CIERRE` (→ `RESUELTA` + aviso a las ONGs), `GET /api/notificaciones` + `POST .../leida`,
-  `POST /api/emergencias/{id}/monitorear`, `/finalizar` (ONG) y `/validar-cierre`, y `ejecucion` en el detalle. Migración 0006.
-  Probado con Bonita real sobre los casos 22/23: monitorear, finalizar y validar avanzan las tareas y el caso termina.
-- Tests: backend 205 pasan / 2 se saltean (16 s), API Nacional 95 / 3. `verificar_despliegue.py` local 59/59 (con el bloque de cierre).
-- `.bos` actual con los 5 conectores: `entrega41_20261017_1311.bos`.
+- **WP0 a WP6** completos: contratos, consolidado de ofertas, reserva todo o nada en la API Nacional, decisión del Coordinador,
+  adjudicación del Municipio, ronda 2, cierre por referencia (`POST /cierres` y `/cierres/lote`), evento `CIERRE`, avisos, monitorear,
+  finalizar, validar cierre, campana y botones en la SPA.
+- **Siete conectores de Bonita**: obtener ofertas, evaluar, avisar evaluación, resolver reservas, avisar adjudicación, cerrar y avisar
+  cierre. Los dos últimos se armaron sin Studio con `bonita/scripts/agregar_conector_cierre.py` y el `.bos` resultante se importó y
+  ejecutó en Studio (17/10). Bitácora: [`CAMBIOS-BONITA.md`](CAMBIOS-BONITA.md).
+- **Pruebas con Bonita real**: Parada 1 26/26 · Parada 2 34/34 por API y 46/46 por la interfaz (guía ilustrada
+  [`guia-parada-2.html`](guia-parada-2.html)) · **cierre `escenario_cierre.py` 28/28** (las dos ONGs, Bonita libera sola y avisa) ·
+  ejecución por la interfaz `ui_ejecucion.py` 24/25 (la falla era una espera del script, ya corregida).
+- **Tests**: backend 205 pasan / 2 se saltean (16 s) · API Nacional 99 / 3 · tipos del front sin errores ·
+  `verificar_despliegue.py` en local 61/61.
+- Hallazgo: «Confirmar Finalizacion» sigue marcada multi-instancia sin configurar y el motor crea una sola instancia; la app la completa
+  con el usuario de la ONG que finaliza última. Alcanza; en Studio se puede cambiar a «Estándar» para sacar el aviso rojo.
 
 ## Falta
-- **Parada 3 (cierre):** probar con Bonita real el conector de «Liberar Recursos y Notificar Cierre» (ya generado, falta importarlo
-  en Studio). "Confirmar Finalizacion" ya funciona como está (una sola instancia).
-- **Checkpoints de la Parada 3** (cada uno se prueba y se commitea antes del siguiente):
-  1. ✅ WP3 en la API Nacional (tests + servidor real + `verificar_despliegue`).
-  2. ✅ WP6 backend: evento `CIERRE`, notificaciones, `finalizar`, monitorear, validar cierre. Tests + `verificar_todo.py` + app y Bonita reales.
-  3. ✅ WP6 front: campana de avisos y botones de cada rol. `backend/scripts/ui_ejecucion.py` (Playwright + Bonita real, con
-     capturas): monitorear, finalizar, validar cierre y aviso en la campana, 24/25 (la falla era de espera del script, ya corregida;
-     falta recorrerlo entero otra vez con un caso nuevo).
-  4. Conector de cierre en Bonita + `escenario_cierre.py` con Bonita real: caso hasta `RESUELTA` y stock de vuelta.
-     **Armado sin Studio:** `bonita/scripts/agregar_conector_cierre.py` clonó los dos conectores de la adjudicación en
-     «Liberar Recursos y Notificar Cierre» → `entrega41_20261017_1311_cierre.bos` (sin commitear hasta probarlo). La API Nacional
-     ganó `POST /cierres/lote` (Bonita no itera). **Falta que Tomás lo importe en Studio y ejecute**, y correr `escenario_cierre.py`.
-  5. Parada 3 por la interfaz (`ui_parada3.py`, como la de la Parada 2) y su guía con capturas.
-- WP9 recorrido completo de punta a punta, WP7 Render con el código nuevo, WP8 Docker Compose + Postgres, WP10 entrega,
-  WP11 JWT (postergado), WP12 parámetros de Bonita (al final).
-- Plan de la nube y de Local vs Production: `plan-nube-docker-entrega.md`.
+| WP | Qué | h | Quién |
+|---|---|---|---|
+| WP11 | **JWT**: cuentas, `POST /login`, `POST /ongs`, protección por rol. Sin empezar y la consigna lo pide | 8 | Sin responsable (propuesta: Franco C., base `franco_v`) |
+| WP7 | Redesplegar la API Nacional en Render con el código nuevo y Postgres; `verificar_despliegue.py` contra la URL | 4 | Alguien con acceso a Render y a los secrets de GitHub |
+| WP8 | Docker Compose completo (hoy solo hay Postgres), Dockerfile del backend y del front; probar la concurrencia en Postgres | 4 | Alguien con Docker |
+| WP9 | `ui_parada3.py` completo, variantes (cobertura completa, API Nacional caída), repetir contra la nube | 4 | Tomás/Claude |
+| WP10 | README de la raíz y del backend (son de la Entrega 2), guía de la Parada 3, guion de demo, video, prueba en limpio, merge a `main`, tag | 7 | Todos |
+| WP12 | Parámetros de Bonita por entorno y prueba contra la nube (M14) | 3 | Tomás (Studio) |
+| WP4 | Re-exportar el `.bos` final desde Studio y commitearlo | 0,5 | Tomás |
+
+## Decisiones abiertas
+1. **Dos implementaciones de WP3 + WP6**: esta rama y el [PR #11](https://github.com/FrancoCirielli16/DSSD/pull/11). Las dos funcionan con
+   Bonita real hasta validar el cierre. Esta rama además trae `/cierres/lote`, los conectores de cierre, el resumen de ejecución para
+   todos los roles y los escenarios. **Las dos agregan una migración `0006` con distinto nombre**: juntas dejan Alembic con dos
+   cabezas. Hay que quedarse con una antes de mergear nada a `dev`.
+2. ¿Quién hace JWT? 3. ¿Quién tiene Render y de qué rama se construye? 4. ¿Quién prueba Docker y Postgres?
 
 ## Cómo se verifica
 ```
-python scripts/verificar_todo.py                                              # tests backend + nacional + tipos del front
+python scripts/verificar_todo.py                                              # tests backend + nacional + tipos del front (~26 s)
 python backend/scripts/escenario_evaluacion.py                                # Parada 1 (Bonita real)
-python backend/scripts/escenario_adjudicacion.py                              # Parada 2 por API (Bonita real)
+python backend/scripts/escenario_adjudicacion.py                              # Parada 2 por API (Bonita real, ~8 min)
+python backend/scripts/escenario_cierre.py                                    # de la adjudicación al cierre (Bonita real, ~6 min)
 python backend/scripts/ui_parada2.py                                          # Parada 2 por la interfaz, con capturas (~15 min)
+python backend/scripts/ui_ejecucion.py --emergencia N --caso C --simular-cierre   # ejecución y cierre por la interfaz
 python backend/scripts/escenario_tope.py                                      # tope de ofertas
 PYTHONIOENCODING=utf-8 python nacional/scripts/verificar_despliegue.py http://localhost:8002
 ```
-Los escenarios necesitan Bonita (`:8080`), la app (`:8001`) y la API Nacional (`:8002`) arriba.
+Los escenarios necesitan Bonita (`:8080`) con el proceso desplegado, la app (`:8001`) y la API Nacional (`:8002`) arriba, esta
+última con el seed y nada comprometido.
 
 ## Entorno (17/10)
-- Bonita: proceso desplegado 12:58, 0 casos, usuarios `operador.municipal`, `coordinador.regional`, `ong.cruzroja` (pass `bpm`).
+- Bonita: proceso con los siete conectores desplegado a las 20:30, usuarios `operador.municipal`, `coordinador.regional`,
+  `ong.cruzroja`, `ong.bomberos` (pass `bpm`).
 - Servidores de preview: `rescuesync-backend` (8001), `rescuesync-frontend` (5173), `rescuesync-nacional` (8002). Mueren entre turnos.
 
 ## Trampas conocidas
 - Cada **Ejecutar** en Studio borra los casos. Tomcat puede tardar hasta 4 minutos: no tocar Studio y esperar.
 - Si "Run" dice que falló el login de `walter.bates`, la causa real suele estar en `workspace\tomcat\server\logs\bonita.log` (Connection refused).
-- Nube: la base de Render persiste. Una referencia ya `LIBERADA` o `CERRADA` da 409. No reiniciar la base local al probar contra la nube.
+- Nube: la base de Render persiste. Una referencia ya `LIBERADA` o `CERRADA` da 409. No reiniciar la base local al probar contra la nube
+  (los ids de emergencia se reusarían y chocarían con las referencias viejas).
 - Nunca apuntar `POSTGRES_TEST_DATABASE_URL` a la base de la demo: las pruebas de concurrencia hacen `drop_all`.
 - Windows: correr los scripts con `PYTHONIOENCODING=utf-8` si fallan por un carácter.
+- El `.bos` es binario: edita una sola persona a la vez.
 
 ## Ayudas de Claude en este proyecto
 - `.claude/agents/lector-de-logs` (lee logs largos y devuelve la causa) y `.claude/agents/verificador` (corre los chequeos y devuelve el resultado).
+  `.claude/` está gitignoreado: no se comparte con el equipo.
