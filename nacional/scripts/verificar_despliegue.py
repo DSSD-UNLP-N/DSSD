@@ -63,8 +63,8 @@ def main() -> int:
     rutas = set(api["paths"]) if status == 200 else set()
     esperadas = {"/tipos-recurso", "/certificaciones", "/ongs", "/ongs/{cuit}", "/ongs/{cuit}/inventario",
                  "/recursos/disponibilidad", "/validaciones", "/evaluaciones",
-                 "/adjudicaciones/{referencia}/confirmar", "/adjudicaciones/{referencia}/liberar"}
-    v.check("Swagger expone catálogo, inventario, validación y reservas", esperadas <= rutas, sorted(esperadas - rutas))
+                 "/adjudicaciones/{referencia}/confirmar", "/adjudicaciones/{referencia}/liberar", "/cierres"}
+    v.check("Swagger expone catálogo, inventario, validación, reservas y cierre", esperadas <= rutas, sorted(esperadas - rutas))
     print(f"     endpoints: {', '.join(sorted(rutas))}")
 
     print("\n== A2-A3. Catálogo")
@@ -220,6 +220,32 @@ def main() -> int:
             and comprometidos() == (4, 0))
     v.pedir("POST", f"/adjudicaciones/{ref2}/liberar")
     v.check("R15 Al liberar la adjudicada, el inventario queda como al principio", comprometidos() == (0, 0), comprometidos())
+
+    print("\n== C. Cierre: libera exactamente lo que comprometió la referencia (deja el inventario como estaba)")
+    cierre = emergencia + 3
+    ref3 = f"emg-{cierre}-r1-{CRUZ_ROJA}"
+    v.pedir("POST", "/evaluaciones", {
+        **pedido, "emergencia_id": cierre,
+        "ofertas": [{"cuit": CRUZ_ROJA, "items": [{"lote_id": 1, "tipo_recurso": "PARAMEDICO", "cantidad": 3}]}]})
+    v.check("C1 Una reserva sin confirmar no se cierra → 409",
+            v.pedir("POST", "/cierres", {"cuit": CRUZ_ROJA, "referencia": ref3})[0] == 409 and comprometidos() == (3, 0))
+    v.pedir("POST", f"/adjudicaciones/{ref3}/confirmar")
+    status, cie = v.pedir("POST", "/cierres", {"cuit": CRUZ_ROJA, "referencia": ref3})
+    v.check("C2 Cerrar la adjudicada libera sus 3 paramédicos y deja el inventario como al principio",
+            status == 201 and cie["items"][0]["cantidad_liberada"] == 3 and comprometidos() == (0, 0), (status, cie))
+    status, otra = v.pedir("POST", "/cierres", {"cuit": CRUZ_ROJA, "referencia": ref3})
+    v.check("C3 Repetir el cierre devuelve el mismo, sin restar de nuevo",
+            status == 200 and otra["id"] == cie["id"] and comprometidos() == (0, 0), (status, otra))
+    v.check("C4 Referencia inexistente → 404",
+            v.pedir("POST", "/cierres", {"cuit": CRUZ_ROJA, "referencia": "no-existe"})[0] == 404)
+    v.check("C5 Una cerrada no se libera ni se evalúa de nuevo → 409",
+            v.pedir("POST", f"/adjudicaciones/{ref3}/liberar")[0] == 409
+            and v.pedir("POST", "/evaluaciones", {
+                **pedido, "emergencia_id": cierre,
+                "ofertas": [{"cuit": CRUZ_ROJA, "items": [{"lote_id": 1, "tipo_recurso": "PARAMEDICO", "cantidad": 3}]}]})[0] == 409)
+    status, lista = v.pedir("GET", f"/ongs/{CRUZ_ROJA}/cierres")
+    v.check("C6 El cierre queda en GET /ongs/{cuit}/cierres",
+            status == 200 and any(c["id"] == cie["id"] for c in lista), (status, lista))
 
     print(f"\n{v.ok}/{v.total} verificaciones OK")
     return 0 if v.ok == v.total else 1
