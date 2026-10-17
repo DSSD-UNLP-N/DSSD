@@ -1,21 +1,28 @@
-from sqlalchemy import select
+"""Tests de POST /cierres con el nuevo contrato (WP3).
 
-from app.models import Inventario, Ong, TipoRecurso
+Flujo de estado: RESERVADA (POST /evaluaciones) → ADJUDICADA (POST /adjudicaciones/{ref}/confirmar)
+                 → CERRADA (POST /cierres {cuit, referencia}).
+
+Idempotencia (contratos.md §3.4): repetir POST /cierres con la misma referencia
+devuelve 200 con el mismo cierre y no vuelve a restar inventario.
+"""
 
 CUIT = "30-54666544-5"
+REF = "emg-1-r1-30-54666544-5"
 
-
-def _bloquear(session_factory, tipo: str, cantidad: int, cuit: str = CUIT) -> None:
-    with session_factory() as db:
-        ong = db.scalar(select(Ong).where(Ong.cuit == cuit))
-        tipo_row = db.scalar(select(TipoRecurso).where(TipoRecurso.codigo == tipo))
-        fila = db.scalar(
-            select(Inventario).where(
-                Inventario.ong_id == ong.id, Inventario.tipo_recurso_id == tipo_row.id
-            )
-        )
-        fila.cantidad_comprometida = cantidad
-        db.commit()
+# Cuerpo de evaluacion que reserva 2 PARAMEDICO de Cruz Roja Argentina.
+_EVAL = {
+    "emergencia_id": 1,
+    "ronda": 1,
+    "gravedad": "BAJO",
+    "lotes": [{"lote_id": 1, "tipo_recurso": "PARAMEDICO", "cantidad": 2}],
+    "ofertas": [
+        {
+            "cuit": CUIT,
+            "items": [{"lote_id": 1, "tipo_recurso": "PARAMEDICO", "cantidad": 2}],
+        }
+    ],
+}
 
 
 def _inv(client, tipo: str, cuit: str = CUIT) -> dict:
@@ -23,124 +30,132 @@ def _inv(client, tipo: str, cuit: str = CUIT) -> dict:
     return next(i for i in inventario if i["tipo_recurso"] == tipo)
 
 
-def test_liberar_baja_lo_comprometido_y_deja_constancia(client, session_factory):
-    _bloquear(session_factory, "PARAMEDICO", 3)
-    r = client.post(
-        "/cierres",
-        json={"cuit": CUIT, "referencia": "emergencia-12", "items": [{"tipo_recurso": "PARAMEDICO", "cantidad": 2}]},
-    )
-    assert r.status_code == 201
-    body = r.json()
-    assert body["referencia"] == "emergencia-12"
-    assert body["ong"] == "Cruz Roja Argentina"
-    item = body["items"][0]
-    assert item["cantidad_liberada"] == 2
-    assert (item["cantidad_total"], item["cantidad_comprometida"], item["disponible"]) == (4, 1, 3)
-    assert _inv(client, "PARAMEDICO")["cantidad_comprometida"] == 1
-
-    guardado = client.get(f"/cierres/{body['id']}")
-    assert guardado.status_code == 200
-    assert guardado.json()["items"][0]["cantidad_liberada"] == 2
+def _reservar(client) -> str:
+    """Crea la adjudicacion en estado RESERVADA y devuelve la referencia."""
+    r = client.post("/evaluaciones", json=_EVAL)
+    assert r.status_code == 200, r.text
+    ong = next(o for o in r.json()["ongs"] if o["cuit"] == CUIT)
+    return ong["referencia"]
 
 
-def test_libera_varios_tipos_en_un_solo_cierre(client, session_factory):
-    _bloquear(session_factory, "PARAMEDICO", 2)
-    _bloquear(session_factory, "AMBULANCIA", 1)
-    r = client.post(
-        "/cierres",
-        json={
-            "cuit": CUIT,
-            "referencia": "emergencia-7",
-            "items": [
-                {"tipo_recurso": "PARAMEDICO", "cantidad": 2},
-                {"tipo_recurso": "AMBULANCIA", "cantidad": 1},
-            ],
-        },
-    )
-    assert r.status_code == 201
-    assert {i["tipo_recurso"]: i["cantidad_comprometida"] for i in r.json()["items"]} == {
-        "PARAMEDICO": 0,
-        "AMBULANCIA": 0,
-    }
+def _confirmar(client, referencia: str) -> None:
+    """Pasa la adjudicacion a ADJUDICADA."""
+    r = client.post(f"/adjudicaciones/{referencia}/confirmar")
+    assert r.status_code == 200, r.text
 
 
-def test_si_un_item_no_alcanza_no_libera_ninguno(client, session_factory):
-    _bloquear(session_factory, "PARAMEDICO", 3)
-    _bloquear(session_factory, "AMBULANCIA", 1)
-    r = client.post(
-        "/cierres",
-        json={
-            "cuit": CUIT,
-            "referencia": "emergencia-9",
-            "items": [
-                {"tipo_recurso": "PARAMEDICO", "cantidad": 4},
-                {"tipo_recurso": "AMBULANCIA", "cantidad": 1},
-            ],
-        },
-    )
-    assert r.status_code == 409
-    assert "PARAMEDICO" in r.json()["detail"]
-    assert _inv(client, "PARAMEDICO")["cantidad_comprometida"] == 3
-    assert _inv(client, "AMBULANCIA")["cantidad_comprometida"] == 1
-    assert client.get("/ongs/" + CUIT + "/cierres").json() == []
+# ---------------------------------------------------------------------------
+# Flujo principal
+# ---------------------------------------------------------------------------
 
+def test_reservar_confirmar_cerrar_libera_inventario(client):
+    """reserve → confirm → close deja inventario exactamente como al principio."""
+    antes = _inv(client, "PARAMEDICO")
+    assert antes["cantidad_comprometida"] == 0
 
-def test_la_misma_referencia_no_libera_dos_veces(client, session_factory):
-    _bloquear(session_factory, "PARAMEDICO", 3)
-    body = {"cuit": CUIT, "referencia": "emergencia-12", "items": [{"tipo_recurso": "PARAMEDICO", "cantidad": 1}]}
-    assert client.post("/cierres", json=body).status_code == 201
-    otra = client.post("/cierres", json=body)
-    assert otra.status_code == 409
-    assert "ya fue informado" in otra.json()["detail"]
+    ref = _reservar(client)
+    assert ref == REF
     assert _inv(client, "PARAMEDICO")["cantidad_comprometida"] == 2
 
-    resto = client.post(
-        "/cierres",
-        json={"cuit": CUIT, "referencia": "emergencia-12-resto", "items": [{"tipo_recurso": "PARAMEDICO", "cantidad": 2}]},
-    )
-    assert resto.status_code == 201
+    _confirmar(client, ref)
+    assert _inv(client, "PARAMEDICO")["cantidad_comprometida"] == 2
+
+    r = client.post("/cierres", json={"cuit": CUIT, "referencia": ref})
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["referencia"] == ref
+    assert body["cuit"] == CUIT
+    item = next(i for i in body["items"] if i["tipo_recurso"] == "PARAMEDICO")
+    assert item["cantidad_liberada"] == 2
+    assert item["cantidad_comprometida"] == 0
+    assert item["disponible"] == antes["cantidad_total"]
+
+    # Inventario volvio al punto de partida.
+    despues = _inv(client, "PARAMEDICO")
+    assert despues["cantidad_comprometida"] == 0
+    assert despues["disponible"] == antes["cantidad_total"]
+
+
+def test_cerrar_estado_reservada_da_409(client):
+    """Intentar cerrar una adjudicacion que esta en RESERVADA (no confirmada) → 409."""
+    ref = _reservar(client)
+    r = client.post("/cierres", json={"cuit": CUIT, "referencia": ref})
+    assert r.status_code == 409, r.text
+    # Inventario no se toco.
+    assert _inv(client, "PARAMEDICO")["cantidad_comprometida"] == 2
+
+
+def test_cerrar_referencia_inexistente_da_409(client):
+    """Referencia que no existe → 409."""
+    r = client.post("/cierres", json={"cuit": CUIT, "referencia": "emg-999-r1-no-existe"})
+    assert r.status_code == 409, r.text
+
+
+def test_cierre_idempotente_devuelve_200(client):
+    """Cerrar dos veces la misma referencia: segunda llamada → 200 con el mismo id, inventario sin cambios."""
+    ref = _reservar(client)
+    _confirmar(client, ref)
+
+    r1 = client.post("/cierres", json={"cuit": CUIT, "referencia": ref})
+    assert r1.status_code == 201, r1.text
+
+    r2 = client.post("/cierres", json={"cuit": CUIT, "referencia": ref})
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["id"] == r1.json()["id"]
+
+    # Inventario no se resto dos veces.
     assert _inv(client, "PARAMEDICO")["cantidad_comprometida"] == 0
 
 
-def test_sin_bloqueados_da_409(client):
-    r = client.post(
-        "/cierres",
-        json={"cuit": CUIT, "referencia": "emergencia-1", "items": [{"tipo_recurso": "BOTE_RESCATE", "cantidad": 1}]},
-    )
-    assert r.status_code == 409
-    assert "0 bloqueados" in r.json()["detail"]
+def test_ong_desconocida_da_404(client):
+    """CUIT inexistente → 404."""
+    r = client.post("/cierres", json={"cuit": "00-0-0", "referencia": REF})
+    assert r.status_code == 404, r.text
 
 
-def test_ong_o_cierre_inexistente_da_404(client):
-    r = client.post(
-        "/cierres",
-        json={"cuit": "00-0-0", "referencia": "x", "items": [{"tipo_recurso": "PARAMEDICO", "cantidad": 1}]},
-    )
-    assert r.status_code == 404
-    assert client.get("/cierres/999").status_code == 404
+# ---------------------------------------------------------------------------
+# GET endpoints
+# ---------------------------------------------------------------------------
+
+def test_obtener_cierre_por_id(client):
+    ref = _reservar(client)
+    _confirmar(client, ref)
+    creado = client.post("/cierres", json={"cuit": CUIT, "referencia": ref}).json()
+
+    r = client.get(f"/cierres/{creado['id']}")
+    assert r.status_code == 200, r.text
+    assert r.json()["id"] == creado["id"]
+    assert r.json()["referencia"] == ref
+
+
+def test_obtener_cierre_inexistente_da_404(client):
+    assert client.get("/cierres/99999").status_code == 404
+
+
+def test_cierres_de_ong(client):
+    ref = _reservar(client)
+    _confirmar(client, ref)
+    client.post("/cierres", json={"cuit": CUIT, "referencia": ref})
+
+    r = client.get(f"/ongs/{CUIT}/cierres")
+    assert r.status_code == 200, r.text
+    assert len(r.json()) == 1
+    assert r.json()[0]["referencia"] == ref
+
+
+def test_cierres_ong_inexistente_da_404(client):
     assert client.get("/ongs/00-0-0/cierres").status_code == 404
 
 
-def test_tipo_inexistente_da_404(client):
-    r = client.post(
-        "/cierres",
-        json={"cuit": CUIT, "referencia": "x", "items": [{"tipo_recurso": "NADA", "cantidad": 1}]},
-    )
-    assert r.status_code == 404
-
+# ---------------------------------------------------------------------------
+# Validacion de entrada
+# ---------------------------------------------------------------------------
 
 def test_entradas_invalidas_dan_422(client):
     for body in (
-        {"cuit": CUIT, "referencia": "x", "items": []},
-        {"cuit": CUIT, "referencia": "", "items": [{"tipo_recurso": "PARAMEDICO", "cantidad": 1}]},
-        {"cuit": CUIT, "referencia": "x", "items": [{"tipo_recurso": "PARAMEDICO", "cantidad": 0}]},
-        {
-            "cuit": CUIT,
-            "referencia": "x",
-            "items": [
-                {"tipo_recurso": "PARAMEDICO", "cantidad": 1},
-                {"tipo_recurso": "PARAMEDICO", "cantidad": 1},
-            ],
-        },
+        {"cuit": CUIT, "referencia": ""},           # referencia vacia
+        {"cuit": "", "referencia": "emg-1"},         # cuit vacio
+        {"referencia": "emg-1"},                     # falta cuit
+        {"cuit": CUIT},                              # falta referencia
     ):
-        assert client.post("/cierres", json=body).status_code == 422
+        assert client.post("/cierres", json=body).status_code == 422, body

@@ -1,14 +1,13 @@
 """Cierre operativo: la ONG informa que terminó una actividad y se liberan los recursos bloqueados."""
-from datetime import datetime, timezone
-
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
-from app.models import CierreItem, CierreOperativo, Inventario, Ong, TipoRecurso
+from app.models import CierreItem, CierreOperativo, Ong
 from app.schemas import CierreIn, CierreItemOut, CierreOut
+from app.services import cierres
 
 router = APIRouter(tags=["cierre"])
 
@@ -50,69 +49,44 @@ def _cargar_cierre(db: Session, cierre_id: int) -> CierreOperativo | None:
     )
 
 
-@router.post("/cierres", response_model=CierreOut, status_code=201, summary="Informar el cierre de una actividad y liberar recursos")
-def informar_cierre(body: CierreIn, db: Session = Depends(get_db)):
-    """Resta `cantidad_comprometida` de cada ítem. La misma referencia no se puede informar dos veces."""
-    ong = db.scalar(
-        select(Ong).where(Ong.cuit == body.cuit).options(selectinload(Ong.inventario))
-    )
-    if ong is None:
-        raise HTTPException(status_code=404, detail="ONG no registrada")
-
-    codigos = [i.tipo_recurso for i in body.items]
-    if len(set(codigos)) != len(codigos):
-        raise HTTPException(status_code=422, detail="Hay tipos de recurso repetidos")
-    tipos = {t.codigo: t for t in db.scalars(select(TipoRecurso).where(TipoRecurso.codigo.in_(codigos)))}
-    desconocidos = sorted(set(codigos) - tipos.keys())
-    if desconocidos:
-        raise HTTPException(status_code=404, detail=f"Tipo de recurso inexistente: {', '.join(desconocidos)}")
-
-    ya = db.scalar(
-        select(CierreOperativo.id).where(
-            CierreOperativo.ong_id == ong.id, CierreOperativo.referencia == body.referencia
-        )
-    )
-    if ya is not None:
-        raise HTTPException(status_code=409, detail="Ese cierre ya fue informado")
-
-    stmt = (
-        select(Inventario)
-        .where(
-            Inventario.ong_id == ong.id,
-            Inventario.tipo_recurso_id.in_([tipos[c].id for c in codigos]),
-        )
-        .order_by(Inventario.id)
-        .options(selectinload(Inventario.tipo_recurso))
-    )
-    # En Postgres toma la fila; SQLite no tiene FOR UPDATE y los tests corren ahí.
-    if db.get_bind().dialect.name != "sqlite":
-        stmt = stmt.with_for_update()
-    filas = {f.tipo_recurso.codigo: f for f in db.scalars(stmt)}
-
-    for item in body.items:
-        fila = filas.get(item.tipo_recurso)
-        bloqueados = 0 if fila is None else fila.cantidad_comprometida
-        if fila is None or bloqueados < item.cantidad:
-            raise HTTPException(
-                status_code=409,
-                detail=f"{item.tipo_recurso}: se pidió liberar {item.cantidad} y hay {bloqueados} bloqueados",
-            )
-
-    cierre = CierreOperativo(
-        ong=ong, referencia=body.referencia, informado_en=datetime.now(timezone.utc)
-    )
-    for item in body.items:
-        fila = filas[item.tipo_recurso]
-        fila.cantidad_comprometida -= item.cantidad
-        cierre.items.append(CierreItem(tipo_recurso=tipos[item.tipo_recurso], cantidad=item.cantidad))
-    db.add(cierre)
+@router.post(
+    "/cierres",
+    response_model=CierreOut,
+    status_code=201,
+    summary="Informar el cierre de una actividad y liberar el stock comprometido",
+)
+def informar_cierre(body: CierreIn, response: Response, db: Session = Depends(get_db)):
+    """Busca la Adjudicacion ADJUDICADA para esa referencia, resta su inventario comprometido,
+    la pasa a CERRADA y registra el CierreOperativo.
+    Idempotente: repetir con la misma referencia devuelve 200 con el cierre ya existente."""
     try:
-        db.commit()
+        cierre_id, creado = cierres.cerrar(db, body.cuit, body.referencia)
+    except cierres.OngNoRegistrada as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except cierres.CierreEnConflicto as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
     except IntegrityError:
+        # Carrera: otro request creo el cierre justo antes; rollback y devolver el existente.
         db.rollback()
-        raise HTTPException(status_code=409, detail="Ese cierre ya fue informado") from None
+        ong = db.scalar(select(Ong).where(Ong.cuit == body.cuit))
+        cierre_id = (
+            db.scalar(
+                select(CierreOperativo.id).where(
+                    CierreOperativo.ong_id == ong.id,
+                    CierreOperativo.referencia == body.referencia,
+                )
+            )
+            if ong is not None
+            else None
+        )
+        if cierre_id is None:
+            raise HTTPException(status_code=409, detail="Error al registrar el cierre")
+        creado = False
 
-    cargado = _cargar_cierre(db, cierre.id)
+    if not creado:
+        response.status_code = 200
+
+    cargado = _cargar_cierre(db, cierre_id)
     return _out(cargado)
 
 
@@ -129,7 +103,7 @@ def cierres_de_la_ong(cuit: str, db: Session = Depends(get_db)):
     ong = db.scalar(select(Ong).where(Ong.cuit == cuit))
     if ong is None:
         raise HTTPException(status_code=404, detail="ONG no registrada")
-    cierres = db.scalars(
+    cierre_list = db.scalars(
         select(CierreOperativo)
         .where(CierreOperativo.ong_id == ong.id)
         .order_by(CierreOperativo.id)
@@ -138,4 +112,4 @@ def cierres_de_la_ong(cuit: str, db: Session = Depends(get_db)):
             selectinload(CierreOperativo.items).selectinload(CierreItem.tipo_recurso),
         )
     )
-    return [_out(c) for c in cierres]
+    return [_out(c) for c in cierre_list]
