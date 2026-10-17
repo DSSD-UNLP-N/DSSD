@@ -63,17 +63,44 @@ Antes: Bonita desplegado, `NACIONAL_BASE_URL` apuntando a la nube, despertar el 
    3 (reemplaza) y entra 1 en la segunda; **retira** y se libera el cupo.
 5. **Cierre**: `POST /cierres` libera lo bloqueado (cuando esté desplegado y el bloqueo exista).
 
-## Pendiente para cerrar la entrega
+## Pendiente para cerrar la entrega (revisado 15/10)
 
-1. Desplegar la rama de Franco en Render y verificar `/cierres` y que la base sea Postgres.
-2. **Bloqueo/compromiso (servicio 4)**: nadie suma `cantidad_comprometida` todavía; sin esto la liberación solo se
-   prueba tocando la base a mano.
-3. JWT y alta de ONGs (servicio 1).
-4. Subir el timeout del cliente a la nube (5 s es poco con el servicio dormido) y correr `e2e_ui.py` contra la URL
-   pública.
-5. PR de mi rama a `main`, y después la de Franco.
-6. Opcionales: pantalla de inventario de la ONG; mostrar el nivel de competencia en la SPA; tope contra la cantidad
-   que pide cada lote.
+Estado: `modelado-tomas-e-3` = `dev` (bloqueo de Leandro, PRs #6 y #7) + el arreglo de migraciones de abajo.
+Servicios 2, 3, 4 y 5 hechos. **JWT (servicio 1) queda para después, por decisión del 15/10.**
+
+### Arreglado en la rama (15/10)
+
+- **Migraciones**: en `dev` la revisión `0001` se había renombrado a `b99371d39182` (con las tablas de cierre
+  adentro). La base de la nube está en `0001`, así que `alembic upgrade head` fallaba ("Can't locate revision
+  '0001'") y el contenedor no arrancaba. Se restauró la cadena `0001 → b99371d39182 (cierres) → 2798b12b1c24
+  (compromiso) → 0002 (adjudicaciones)`. Probado: una base en `0001` con datos migra a `0002` conservándolos; una
+  base creada con la cadena de `dev` (en `0002`) sigue en `0002`; la base local en `b99371d39182` migró a `0002`.
+
+### Plan para terminar
+
+1. **Llevar el arreglo a `dev`**: push de la rama y PR a `dev` (el deploy automático sale de `dev`/`main`).
+2. **Deploy en Render** (quien tenga acceso al panel):
+   - definir el servicio oficial (`sistema-nacional-latest` o el del blueprint `rescuesync-nacional`) y que se
+     construya desde `dev` con `nacional/Dockerfile`;
+   - confirmar que `DATABASE_URL` es una Postgres y cargar el secret `RENDER_DEPLOY_HOOK_URL` en GitHub;
+   - después del deploy: `python nacional/scripts/verificar_despliegue.py <url>`, una adjudicación + cierre por
+     Swagger, y el test de concurrencia contra esa Postgres (`POSTGRES_TEST_DATABASE_URL=... pytest
+     tests/test_concurrencia_adjudicacion.py`, hoy se saltea porque en local no hay Postgres).
+3. **Coherencia del bloqueo** (con Leandro y Franco; no frena el deploy):
+   - las tablas `compromiso` y `compromiso_item` (PR #6) quedaron sin endpoint: sacarlas (modelo + migración que
+     las borre);
+   - `/adjudicaciones` pide ids internos (`ong_id`, `inventario_id`); el resto de la API usa CUIT y código de recurso,
+     que es lo que conocen la app y Bonita;
+   - `/cierres` no está atado a la adjudicación: libera por referencia sin chequear qué comprometió esa referencia.
+4. **Ramas del equipo fuera de `dev`** (revisar antes de mergear):
+   - `e3-leandro`: Docker Compose, Dockerfile del backend y cambios grandes en routers/schemas de las dos apps;
+   - `leandro`: informe técnico de concurrencia (útil para la entrega) y `Dockerfile`/`.dockerignore` vacíos (no
+     mergear esos dos);
+   - `cloud-deploy-fabri`: otro `Dockerfile` + `entrypoint.sh` en paralelo al de `dev`: quedarse con uno;
+   - `franco_v`: JWT en la app local, no en `nacional/` (retomar cuando toque el servicio 1).
+5. **Entregables**: mergear `dev` a `main`; URL pública, link al Swagger, repo y Dockerfile.
+6. **Demo**: despertar el servicio antes (42-51 s en frío) o subir `NACIONAL_TIMEOUT_SECONDS`.
+7. Opcionales: pantalla de inventario de la ONG; nivel de competencia en la SPA; tope contra lo que pide cada lote.
 
 Liberación (Franco, 12/10, rama `franco/e3-liberacion-y-deploy`): `POST /cierres` informa el fin de una actividad
 y resta `cantidad_comprometida`. Imagen en `nacional/Dockerfile` y blueprint `render.yaml`; la URL pública sale

@@ -201,14 +201,14 @@ def main() -> int:
 
     print(f"\n== Convocatoria #3 vence: esperando hasta {fin3:%H:%M:%S}")
     faltan = (fin3 - datetime.now().astimezone()).total_seconds()
-    if faltan > 0:
-        time.sleep(faltan + 5)
+    if faltan > 0:  # margen para que dispare el timer de Bonita y su conector pida el consolidado
+        time.sleep(faltan + 15)
     e.esperar("V1 Ofertar en #3 vencida → 400", e.ofrecer("ong.bomberos", e3, (pm3, 1)), 400, "cerró")
     e.esperar("V2 Retirar en #3 vencida → 400", e.ofrecer("ong.bomberos", e3), 400, "cerró")
-    e.esperar("V3 Lo ofrecido en #3 ya no compromete stock: Bomberos ofrece 6 en #1 → 201",
-              e.ofrecer("ong.bomberos", e1, (pm1, 6)), 201)
-    e.esperar("V4 Y 7 → 400", e.ofrecer("ong.bomberos", e1, (pm1, 7)), 400, "sumás 7 personas y tenés 6")
-    e.check("V5 La app marca #3 como CERRADA", e.get("coordinador.regional", f"/emergencias/{e3}").json()["estado"] == "CERRADA")
+    e.esperar("V3 Bonita evaluó #3 y la API Nacional reservó los 6 paramédicos de Bomberos: ya no puede ofrecer 1 en #1",
+              e.ofrecer("ong.bomberos", e1, (pm1, 1)), 400, "tenés 0 disponibles")
+    e.check("V5 La app marca #3 como EN_EVALUACION (el conector de Bonita pidió el consolidado)",
+            e.get("coordinador.regional", f"/emergencias/{e3}").json()["estado"] == "EN_EVALUACION")
     admin = BonitaClient(settings.bonita_base_url, settings.bonita_timeout_seconds)
     admin.login(settings.bonita_username, settings.bonita_password)
     tarea = admin.wait_for_task(caso3, "Evaluar Cobertura", retries=30)
@@ -216,7 +216,10 @@ def main() -> int:
             [t["displayName"] for t in admin.get_human_tasks(caso3)])
 
     print("\n== Limpieza")
-    retiradas = sum(e.ofrecer(o, i).status_code == 201 for o in ("ong.cruzroja", "ong.bomberos") for i in (e1, e2))
+    nacional = settings.nacional_base_url.rstrip("/")
+    r = requests.post(f"{nacional}/adjudicaciones/emg-{e3}-r1-30-68522415-9/liberar", timeout=60)
+    e.check("Se libera la reserva que Bonita hizo para #3", r.status_code == 200 and r.json()["estado"] == "LIBERADA", r.text)
+    retiradas =sum(e.ofrecer(o, i).status_code == 201 for o in ("ong.cruzroja", "ong.bomberos") for i in (e1, e2))
     print(f"     {retiradas} ofertas del escenario retiradas (las convocatorias quedan abiertas 2 h)")
 
     print(f"\n{e.ok}/{e.total} verificaciones OK")

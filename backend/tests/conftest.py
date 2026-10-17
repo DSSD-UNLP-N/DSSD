@@ -71,10 +71,16 @@ class FakeNacional:
             ("30-68522415-9", "PARAMEDICO"): 6,
         }
         self.validaciones = []  # (gravedad, items) de cada llamada a validar()
+        self.liberadas = []  # referencia de cada llamada a liberar()
 
     def _verificar(self):
         if self.caido:
             raise NacionalError("Sistema Nacional caído (simulado)")
+
+    def liberar(self, referencia):
+        self._verificar()
+        self.liberadas.append(referencia)
+        return {"referencia": referencia, "estado": "LIBERADA", "liberado": []}
 
     def tipos_recurso(self):
         self._verificar()

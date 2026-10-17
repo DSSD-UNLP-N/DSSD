@@ -1,6 +1,9 @@
-from fastapi import Depends, HTTPException, Request
+import hmac
+
+from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from app.core.config import Settings, get_settings
 from app.db import get_db
 from app.models import Rol, Usuario
 
@@ -27,3 +30,12 @@ def require_role(*roles: Rol):
         return user
 
     return dep
+
+
+def require_bonita_key(
+    x_api_key: str | None = Header(default=None), settings: Settings = Depends(get_settings)
+) -> None:
+    """Los endpoints /api/bonita/* los llama el motor de Bonita, no una persona: no hay sesión,
+    solo la clave compartida. 401 si falta o no coincide."""
+    if x_api_key is None or not hmac.compare_digest(x_api_key.encode(), settings.bonita_api_key.encode()):
+        raise HTTPException(status_code=401, detail="Clave de Bonita inválida")

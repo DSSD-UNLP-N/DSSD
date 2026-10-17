@@ -93,12 +93,24 @@ def test_cada_ong_tiene_su_propio_inventario(api_login, seeded):
     assert _ofrecer(api_login("ong.bomberos"), em, (lote, 7)).status_code == 400
 
 
-def test_una_convocatoria_vencida_ya_no_compromete_el_stock(api_login, seeded):
+def test_una_convocatoria_vencida_sin_evaluar_sigue_comprometiendo_el_stock(api_login, seeded):
     vencida, (lv,) = _emergencia(seeded, ("PARAMEDICO", 10))
     em, (lote,) = _emergencia(seeded, ("PARAMEDICO", 10))
     assert _ofrecer(api_login("ong.cruzroja"), vencida, (lv, 4)).status_code == 201
-    with seeded() as s:  # la ventana de la primera vence después de haber ofertado
+    with seeded() as s:  # la ventana vence después de haber ofertado; Bonita todavía no pidió el consolidado
         s.get(Emergencia, vencida).ventana_ofertas_fin = _sin_zona(-timedelta(minutes=1))
+        s.commit()
+    assert _ofrecer(api_login("ong.cruzroja"), em, (lote, 1)).status_code == 400
+
+
+def test_en_evaluacion_la_reserva_ya_esta_en_la_api_nacional_y_no_cuenta_dos_veces(api_login, seeded):
+    evaluada, (lv,) = _emergencia(seeded, ("PARAMEDICO", 10))
+    em, (lote,) = _emergencia(seeded, ("PARAMEDICO", 10))
+    assert _ofrecer(api_login("ong.cruzroja"), evaluada, (lv, 4)).status_code == 201
+    with seeded() as s:
+        e = s.get(Emergencia, evaluada)
+        e.ventana_ofertas_fin = _sin_zona(-timedelta(minutes=1))
+        e.estado = EstadoEmergencia.EN_EVALUACION
         s.commit()
     assert _ofrecer(api_login("ong.cruzroja"), em, (lote, 4)).status_code == 201
 

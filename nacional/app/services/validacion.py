@@ -55,20 +55,12 @@ def validar(db: Session, gravedad: Riesgo, items: list[ItemValidacionIn], hoy: d
     ]
 
 
-def _resultado(
-    cuit: str, ong: Ong | None, tipo: TipoRecurso, solicitado: int, gravedad: Riesgo, hoy: date
-) -> ResultadoValidacionOut:
+def competencia(
+    ong: Ong | None, tipo: TipoRecurso, gravedad: Riesgo, hoy: date
+) -> tuple[NivelCompetencia, Riesgo | None, Asignacion, list[str]]:
+    """Con qué nivel opera la ONG este recurso en una emergencia de esa gravedad (sin mirar cantidades)."""
     observaciones: list[str] = []
     habilitada = ong is not None and ong.estado is EstadoOng.HABILITADA
-
-    # Cantidad: una ONG no registrada o suspendida no puede comprometer nada.
-    fila: Inventario | None = next((i for i in ong.inventario if i.tipo_recurso_id == tipo.id), None) if ong else None
-    disponible = fila.disponible if fila is not None and habilitada else 0
-    alcanza = solicitado <= disponible
-    if not alcanza:
-        observaciones.append(f"Solicitado {solicitado}, disponible {disponible}")
-
-    # Competencia.
     if ong is None:
         observaciones.append("ONG no registrada en el Sistema Nacional")
     elif not habilitada:
@@ -90,9 +82,26 @@ def _resultado(
         observaciones.append(
             f"{tipo.certificacion.codigo} vigente hasta riesgo {riesgo.value}; la emergencia es {gravedad.value}"
         )
+    return nivel, riesgo, asignacion, observaciones
 
+
+def _resultado(
+    cuit: str, ong: Ong | None, tipo: TipoRecurso, solicitado: int, gravedad: Riesgo, hoy: date
+) -> ResultadoValidacionOut:
+    observaciones: list[str] = []
+    habilitada = ong is not None and ong.estado is EstadoOng.HABILITADA
+
+    # Cantidad: una ONG no registrada o suspendida no puede comprometer nada.
+    fila: Inventario | None = next((i for i in ong.inventario if i.tipo_recurso_id == tipo.id), None) if ong else None
+    disponible = fila.disponible if fila is not None and habilitada else 0
+    alcanza = solicitado <= disponible
+    if not alcanza:
+        observaciones.append(f"Solicitado {solicitado}, disponible {disponible}")
+
+    nivel, riesgo, asignacion, de_competencia = competencia(ong, tipo, gravedad, hoy)
     return ResultadoValidacionOut(
         cuit=cuit, ong=ong.nombre if ong else None, tipo_recurso=tipo.codigo,
         nombre_recurso=tipo.nombre, unidad=tipo.unidad, solicitado=solicitado, disponible=disponible, alcanza=alcanza,
-        nivel=nivel, riesgo_permitido=riesgo, asignacion_sugerida=asignacion, observaciones=observaciones,
+        nivel=nivel, riesgo_permitido=riesgo, asignacion_sugerida=asignacion,
+        observaciones=observaciones + de_competencia,
     )

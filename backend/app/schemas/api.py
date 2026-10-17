@@ -1,9 +1,10 @@
 from datetime import datetime, timezone
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
-from app.models import EstadoEmergencia, Gravedad, Rol, TipoLote
+from app.models import EstadoEmergencia, EstadoOferta, Gravedad, Rol, TipoLote
+from app.schemas.evaluacion import Evaluacion
 
 
 # SQLite descarta la zona y lo que se guarda siempre es UTC: sin esto el navegador lee la hora
@@ -61,8 +62,19 @@ class EmergenciaOut(BaseModel):
     lotes: list[LoteOut] = []
     # Tarea que Bonita tiene pendiente para quien consulta; solo el detalle la completa.
     tarea_bonita: str | None = None
+    # Cobertura y ofertas validadas por la API Nacional; solo el detalle la trae, y no para la ONG.
+    evaluacion: Evaluacion | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DecisionIn(BaseModel):
+    # PARCIAL: seguir con lo reservado. REFORMULAR: liberar todo y volver a cargar lotes (ronda siguiente).
+    decision: Literal["PARCIAL", "REFORMULAR"]
+
+
+class AdjudicarIn(BaseModel):
+    cuits: list[str] = Field(min_length=1)  # las ONGs elegidas
 
 
 class PublicarIn(BaseModel):
@@ -97,5 +109,6 @@ class OfertaOut(BaseModel):
     version_actual: int
     items: list[OfertaItemOut]
     retirada: bool = False  # la versión vigente no tiene ítems
+    estado: EstadoOferta = EstadoOferta.PRESENTADA
 
     model_config = ConfigDict(from_attributes=True)

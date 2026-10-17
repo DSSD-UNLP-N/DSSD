@@ -1,6 +1,7 @@
 """Verifica un despliegue de la API Nacional por HTTP: catálogo, fichas, disponibilidad y las reglas de
-validación de ofertas. No modifica datos (solo lecturas, `POST /validaciones`, que no guarda nada, y `PUT`
-que fallan antes de escribir). Espera los datos del seed (app/seed.py) sin nada comprometido.
+validación de ofertas. No deja datos modificados: lecturas, `POST /validaciones` (no guarda nada), `PUT` que
+fallan antes de escribir y, en la sección R, una reserva que se libera al final. Espera los datos del seed
+(app/seed.py) sin nada comprometido.
 
     python scripts/verificar_despliegue.py https://sistema-nacional-latest.onrender.com
     python scripts/verificar_despliegue.py http://localhost:8002
@@ -61,8 +62,9 @@ def main() -> int:
     status, api = v.pedir("GET", "/openapi.json")
     rutas = set(api["paths"]) if status == 200 else set()
     esperadas = {"/tipos-recurso", "/certificaciones", "/ongs", "/ongs/{cuit}", "/ongs/{cuit}/inventario",
-                 "/recursos/disponibilidad", "/validaciones"}
-    v.check("Swagger expone catálogo, inventario y validación", esperadas <= rutas, sorted(esperadas - rutas))
+                 "/recursos/disponibilidad", "/validaciones", "/evaluaciones",
+                 "/adjudicaciones/{referencia}/confirmar", "/adjudicaciones/{referencia}/liberar"}
+    v.check("Swagger expone catálogo, inventario, validación y reservas", esperadas <= rutas, sorted(esperadas - rutas))
     print(f"     endpoints: {', '.join(sorted(rutas))}")
 
     print("\n== A2-A3. Catálogo")
@@ -162,6 +164,62 @@ def main() -> int:
     v.validar("ALTO", (CRUZ_ROJA, "PARAMEDICO", 3))
     _, despues = v.pedir("GET", f"/ongs/{CRUZ_ROJA}")
     v.check("V14 Validar no guarda nada: la ficha queda igual", antes == despues)
+
+    print("\n== R. Reserva: evaluar, confirmar y liberar (deja el inventario como estaba)")
+    emergencia = int(time.time())  # única por corrida: una referencia liberada no se puede evaluar de nuevo
+    ref = f"emg-{emergencia}-r1-{CRUZ_ROJA}"
+    ref_b = f"emg-{emergencia}-r1-{BOMBEROS}"
+    pedido = {"emergencia_id": emergencia, "ronda": 1, "gravedad": "ALTO",
+              "lotes": [{"lote_id": 1, "tipo_recurso": "PARAMEDICO", "cantidad": 10}],
+              "ofertas": [{"cuit": CRUZ_ROJA, "items": [{"lote_id": 1, "tipo_recurso": "PARAMEDICO", "cantidad": 4}]},
+                          {"cuit": BOMBEROS, "items": [{"lote_id": 1, "tipo_recurso": "PARAMEDICO", "cantidad": 2}]}]}
+
+    def comprometidos() -> tuple[int, int]:
+        return tuple(
+            next(i for i in v.pedir("GET", f"/ongs/{c}")[1]["inventario"] if i["tipo_recurso"] == "PARAMEDICO")["cantidad_comprometida"]
+            for c in (CRUZ_ROJA, BOMBEROS))
+
+    status, ev = v.pedir("POST", "/evaluaciones", pedido)
+    v.check("R1 Evaluar: cobertura 60 % (4 + 2 de 10), incompleta",
+            status == 200 and (ev["porcentaje_cobertura"], ev["cobertura_completa"]) == (60.0, False), (status, ev))
+    v.check("R2 Cada ONG recibe su referencia, RESERVADA",
+            status == 200 and [(o["referencia"], o["estado"]) for o in ev["ongs"]] == [
+                (ref, "RESERVADA"), (ref_b, "RESERVADA")], ev)
+    v.check("R3 La reserva bloqueó el stock: 4 y 2 comprometidos", comprometidos() == (4, 2), comprometidos())
+    v.check("R4 Repetir la evaluación devuelve lo mismo", v.pedir("POST", "/evaluaciones", pedido) == (200, ev))
+    v.check("R5 …y no reserva dos veces", comprometidos() == (4, 2), comprometidos())
+    v.check("R6 Confirmar Cruz Roja → ADJUDICADA",
+            v.pedir("POST", f"/adjudicaciones/{ref}/confirmar") == (200, {"referencia": ref, "estado": "ADJUDICADA"}))
+    status, lib = v.pedir("POST", f"/adjudicaciones/{ref_b}/liberar")
+    v.check("R7 Liberar Bomberos devuelve sus 2 paramédicos",
+            status == 200 and lib["estado"] == "LIBERADA" and lib["liberado"] == [{"tipo_recurso": "PARAMEDICO", "cantidad": 2}]
+            and comprometidos() == (4, 0), (status, lib, comprometidos()))
+    v.check("R8 Liberar de nuevo no resta otra vez",
+            v.pedir("POST", f"/adjudicaciones/{ref_b}/liberar")[0] == 200 and comprometidos() == (4, 0))
+    v.check("R9 Una liberada no se confirma → 409", v.pedir("POST", f"/adjudicaciones/{ref_b}/confirmar")[0] == 409)
+    v.check("R10 Referencia inexistente → 404", v.pedir("POST", "/adjudicaciones/no-existe/confirmar")[0] == 404)
+    status, _ = v.pedir("POST", f"/adjudicaciones/{ref}/liberar")
+    v.check("R11 Liberar la adjudicada deja el inventario como al principio",
+            status == 200 and comprometidos() == (0, 0), (status, comprometidos()))
+    de_mas = {**pedido, "emergencia_id": emergencia + 1,
+              "ofertas": [{"cuit": CRUZ_ROJA, "items": [{"lote_id": 1, "tipo_recurso": "PARAMEDICO", "cantidad": 5}]}]}
+    status, ev = v.pedir("POST", "/evaluaciones", de_mas)
+    v.check("R12 Ofrecer más de lo que tiene (5 > 4): NO_RESERVADA, sin recortar ni reservar nada",
+            status == 200 and (ev["ongs"][0]["estado"], ev["ongs"][0]["items"][0]["reservado"]) == ("NO_RESERVADA", 0)
+            and comprometidos() == (0, 0), (status, ev, comprometidos()))
+    segunda = {**pedido, "emergencia_id": emergencia + 2}
+    ref2, ref2_b = f"emg-{emergencia + 2}-r1-{CRUZ_ROJA}", f"emg-{emergencia + 2}-r1-{BOMBEROS}"
+    v.pedir("POST", "/evaluaciones", segunda)
+    status, res = v.pedir("POST", "/adjudicaciones/resolucion", {"confirmar": [ref2], "liberar": [ref2_b]})
+    v.check("R13 Resolución: confirma Cruz Roja y libera Bomberos en una sola llamada",
+            status == 200 and [c["estado"] for c in res["confirmadas"]] == ["ADJUDICADA"]
+            and [x["estado"] for x in res["liberadas"]] == ["LIBERADA"] and comprometidos() == (4, 0),
+            (status, res, comprometidos()))
+    v.check("R14 Repetir la resolución no cambia nada",
+            v.pedir("POST", "/adjudicaciones/resolucion", {"confirmar": [ref2], "liberar": [ref2_b]})[0] == 200
+            and comprometidos() == (4, 0))
+    v.pedir("POST", f"/adjudicaciones/{ref2}/liberar")
+    v.check("R15 Al liberar la adjudicada, el inventario queda como al principio", comprometidos() == (0, 0), comprometidos())
 
     print(f"\n{v.ok}/{v.total} verificaciones OK")
     return 0 if v.ok == v.total else 1
