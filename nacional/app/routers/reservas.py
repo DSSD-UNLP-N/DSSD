@@ -32,8 +32,9 @@ def evaluar_ofertas(body: EvaluacionIn, db: Session = Depends(get_db)):
     ofreció, sumando por recurso, hasta que se decida. Devuelve la cobertura por lote (promedio simple) y, por ONG,
     su referencia `emg-{emergencia}-r{ronda}-{cuit}`.
 
-    Idempotente: repetir el pedido devuelve lo mismo sin reservar dos veces. Si lo ofrecido supera lo disponible
-    se reserva lo que hay, recortando de los últimos ítems. `409` si la referencia ya fue liberada o cerrada."""
+    Idempotente: repetir el pedido devuelve lo mismo sin reservar dos veces. La oferta de una ONG se reserva entera o
+    no se reserva: si lo ofrecido supera lo disponible queda `NO_RESERVADA` y la ONG la rehace (nunca se recorta).
+    `409` si la referencia ya fue liberada o cerrada."""
     try:
         try:
             return reservas.evaluar(db, body, date.today())
