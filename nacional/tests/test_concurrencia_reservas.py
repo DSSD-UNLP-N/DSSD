@@ -65,12 +65,12 @@ def _comprometido(factory) -> int:
 
 @pytest.mark.integration
 def test_dos_emergencias_que_piden_el_mismo_stock_no_lo_pasan(postgres):
-    """Cruz Roja tiene 4 paramédicos y ofrece 3 a cada una: una reserva 3 y la otra se recorta a 1."""
+    """Cruz Roja tiene 4 paramédicos y ofrece 3 a cada una: una reserva 3 y la otra queda sin reservar (todo o nada)."""
     respuestas = _en_paralelo(postgres, [_pedido(101, 3), _pedido(102, 3)])
 
-    reservado = sorted(r.ongs[0].items[0].reservado for r in respuestas)
-    assert reservado == [1, 3]
-    assert _comprometido(postgres) == 4
+    assert sorted(r.ongs[0].estado for r in respuestas) == ["NO_RESERVADA", "RESERVADA"]
+    assert sorted(r.ongs[0].items[0].reservado for r in respuestas) == [0, 3]
+    assert _comprometido(postgres) == 3
 
 
 @pytest.mark.integration

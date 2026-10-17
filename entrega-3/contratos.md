@@ -91,8 +91,10 @@ Qué hace, por cada ONG de `ofertas`:
 1. Valida con las reglas de `/validaciones` (competencia contra `gravedad`, y cantidades contra el disponible).
 2. **Reserva** (bloqueo de filas ordenado, en una transacción) lo ofrecido, sumando por recurso entre sus ítems, con
    estado `RESERVADA` y la referencia del punto 1.
-3. Si lo ofrecido supera el disponible (no debería: el tope local ya lo controló), reserva lo que hay, recortando de los
-   últimos ítems hacia atrás, y lo informa en `reservado` y `observaciones`.
+3. Si lo ofrecido por una ONG (sumado por recurso) supera lo que tiene disponible, **no se reserva nada de esa oferta**:
+   no se recorta ni se edita. Vuelve como `NO_RESERVADA` con el motivo y la ONG tiene que rehacerla (en la ronda
+   siguiente si el Coordinador reformula). No suma a la cobertura. La oferta es una unidad: la ONG manda la oferta
+   completa cada vez, así que o entra entera o no entra.
 
 Response `200`:
 
@@ -127,8 +129,9 @@ Cálculo de la cobertura (decisión a confirmar en la revisión):
   pregunta "¿se cubrieron todos los lotes?").
 - Sin ofertas: `cobertura_completa = false`, `porcentaje_cobertura = 0`, `ongs = []`.
 
-Una ONG que la API no conoce (CUIT sin registrar) vuelve con `estado: "NO_RESERVADA"`, `referencia: null` y `reservado: 0`
-en cada ítem: no hay nada que confirmar ni liberar. Una ONG suspendida o sin stock vuelve `RESERVADA` con `reservado: 0`.
+Una ONG sin reserva (CUIT desconocido, suspendida, o sin stock para su oferta) vuelve con `estado: "NO_RESERVADA"`,
+`referencia: null` y `reservado: 0` en cada ítem, y la observación `Oferta sin reservar: <motivo>`. No hay nada que
+confirmar ni liberar. Lo que sobra del lote se reserva entero (el Municipio elige después; lo demás se libera).
 
 Idempotencia: la clave es la referencia. Si ya existe en `RESERVADA` o `ADJUDICADA`, se devuelve lo mismo; si está
 `LIBERADA` o `CERRADA` (otra ronda ya la usó) responde `409`.
@@ -238,7 +241,7 @@ Todo esto va en **una sola migración** de la app (WP1) para que dos tareas no c
 ## 8. Decisiones abiertas (cerrarlas en la reunión del equipo)
 
 1. **Cobertura**: promedio simple por lote, todos los lotes cuentan (propuesta). ¿Alcanza o se pondera/excluye apoyo?
-2. **Recorte de reserva** cuando el stock no alcanza: de los últimos ítems hacia atrás (propuesta).
+2. ~~Recorte de reserva~~ **Resuelto (16/10):** sin recorte. Si el stock no alcanza para la oferta, esa ONG queda `NO_RESERVADA` y rehace la oferta.
 3. **Quién llama a `/liberar` al REFORMULAR**: la app (propuesta, porque el caso vuelve atrás por el modelo) o Bonita.
 4. **Multi-instancia** de "Confirmar Finalizacion": versión simple (una tarea que la app completa cuando todas las ONGs
    adjudicadas finalizaron) o configurarla con cardinalidad `ongsAdjudicadas`.

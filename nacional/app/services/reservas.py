@@ -5,6 +5,9 @@ competencia opera y se RESERVA lo que ofreció (estado RESERVADA) hasta que se d
 ADJUDICADA (`confirmar`) y lo demás vuelve al inventario (`liberar`). Cada reserva se identifica por su
 referencia `emg-{emergencia}-r{ronda}-{cuit}`, así que repetir una llamada no reserva dos veces.
 
+La oferta de una ONG es una unidad y no se edita: si no alcanza el stock para algo de lo que ofreció, no se reserva
+nada de esa oferta (NO_RESERVADA) y la ONG tiene que rehacerla; nunca se recorta.
+
 Concurrencia: las filas de inventario involucradas se bloquean juntas y ordenadas por id (sin deadlocks) antes
 de leer lo disponible. SQLite ignora el bloqueo, y ahí no hace falta.
 """
@@ -107,28 +110,20 @@ def evaluar(db: Session, body: EvaluacionIn, hoy: date) -> EvaluacionOut:
     salida: list[OngEvaluadaOut] = []
     for oferta in body.ofertas:
         ong, ref = ongs.get(oferta.cuit), refs[oferta.cuit]
-        if ong is None:
-            salida.append(_no_registrada(oferta, tipos, body))
-            continue
-
         adj = existentes.get(ref)
         if adj is None:
+            motivos = _no_alcanza(ong, oferta, tipos, filas)
+            if motivos:
+                salida.append(_sin_reserva(ong, oferta, tipos, body, hoy, motivos))
+                continue
             adj = _reservar(ong, oferta, tipos, filas, ref, body.emergencia_id, ahora)
             db.add(adj)
-        reservado = defaultdict(int)  # código de recurso -> lo que esa referencia tiene bloqueado
-        for it in adj.items:
-            reservado[it.inventario.tipo_recurso.codigo] = it.cantidad
-
         items = []
         for it in oferta.items:
-            r = min(it.cantidad, reservado[it.tipo_recurso])  # el recorte sale de los últimos ítems
-            reservado[it.tipo_recurso] -= r
-            reservado_por_lote[it.lote_id] += r
+            reservado_por_lote[it.lote_id] += it.cantidad
             nivel, riesgo, asignacion, obs = competencia(ong, tipos[it.tipo_recurso], body.gravedad, hoy)
-            if r < it.cantidad:
-                obs = [f"Stock insuficiente: se reservaron {r} de {it.cantidad}"] + obs
             items.append(ItemEvaluadoOut(
-                lote_id=it.lote_id, tipo_recurso=it.tipo_recurso, ofrecido=it.cantidad, reservado=r,
+                lote_id=it.lote_id, tipo_recurso=it.tipo_recurso, ofrecido=it.cantidad, reservado=it.cantidad,
                 nivel=nivel, riesgo_permitido=riesgo, asignacion_sugerida=asignacion, observaciones=obs,
             ))
         salida.append(OngEvaluadaOut(cuit=ong.cuit, ong=ong.nombre, referencia=ref, estado=adj.estado.value,
@@ -151,32 +146,49 @@ def evaluar(db: Session, body: EvaluacionIn, hoy: date) -> EvaluacionOut:
     )
 
 
-def _reservar(ong, oferta, tipos, filas, ref, emergencia_id, ahora) -> Adjudicacion:
-    """Bloquea lo ofrecido (sumado por recurso) hasta donde alcance el disponible."""
+def _por_recurso(oferta) -> dict[str, int]:
     ofrecido: dict[str, int] = defaultdict(int)
     for it in oferta.items:
         ofrecido[it.tipo_recurso] += it.cantidad
-    adj = Adjudicacion(referencia_id=ref, ong_id=ong.id, emergencia_id=emergencia_id, fecha_creacion=ahora,
-                       estado=EstadoAdjudicacion.RESERVADA)
-    for codigo, cantidad in ofrecido.items():
+    return ofrecido
+
+
+def _no_alcanza(ong, oferta, tipos, filas) -> list[str]:
+    """Por qué no se puede reservar esta oferta entera (vacío = se puede). Se suma por recurso entre lotes."""
+    if ong is None:
+        return ["ONG no registrada en el Sistema Nacional"]
+    motivos = []
+    for codigo, cantidad in _por_recurso(oferta).items():
         fila = filas.get((ong.id, tipos[codigo].id))
         disponible = fila.disponible if fila is not None and ong.estado is EstadoOng.HABILITADA else 0
-        r = min(cantidad, disponible)
-        if r > 0:
-            fila.cantidad_comprometida += r
-            adj.items.append(AdjudicacionItem(inventario=fila, cantidad=r))
+        if cantidad > disponible:
+            motivos.append(f"{tipos[codigo].nombre}: ofrecida {cantidad} y disponible {disponible}")
+    return motivos
+
+
+def _reservar(ong, oferta, tipos, filas, ref, emergencia_id, ahora) -> Adjudicacion:
+    """Bloquea todo lo ofrecido, sumado por recurso (ya se comprobó que alcanza)."""
+    adj = Adjudicacion(referencia_id=ref, ong_id=ong.id, emergencia_id=emergencia_id, fecha_creacion=ahora,
+                       estado=EstadoAdjudicacion.RESERVADA)
+    for codigo, cantidad in _por_recurso(oferta).items():
+        fila = filas[(ong.id, tipos[codigo].id)]
+        fila.cantidad_comprometida += cantidad
+        adj.items.append(AdjudicacionItem(inventario=fila, cantidad=cantidad))
     return adj
 
 
-def _no_registrada(oferta, tipos, body) -> OngEvaluadaOut:
+def _sin_reserva(ong, oferta, tipos, body, hoy, motivos) -> OngEvaluadaOut:
+    """La oferta queda como llegó, sin reservar nada: la ONG tiene que rehacerla."""
     items = []
     for it in oferta.items:
-        nivel, riesgo, asignacion, obs = competencia(None, tipos[it.tipo_recurso], body.gravedad, date.today())
+        nivel, riesgo, asignacion, obs = competencia(ong, tipos[it.tipo_recurso], body.gravedad, hoy)
         items.append(ItemEvaluadoOut(
             lote_id=it.lote_id, tipo_recurso=it.tipo_recurso, ofrecido=it.cantidad, reservado=0,
-            nivel=nivel, riesgo_permitido=riesgo, asignacion_sugerida=asignacion, observaciones=obs,
+            nivel=nivel, riesgo_permitido=riesgo, asignacion_sugerida=asignacion,
+            observaciones=[f"Oferta sin reservar: {m}" for m in motivos] + obs,
         ))
-    return OngEvaluadaOut(cuit=oferta.cuit, ong=None, referencia=None, estado="NO_RESERVADA", items=items)
+    return OngEvaluadaOut(cuit=oferta.cuit, ong=ong.nombre if ong else None, referencia=None,
+                          estado="NO_RESERVADA", items=items)
 
 
 def _cargar_bloqueada(db: Session, ref: str) -> Adjudicacion:

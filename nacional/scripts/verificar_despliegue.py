@@ -201,6 +201,12 @@ def main() -> int:
     status, _ = v.pedir("POST", f"/adjudicaciones/{ref}/liberar")
     v.check("R11 Liberar la adjudicada deja el inventario como al principio",
             status == 200 and comprometidos() == (0, 0), (status, comprometidos()))
+    de_mas = {**pedido, "emergencia_id": emergencia + 1,
+              "ofertas": [{"cuit": CRUZ_ROJA, "items": [{"lote_id": 1, "tipo_recurso": "PARAMEDICO", "cantidad": 5}]}]}
+    status, ev = v.pedir("POST", "/evaluaciones", de_mas)
+    v.check("R12 Ofrecer más de lo que tiene (5 > 4): NO_RESERVADA, sin recortar ni reservar nada",
+            status == 200 and (ev["ongs"][0]["estado"], ev["ongs"][0]["items"][0]["reservado"]) == ("NO_RESERVADA", 0)
+            and comprometidos() == (0, 0), (status, ev, comprometidos()))
 
     print(f"\n{v.ok}/{v.total} verificaciones OK")
     return 0 if v.ok == v.total else 1

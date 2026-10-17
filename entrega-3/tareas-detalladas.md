@@ -84,7 +84,7 @@ ids internos (`ong_id`, `inventario_id`). `POST /validaciones` valida sin guarda
 2. **`POST /evaluaciones`** (`services/evaluacion.py`), recibe el JSON del contrato:
    - por cada ONG: valida con las mismas reglas de `/validaciones` (competencia y cantidad) y **reserva** con bloqueo
      de filas ordenado lo que ofreció (referencia `emg-{id}:{cuit}`, estado `RESERVADA`). Si no alcanza el disponible
-     (no debería pasar por el tope local), reserva lo que hay y lo informa;
+     (no debería pasar por el tope local), no reserva nada de esa oferta (todo o nada, sin recortar) y la ONG la rehace;
    - calcula la **cobertura por lote** (lo reservado sobre lo pedido), el porcentaje total y si está completa;
    - devuelve todo en el formato del contrato: es lo que el Municipio ve como "ofertas validadas";
    - idempotente: si Bonita reintenta, no reserva dos veces.

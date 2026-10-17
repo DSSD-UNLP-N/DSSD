@@ -67,16 +67,50 @@ def test_repetir_la_evaluacion_devuelve_lo_mismo_y_no_reserva_dos_veces(client, 
         assert len(db.scalars(select(Adjudicacion)).all()) == 1
 
 
-def test_lo_ofrecido_en_varios_lotes_se_suma_y_el_recorte_sale_de_los_ultimos_items(client, session_factory):
+def test_lo_ofrecido_en_varios_lotes_se_suma_por_recurso(client, session_factory):
+    lotes = [{"lote_id": 1, "tipo_recurso": "PARAMEDICO", "cantidad": 3},
+             {"lote_id": 2, "tipo_recurso": "PARAMEDICO", "cantidad": 3}]
+    r = client.post("/evaluaciones", json=_cuerpo((CRUZ_ROJA, [(1, "PARAMEDICO", 2), (2, "PARAMEDICO", 2)]), lotes=lotes))
+
+    items = r.json()["ongs"][0]["items"]
+    assert [(i["lote_id"], i["ofrecido"], i["reservado"]) for i in items] == [(1, 2, 2), (2, 2, 2)]
+    assert _comprometido(session_factory, CRUZ_ROJA, "PARAMEDICO") == 4  # 2 + 2 = todo lo que tiene
+
+
+def test_si_no_alcanza_no_se_reserva_nada_ni_se_recorta_la_oferta(client, session_factory):
     lotes = [{"lote_id": 1, "tipo_recurso": "PARAMEDICO", "cantidad": 3},
              {"lote_id": 2, "tipo_recurso": "PARAMEDICO", "cantidad": 3}]
     r = client.post("/evaluaciones", json=_cuerpo((CRUZ_ROJA, [(1, "PARAMEDICO", 3), (2, "PARAMEDICO", 3)]), lotes=lotes))
 
-    items = r.json()["ongs"][0]["items"]
-    assert [(i["lote_id"], i["ofrecido"], i["reservado"]) for i in items] == [(1, 3, 3), (2, 3, 1)]
-    assert "Stock insuficiente: se reservaron 1 de 3" in items[1]["observaciones"]
-    assert _comprometido(session_factory, CRUZ_ROJA, "PARAMEDICO") == 4  # tenía 4: no se pasa
-    assert [l["reservado"] for l in r.json()["lotes"]] == [3, 1]
+    ong = r.json()["ongs"][0]
+    assert (ong["estado"], ong["referencia"]) == ("NO_RESERVADA", None)
+    assert [(i["lote_id"], i["ofrecido"], i["reservado"]) for i in ong["items"]] == [(1, 3, 0), (2, 3, 0)]
+    assert "Oferta sin reservar: Paramédico: ofrecida 6 y disponible 4" in ong["items"][0]["observaciones"]
+    assert _comprometido(session_factory, CRUZ_ROJA, "PARAMEDICO") == 0
+    assert [l["reservado"] for l in r.json()["lotes"]] == [0, 0]
+    with session_factory() as db:
+        assert db.scalars(select(Adjudicacion)).all() == []
+
+
+def test_todo_o_nada_tambien_entre_recursos_de_la_misma_oferta(client, session_factory):
+    lotes = [{"lote_id": 1, "tipo_recurso": "PARAMEDICO", "cantidad": 4},
+             {"lote_id": 2, "tipo_recurso": "AGUA_POTABLE", "cantidad": 5000}]
+    r = client.post("/evaluaciones", json=_cuerpo(
+        (CRUZ_ROJA, [(1, "PARAMEDICO", 4), (2, "AGUA_POTABLE", 3001)]), lotes=lotes))
+
+    assert r.json()["ongs"][0]["estado"] == "NO_RESERVADA"
+    assert _comprometido(session_factory, CRUZ_ROJA, "PARAMEDICO") == 0  # los paramédicos entraban, pero la oferta es una
+    assert _comprometido(session_factory, CRUZ_ROJA, "AGUA_POTABLE") == 0
+
+
+def test_lo_que_sobra_del_lote_se_reserva_entero(client, session_factory):
+    lotes = [{"lote_id": 1, "tipo_recurso": "PARAMEDICO", "cantidad": 3}]
+    r = client.post("/evaluaciones", json=_cuerpo(
+        (CRUZ_ROJA, [(1, "PARAMEDICO", 4)]), (BOMBEROS, [(1, "PARAMEDICO", 2)]), lotes=lotes))
+
+    assert [l["reservado"] for l in r.json()["lotes"]] == [6]
+    assert (r.json()["lotes"][0]["porcentaje"], r.json()["cobertura_completa"]) == (100.0, True)
+    assert _comprometido(session_factory, CRUZ_ROJA, "PARAMEDICO") == 4  # nada se descarta: elige el Municipio
 
 
 def test_la_cobertura_es_el_promedio_simple_de_los_lotes(client):
@@ -123,15 +157,16 @@ def test_una_ong_no_registrada_no_reserva_nada(client):
 
     ong = r.json()["ongs"][0]
     assert (ong["estado"], ong["referencia"], ong["items"][0]["reservado"]) == ("NO_RESERVADA", None, 0)
-    assert "ONG no registrada en el Sistema Nacional" in ong["items"][0]["observaciones"]
+    assert "Oferta sin reservar: ONG no registrada en el Sistema Nacional" in ong["items"][0]["observaciones"]
 
 
-def test_una_ong_suspendida_queda_con_reserva_vacia(client, session_factory):
+def test_una_ong_suspendida_no_reserva_nada(client, session_factory):
     r = client.post("/evaluaciones", json=_cuerpo(
         (SUSPENDIDA, [(1, "RACION_ALIMENTO", 100)]), lotes=[{"lote_id": 1, "tipo_recurso": "RACION_ALIMENTO", "cantidad": 100}]))
 
     ong = r.json()["ongs"][0]
-    assert ong["estado"] == "RESERVADA" and ong["items"][0]["reservado"] == 0
+    assert (ong["estado"], ong["referencia"], ong["items"][0]["reservado"]) == ("NO_RESERVADA", None, 0)
+    assert "ONG suspendida: no está habilitada para comprometer recursos" in ong["items"][0]["observaciones"]
     assert _comprometido(session_factory, SUSPENDIDA, "RACION_ALIMENTO") == 0
 
 
