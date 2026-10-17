@@ -58,6 +58,42 @@ def test_login_de_usuario_inexistente(client):
     assert r.status_code == 401
 
 
+def test_login_emite_jwt_y_autoriza_rutas(client):
+    response = client.post(
+        "/api/auth/login",
+        json={"username": "ong.cruzroja", "password": "demo1234"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["token_type"] == "bearer"
+    assert payload["user"]["username"] == "ong.cruzroja"
+    assert client.get(
+        "/api/auth/me",
+        headers={"Authorization": f"Bearer {payload['access_token']}"},
+    ).json()["username"] == "ong.cruzroja"
+
+
+def test_login_rechaza_credenciales_invalidas(client):
+    response = client.post(
+        "/api/auth/login",
+        json={"username": "ong.cruzroja", "password": "incorrecta"},
+    )
+    assert response.status_code == 401
+
+
+def test_openapi_publica_bearer_para_swagger(client):
+    schema = client.get("/openapi.json").json()
+    security_schemes = schema["components"]["securitySchemes"]
+    bearer = next(s for s in security_schemes.values() if s["type"] == "http")
+    assert bearer["scheme"] == "bearer"
+    login = schema["paths"]["/api/auth/login"]["post"]
+    assert "application/json" in login["requestBody"]["content"]
+
+
+def test_no_hay_endpoint_de_login_duplicado(client):
+    assert client.post("/api/auth/token").status_code == 404
+
+
 @pytest.mark.parametrize("username", USUARIOS)
 def test_cada_perfil_entra_y_se_reconoce(login, username):
     r = login(username).get("/api/auth/me")

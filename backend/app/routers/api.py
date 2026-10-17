@@ -105,10 +105,15 @@ def api_login(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ):
-    user = db.scalar(select(Usuario).where(Usuario.username == body.username.strip()))
-    if user is None or not verify_password(body.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
+    user = _authenticate_user(db, body.username, body.password)
     return _token_response(user, settings)
+
+
+def _authenticate_user(db: Session, username: str, password: str) -> Usuario:
+    user = db.scalar(select(Usuario).where(Usuario.username == username.strip()))
+    if user is None or not verify_password(password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
+    return user
 
 
 @router.post("/auth/register-ong", response_model=TokenOut, status_code=201)

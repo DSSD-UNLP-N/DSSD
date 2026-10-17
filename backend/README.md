@@ -80,10 +80,16 @@ pass `demo1234`): `operador.municipal`, `coordinador.regional`, `ong.cruzroja`, 
 `auditor`. Con `SHOW_DEMO_USERS=true` en `.env` el login los lista (solo desarrollo).
 
 `POST /api/auth/login` devuelve `access_token`, `token_type` y `user`.
+Es el único endpoint de inicio de sesión: recibe un JSON con `username` y
+`password`, valida las credenciales contra la base de datos y devuelve el JWT
+como token bearer. En Swagger UI (`/docs`), ejecutar este endpoint con **Try it
+out**, copiar `access_token` de la respuesta y pegarlo en **Authorize** para
+usar las rutas protegidas.
 `POST /api/auth/register-ong` recibe `ong_nombre`, `cuit` (opcional), `nombre`
 del representante, `username` y `password`; crea la ONG y su primer usuario con
-rol `ONG` y devuelve un JWT. Ambos endpoints responden 409 si el usuario o la
-organización ya existen. En los endpoints protegidos enviar
+rol `ONG` y devuelve un JWT. El login responde 401 si las credenciales son
+incorrectas; el registro responde 409 si el usuario o la organización ya
+existen. En los endpoints protegidos enviar
 `Authorization: Bearer <access_token>`.
 
 Proteger una ruta con el rol:
