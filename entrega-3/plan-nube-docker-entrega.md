@@ -57,11 +57,95 @@ Usar una Postgres descartable (la del compose, o una gratuita aparte).
 
 ## Pasar todo a la nube (después de que todo pase en local, es el WP12)
 
+### Qué cambia y qué no
+
+Solo se mueve **una pieza** (la API Nacional). La app web, el front y Bonita siguen en local: la consigna los llama "locales".
+Lo único que cambia es **a qué dirección llama cada uno cuando habla con la API Nacional**:
+
+| Quién llama a la API Nacional | Dónde está la URL hoy | En local | En la nube |
+|---|---|---|---|
+| La app (reservar/liberar al reformular, `POST /api/emergencias/{id}/decision`) | `backend/.env` → `NACIONAL_BASE_URL` | `http://localhost:8002` | `https://sistema-nacional-latest.onrender.com` |
+| Bonita, conector `evaluarOfertas` (`POST /evaluaciones`) | URL del conector, escrita a mano en el diagrama | `http://localhost:8002/evaluaciones` | `https://sistema-nacional-latest.onrender.com/evaluaciones` |
+| Bonita, conector `resolverReservas` (`POST /adjudicaciones/resolucion`) | ídem | `http://localhost:8002/adjudicaciones/resolucion` | `https://sistema-nacional-latest.onrender.com/adjudicaciones/resolucion` |
+| Bonita, conector de cierre (a crear en la Parada 3) | ídem | `http://localhost:8002/cierres` | `https://sistema-nacional-latest.onrender.com/cierres` |
+
+**No cambian** (la app sigue en local): los conectores `get obteber ofertas`, `avisarEvaluacion` y `avisarAdjudicacion`, que
+llaman a `http://localhost:8001`; ni `BONITA_BASE_URL` (`http://localhost:8080/bonita`) ni `BONITA_API_KEY`.
+
+Además de las URLs, en la nube hay tres diferencias:
+- **HTTPS** en vez de HTTP. Los conectores de Bonita usan el certificado público de Render, que Java ya reconoce; no hace falta
+  tocar la pestaña SSL del conector. *Sin verificar hasta la primera corrida contra Render.*
+- **Arranque en frío** de 35 a 45 s después de un rato sin uso: `NACIONAL_TIMEOUT_SECONDS=60` en el `.env` y los 60000 ms que ya
+  tienen los conectores. Despertar la API con `GET /health` antes de probar o de la demo.
+- **Los datos son los de la base de Render**, no los de tu SQLite, y **persisten entre corridas**. El inventario queda como estaba
+  (los escenarios reservan y liberan), pero las referencias `emg-ID-rN-CUIT` quedan guardadas. Si la base local de la app se
+  reinicia (SQLite nueva, los ids de emergencia vuelven a 1) y se vuelve a evaluar una referencia que en la nube ya está
+  `LIBERADA` o `CERRADA`, la API responde **409** ("ya está LIBERADA; no se puede evaluar de nuevo") y el conector de Bonita falla.
+  Si la referencia sigue `RESERVADA` o `ADJUDICADA`, en cambio, es idempotente y devuelve la vieja. Por eso: **no reiniciar la base
+  local de la app mientras se prueba contra la nube** (los ids siguen creciendo) o, si hay que hacerlo, usar emergencias con id
+  mayor al último usado en la nube.
+
+**Regla de oro:** la URL del `.env` de la app y la de los conectores de Bonita **tienen que apuntar al mismo lado**. Los
+escenarios de `backend/scripts/` leen el inventario con la URL del `.env`, y Bonita reserva con la suya; si apuntan a lugares
+distintos, el escenario ve un inventario y Bonita reserva en otro.
+
+### Las dos "configuraciones" de Bonita: Local y Production
+
+Lo que se ve en Studio (Configurar) son dos conjuntos de valores distintos del mismo proceso:
+
+- **Local** es la que usa **Ejecutar** en Studio. Es la que importa para probar y para la demo. Está bien: los tres actores
+  mapeados a `/rescuesync/coordinador`, `/rescuesync/ong` y `/rescuesync/municipio`.
+- **Production** es la que se usa al **exportar/desplegar a un servidor Bonita real** (no es nuestro caso: la consigna pide
+  Bonita local). Hoy tiene los actores sin mapear y por eso muestra el aviso amarillo. **No impide nada**: Ejecutar no la mira.
+  Igual conviene dejarla igual a Local para que no quede el aviso y para que el `.bos` entregado sea consistente:
+  1. Configurar → **Local** → *Mapeo de actores* → **Exportar mapeo de actor al archivo…** (guardar un `.xml`).
+  2. Configurar → **Production** → *Mapeo de actores* → **Importar archivo de mapeo de actores…** → elegir ese `.xml`.
+  3. Finalizar. El aviso desaparece.
+- **Importante:** el diagrama **no tiene parámetros de proceso hoy** (verificado en el `.proc`: 0) y las URLs de los conectores
+  están **escritas en el diagrama** (`http://localhost:8002/...` y `http://localhost:8001/...`). Por eso cambiar entre Local
+  y Production **no cambia ninguna URL**: hoy, cambiar de local a nube obliga a editar cada conector a mano.
+
+### La forma más fácil de alternar: un parámetro del proceso (WP12)
+
+Se define **un parámetro** y los conectores arman la URL con él. Después, pasar de local a nube es **cambiar un valor en un solo
+lugar**, no editar conectores.
+
+1. En Studio, seleccionar el Pool → *Parámetros* (en la pestaña del proceso) → agregar:
+   - `nacionalBaseUrl` (Texto), valor por defecto `http://localhost:8002`.
+   - `appBaseUrl` (Texto), valor por defecto `http://localhost:8001` (opcional: la app no se mueve, pero queda todo en un lugar).
+   - `bonitaApiKey` (Texto), valor `rescuesync-dev-key` (hoy está escrita en los 3 conectores que llaman a la app).
+2. En cada conector, la **URL** pasa a ser una expresión Groovy que usa el parámetro, por ejemplo:
+   `nacionalBaseUrl + "/evaluaciones"` y `appBaseUrl + "/api/bonita/emergencias/" + emergenciaId + "/eventos"`
+   (el editor de expresiones tiene el tipo *Parámetro* para elegirlo).
+3. Configurar → **Local** → *Parámetros*: poner el valor que se quiera usar **cuando se ejecuta en Studio**:
+   - para probar en local: `nacionalBaseUrl = http://localhost:8002`
+   - para probar contra la nube: `nacionalBaseUrl = https://sistema-nacional-latest.onrender.com`
+4. Configurar → **Production** → *Parámetros*: dejar la URL de la nube (así el `.bos` ya trae el valor "de producción").
+5. **Ejecutar** (redespliega y borra los casos viejos). Verificar con un caso de prueba que Bonita llama a donde se espera
+   (en los logs de la API que corresponda).
+6. Del lado de la app: en `backend/.env`, la línea de `NACIONAL_BASE_URL` apunta al mismo lado.
+
+**Ojo con lo que es distinto en la práctica:** como Ejecutar usa **Local**, para probar contra la nube desde Studio hay que
+**cambiar el valor de Local**; no alcanza con "pasar a Production". La config Production solo sirve para dejar el valor de nube
+guardado en el `.bos` y para un despliegue en un servidor real.
+
+*Sin verificar todavía:* que la edición de parámetros se pueda hacer también desde el portal de Bonita Community sin redesplegar
+(si se puede, evita borrar casos). Se prueba al hacer este WP; si no, se edita en Studio.
+
+### Resumen de cómo alternar (cuando el WP12 esté hecho)
+
+| Quiero | `backend/.env` (`NACIONAL_BASE_URL`) | Bonita, Configurar → Local → Parámetros (`nacionalBaseUrl`) |
+|---|---|---|
+| Todo en local | `http://localhost:8002` | `http://localhost:8002` |
+| App y Bonita contra la nube | `https://sistema-nacional-latest.onrender.com` (y timeout 60) | `https://sistema-nacional-latest.onrender.com` |
+
+Después de cambiar: reiniciar la app, **Ejecutar** en Studio, despertar la nube con `/health`, y recién ahí correr los escenarios.
+
+### Pasos (M14, una vez que todo pasa en local)
 1. En `backend/.env`: `NACIONAL_BASE_URL=https://sistema-nacional-latest.onrender.com` y `NACIONAL_TIMEOUT_SECONDS=60`.
-2. En Bonita: cambiar la URL de los conectores que llaman a la API Nacional (hoy `localhost:8002`) por la de Render. Con los
-   parámetros del WP12 es un solo valor. **Tienen que coincidir** con el `.env` de la app: los escenarios de `backend/scripts/`
-   leen el inventario con la URL del `.env` y Bonita reserva con la suya.
-3. Despertar la API (`/health`), reiniciar la app y volver a correr los escenarios (M14). Cada Ejecutar en Studio borra casos.
+2. En Bonita: el parámetro `nacionalBaseUrl` de la configuración **Local** con la URL de Render.
+3. Despertar la API (`/health`), reiniciar la app, Ejecutar en Studio y volver a correr los escenarios (`escenario_evaluacion.py`,
+   `escenario_adjudicacion.py`, `escenario_tope.py`) y `verificar_despliegue.py`.
 
 ---
 
