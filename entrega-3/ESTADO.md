@@ -19,15 +19,18 @@ Rama `modelado-tomas-e-3`, [PR #10](https://github.com/FrancoCirielli16/DSSD/pul
 - `.bos` actual con los 5 conectores: `entrega41_20261017_1311.bos`.
 
 ## Falta
-- **Parada 3 (cierre):** pantallas de WP6 (campana de avisos, Monitorear, Marcar finalizada, Validar cierre) + conector
-  "Liberar Recursos y Notificar Cierre" en Bonita. "Confirmar Finalizacion" ya funciona como está (una sola instancia).
+- **Parada 3 (cierre):** probar con Bonita real el conector de «Liberar Recursos y Notificar Cierre» (ya generado, falta importarlo
+  en Studio). "Confirmar Finalizacion" ya funciona como está (una sola instancia).
 - **Checkpoints de la Parada 3** (cada uno se prueba y se commitea antes del siguiente):
   1. ✅ WP3 en la API Nacional (tests + servidor real + `verificar_despliegue`).
   2. ✅ WP6 backend: evento `CIERRE`, notificaciones, `finalizar`, monitorear, validar cierre. Tests + `verificar_todo.py` + app y Bonita reales.
   3. ✅ WP6 front: campana de avisos y botones de cada rol. `backend/scripts/ui_ejecucion.py` (Playwright + Bonita real, con
      capturas): monitorear, finalizar, validar cierre y aviso en la campana, 24/25 (la falla era de espera del script, ya corregida;
      falta recorrerlo entero otra vez con un caso nuevo).
-  4. Conector de cierre en Bonita (Tomás, Studio) + `escenario_cierre.py` con Bonita real: caso hasta `RESUELTA` y stock de vuelta.
+  4. Conector de cierre en Bonita + `escenario_cierre.py` con Bonita real: caso hasta `RESUELTA` y stock de vuelta.
+     **Armado sin Studio:** `bonita/scripts/agregar_conector_cierre.py` clonó los dos conectores de la adjudicación en
+     «Liberar Recursos y Notificar Cierre» → `entrega41_20261017_1311_cierre.bos` (sin commitear hasta probarlo). La API Nacional
+     ganó `POST /cierres/lote` (Bonita no itera). **Falta que Tomás lo importe en Studio y ejecute**, y correr `escenario_cierre.py`.
   5. Parada 3 por la interfaz (`ui_parada3.py`, como la de la Parada 2) y su guía con capturas.
 - WP9 recorrido completo de punta a punta, WP7 Render con el código nuevo, WP8 Docker Compose + Postgres, WP10 entrega,
   WP11 JWT (postergado), WP12 parámetros de Bonita (al final).
