@@ -392,7 +392,7 @@ suspendida** con 800 raciones. En total 11 tipos de recurso y 4 certificaciones.
   `GET /emergencias/{id}` (trae la evaluación si el rol es Municipio, Coordinador o Auditor); `GET /tipos-recurso`;
   `POST|DELETE /emergencias/{id}/lotes`; `POST /emergencias/{id}/publicar`; `GET|POST /emergencias/{id}/ofertas`.
 - **Bonita** (`/api/bonita`, con `X-Api-Key`): `GET /emergencias/{id}/ofertas` (el consolidado; pasa la emergencia a
-  `EN_EVALUACION`) y `POST /emergencias/{id}/eventos` (tipo `EVALUACION`; los tipos `ADJUDICACION` y `CIERRE` FALTAN).
+  `EN_EVALUACION`) y `POST /emergencias/{id}/eventos` (tipos `EVALUACION` y `ADJUDICACION`; el tipo `CIERRE` FALTA).
 
 ### API Nacional (`:8002`, Swagger en `/docs`)
 - Consulta: `GET /tipos-recurso`, `/certificaciones`, `/ongs`, `/ongs/{cuit}` (ficha con inventario),
@@ -422,9 +422,9 @@ Las tareas del plan se llaman **WP** (*work package*).
 | Primer conector de Bonita | "Obtener Ofertas de la Red": GET a la app | HECHO (URL fija en el conector) |
 | WP2 | API Nacional: evaluar con reserva (todo o nada), confirmar, liberar | HECHO (falta probar la concurrencia en Postgres) |
 | Evento `EVALUACION` | La app guarda el resultado y el Coordinador ve la cobertura | HECHO |
-| **WP4 (parcial)** | **Conectores de Bonita hacia la API Nacional y hacia el evento** | **EN CURSO (lo que se está haciendo en Studio)** |
+| WP4 (conectores de Bonita) | Evaluar y avisar a la app (HECHO); resolver las reservas y avisar la adjudicación (HECHO); falta el de cierre (`Liberar Recursos y Notificar Cierre`) | PARCIAL |
 | WP3 | `POST /cierres` atado a la referencia | FALTA |
-| WP5 | Pantallas: el Coordinador decide, el Municipio adjudica | FALTA |
+| WP5 | El Coordinador decide (parcial o reformular) y el Municipio adjudica, con el evento `ADJUDICACION` | HECHO y probado con Bonita real (Parada 2) |
 | WP6 | Notificaciones, finalizar actividad, monitoreo, cierre bilateral, multi-instancia | FALTA |
 | WP7 | Deploy final de la API Nacional en Render con Postgres | FALTA (hoy la nube corre código viejo) |
 | WP8 | Docker Compose con Postgres, backend y frontend | FALTA |
@@ -433,7 +433,7 @@ Las tareas del plan se llaman **WP** (*work package*).
 | WP11 | JWT | POSTERGADO |
 | WP12 | Bonita con parámetros por entorno, para apuntar a la nube sin editar conectores | FALTA (al final, con todo probado en local; hoy los conectores llevan `localhost` fijo) |
 
-**Primera parada de pruebas (la próxima):** tres usuarios ofertan, vence el plazo y, sin tocar nada, Bonita trae las
+**Primera parada de pruebas (HECHA, 26/26):** tres usuarios ofertan, vence el plazo y, sin tocar nada, Bonita trae las
 ofertas, la API Nacional reserva el stock y el Coordinador ve la cobertura en pantalla. Para eso falta, en Bonita
 Studio, la tarea "Validar en Sistema Nacional y Calcular Cobertura": crear la variable `evaluacionJson`, un conector
 `POST` a la API Nacional, un conector `POST` al evento de la app y dos operaciones que completan `coberturaCompleta` y
@@ -501,3 +501,22 @@ entrega-3/                 planes, contratos (contratos.md) y esta guía
 - **Swagger**: la página `/docs` de una API, con cada endpoint documentado y probable.
 - **JWT**: tipo de token de autenticación entre sistemas (postergado).
 - **WP**: *work package*, una tarea del plan.
+
+---
+
+## 14. Parada 2 (hecha): la decisión y la adjudicación
+
+Probada con Bonita real (`backend/scripts/escenario_adjudicacion.py`, 34/34):
+
+- **Cobertura parcial:** el Coordinador elige "seguir con cobertura parcial", el Municipio adjudica solo a una ONG, Bonita
+  confirma su reserva y libera la de la otra (`POST /adjudicaciones/resolucion`, una sola llamada) y le avisa a la app
+  (evento `ADJUDICACION`): las ofertas quedan adjudicada y no adjudicada, se crean los avisos para las ONGs y la emergencia
+  pasa a `EN_EJECUCION`. El caso de Bonita espera en "Monitorear Ejecución del Despliegue".
+- **Reformulación:** el Coordinador elige REFORMULAR, la app libera las reservas de la ronda en la API Nacional, retira las
+  ofertas (el historial queda), sube la ronda y la emergencia vuelve a registrada. Bonita vuelve a "Revisar Información"; se
+  publica de nuevo, las ONGs ofrecen, la evaluación de la ronda 2 (referencia `emg-ID-r2-CUIT`) cubre todo, va directo a
+  adjudicación y el Municipio adjudica.
+
+Lo que sigue (Parada 3, el flujo completo): `POST /cierres` atado a la referencia, "Marcar actividad finalizada" de cada ONG,
+monitoreo y cierre bilateral del Coordinador, el conector de "Liberar Recursos y Notificar Cierre" y el evento `CIERRE`,
+las notificaciones en pantalla y la multi-instancia de "Confirmar Finalización".
