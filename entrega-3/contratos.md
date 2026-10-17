@@ -173,6 +173,14 @@ cantidad_comprometida, disponible}`). Repetido → `200` con el mismo cierre, si
 > la referencia y libera lo que realmente se comprometió. Un cuerpo con `items` se ignora el campo extra, pero ya no
 > sirve para nada: Bonita manda solo `{cuit, referencia}`. `404` si la ONG o la referencia no existen o no son de esa ONG.
 
+### 3.4b `POST /cierres/lote` — el cierre de todas las ONGs adjudicadas, en una sola llamada
+
+Request: `{"cierres": [{"cuit": "30-54666544-5", "referencia": "emg-12-r1-30-54666544-5"}, {"cuit": "30-68522415-9", "referencia": "emg-12-r1-30-68522415-9"}]}`.
+Igual que `/adjudicaciones/resolucion` para la adjudicación: Bonita no itera, así que un solo conector arma el cuerpo con
+Groovy a partir de `evaluacionJson` y `ongsAdjudicadas`. Cada cierre se comporta como en 3.4. Valida todo antes de cambiar
+nada (`404` si una ONG o referencia no existe o es de otra ONG, `409` si alguna no está `ADJUDICADA`, `400` si repite una
+referencia) y es idempotente. Response `200`: la lista de cierres, en el orden pedido.
+
 ### 3.5 Transiciones de una reserva
 
 ```

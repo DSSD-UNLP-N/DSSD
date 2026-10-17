@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.db import get_db
 from app.models import CierreItem, CierreOperativo, Ong
 from app.routers.reservas import _ERRORES, _http
-from app.schemas import CierreIn, CierreItemOut, CierreOut
+from app.schemas import CierreIn, CierreItemOut, CierreLoteIn, CierreOut
 from app.services import reservas
 
 router = APIRouter(tags=["cierre"])
@@ -70,6 +70,25 @@ def informar_cierre(body: CierreIn, response: Response, db: Session = Depends(ge
     if not nuevo:
         response.status_code = 200
     return _out(_cargar_cierre(db, cierre.id))
+
+
+@router.post("/cierres/lote", response_model=list[CierreOut],
+             summary="Cerrar varias adjudicaciones de una emergencia en una sola llamada")
+def informar_cierres(body: CierreLoteIn, db: Session = Depends(get_db)):
+    """Lo que Bonita manda al validarse el cierre bilateral: un `{cuit, referencia}` por cada ONG adjudicada, y un
+    solo pedido en vez de uno por ONG. Valida todo antes de cambiar nada (`404` si una ONG o referencia no existe,
+    `409` si alguna no está `ADJUDICADA`, `400` si repite una referencia) y es idempotente: repetir la llamada
+    completa devuelve los mismos cierres sin restar de nuevo. Cada cierre se comporta como en `POST /cierres`."""
+    pedidos = [(c.cuit, c.referencia) for c in body.cierres]
+    try:
+        try:
+            cerrados = reservas.cerrar_varias(db, pedidos)
+        except IntegrityError:
+            db.rollback()
+            cerrados = reservas.cerrar_varias(db, pedidos)
+    except _ERRORES as exc:
+        raise _http(exc) from exc
+    return [_out(_cargar_cierre(db, cierre.id)) for cierre, _ in cerrados]
 
 
 @router.get("/cierres/{cierre_id}", response_model=CierreOut, summary="Ver un cierre ya informado")

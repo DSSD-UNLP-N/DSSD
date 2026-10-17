@@ -33,6 +33,7 @@ lee la misma variable; si exportás una en la terminal, la leen los dos.
 | POST | `/validaciones` | Valida cantidades y competencia; **no guarda nada** |
 | POST | `/adjudicaciones` | Compromete inventario de forma atómica e idempotente |
 | POST | `/cierres` | Cierra una adjudicación (`{cuit, referencia}`) y libera exactamente lo que tenía comprometido |
+| POST | `/cierres/lote` | Lo mismo para varias ONGs en una llamada (`{cierres: [{cuit, referencia}]}`); todo o nada, idempotente |
 | GET | `/cierres/{id}` | Un cierre ya informado |
 | GET | `/ongs/{cuit}/cierres` | Cierres de una ONG |
 

@@ -246,6 +246,19 @@ def main() -> int:
     status, lista = v.pedir("GET", f"/ongs/{CRUZ_ROJA}/cierres")
     v.check("C6 El cierre queda en GET /ongs/{cuit}/cierres",
             status == 200 and any(c["id"] == cie["id"] for c in lista), (status, lista))
+    lote = emergencia + 4
+    v.pedir("POST", "/evaluaciones", {**pedido, "emergencia_id": lote})
+    refs = [f"emg-{lote}-r1-{CRUZ_ROJA}", f"emg-{lote}-r1-{BOMBEROS}"]
+    for ref in refs:
+        v.pedir("POST", f"/adjudicaciones/{ref}/confirmar")
+    cuerpo_lote = {"cierres": [{"cuit": CRUZ_ROJA, "referencia": refs[0]}, {"cuit": BOMBEROS, "referencia": refs[1]}]}
+    status, cerrados = v.pedir("POST", "/cierres/lote", cuerpo_lote)
+    v.check("C7 El lote cierra las dos ONGs en una llamada y deja el inventario como al principio",
+            status == 200 and [c["items"][0]["cantidad_liberada"] for c in cerrados] == [4, 2] and comprometidos() == (0, 0),
+            (status, cerrados, comprometidos()))
+    status, otra = v.pedir("POST", "/cierres/lote", cuerpo_lote)
+    v.check("C8 Repetir el lote devuelve los mismos cierres, sin restar de nuevo",
+            status == 200 and [c["id"] for c in otra] == [c["id"] for c in cerrados] and comprometidos() == (0, 0))
 
     print(f"\n{v.ok}/{v.total} verificaciones OK")
     return 0 if v.ok == v.total else 1

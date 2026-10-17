@@ -124,6 +124,11 @@ class CierreIn(BaseModel):
     referencia: str = Field(min_length=1, max_length=80)
 
 
+class CierreLoteIn(BaseModel):
+    """Los cierres de varias ONGs de una emergencia, para que un solo pedido de Bonita los resuelva."""
+    cierres: list[CierreIn] = Field(min_length=1)
+
+
 class CierreItemOut(BaseModel):
     tipo_recurso: str
     nombre: str

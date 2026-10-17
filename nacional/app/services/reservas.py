@@ -273,6 +273,28 @@ def cerrar(db: Session, cuit: str, ref: str) -> tuple[CierreOperativo, bool]:
     return cierre, True
 
 
+def cerrar_varias(db: Session, pedidos: list[tuple[str, str]]) -> list[tuple[CierreOperativo, bool]]:
+    """Cierra varias adjudicaciones en una llamada (lo que manda Bonita al validarse el cierre bilateral).
+
+    Se valida todo antes de tocar nada: si una ONG o referencia no existe o no se puede cerrar, no se cierra ninguna.
+    Cada cierre es idempotente, así que repetir la llamada completa es seguro."""
+    referencias = [ref for _, ref in pedidos]
+    if len(set(referencias)) != len(referencias):
+        raise ReservaError("Una referencia no puede repetirse")
+    ongs = {o.cuit: o for o in db.scalars(select(Ong).where(Ong.cuit.in_([c for c, _ in pedidos])))}
+    existentes = {a.referencia_id: a for a in db.scalars(
+        select(Adjudicacion).where(Adjudicacion.referencia_id.in_(referencias)))}
+    for cuit, ref in pedidos:
+        if cuit not in ongs:
+            raise ReservaNoExiste("ONG no registrada")
+        if ref not in existentes or existentes[ref].ong_id != ongs[cuit].id:
+            raise ReservaNoExiste(f"La referencia {ref} no existe para la ONG {cuit}")
+        if existentes[ref].estado not in (EstadoAdjudicacion.ADJUDICADA, EstadoAdjudicacion.CERRADA):
+            raise ReservaEnConflicto(
+                f"La referencia {ref} está {existentes[ref].estado.value}; solo se cierra una ADJUDICADA")
+    return [cerrar(db, cuit, ref) for cuit, ref in pedidos]
+
+
 def resolver(db: Session, confirmar_refs: list[str], liberar_refs: list[str]) -> ResolucionOut:
     """Confirma unas reservas y libera otras en una sola llamada (lo que decidió el Municipio).
 

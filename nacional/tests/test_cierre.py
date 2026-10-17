@@ -144,3 +144,55 @@ def test_no_se_puede_cerrar_la_referencia_de_otra_ong(client):
 def test_entradas_invalidas_dan_422(client):
     for body in ({"cuit": CRUZ_ROJA}, {"referencia": "x"}, {"cuit": CRUZ_ROJA, "referencia": ""}, {"cuit": "", "referencia": "x"}):
         assert client.post("/cierres", json=body).status_code == 422
+
+
+# --- varias adjudicaciones en una llamada (lo que usa Bonita) ---
+
+def _lote(*refs, cuit=CRUZ_ROJA):
+    return {"cierres": [{"cuit": c, "referencia": r} for c, r in refs]}
+
+
+def test_el_lote_cierra_a_todas_las_ongs_adjudicadas(client):
+    _adjudicar(client, 12, (CRUZ_ROJA, 4), (BOMBEROS, 2))
+    antes = client.get(f"/ongs/{CRUZ_ROJA}").json()["inventario"]
+
+    r = client.post("/cierres/lote", json=_lote((CRUZ_ROJA, _ref(12)), (BOMBEROS, _ref(12, BOMBEROS))))
+
+    assert r.status_code == 200
+    assert [(c["cuit"], c["items"][0]["cantidad_liberada"]) for c in r.json()] == [(CRUZ_ROJA, 4), (BOMBEROS, 2)]
+    assert _inv(client)["cantidad_comprometida"] == 0 and _inv(client, cuit=BOMBEROS)["cantidad_comprometida"] == 0
+    assert client.get(f"/ongs/{CRUZ_ROJA}").json()["inventario"] != antes  # ya no está bloqueado lo adjudicado
+
+
+def test_repetir_el_lote_no_resta_de_nuevo(client):
+    _adjudicar(client, 12, (CRUZ_ROJA, 1))
+    _adjudicar(client, 13, (CRUZ_ROJA, 3))
+    cuerpo = _lote((CRUZ_ROJA, _ref(12)))
+    primero = client.post("/cierres/lote", json=cuerpo)
+    segundo = client.post("/cierres/lote", json=cuerpo)
+
+    assert (primero.status_code, segundo.status_code) == (200, 200)
+    assert [c["id"] for c in segundo.json()] == [c["id"] for c in primero.json()]
+    assert _inv(client)["cantidad_comprometida"] == 3
+
+
+def test_si_una_del_lote_no_se_puede_cerrar_no_se_cierra_ninguna(client):
+    _adjudicar(client, 12, (CRUZ_ROJA, 4))
+    assert _evaluar(client, 13, (BOMBEROS, 2)).status_code == 200  # reservada, sin confirmar
+
+    r = client.post("/cierres/lote", json=_lote((CRUZ_ROJA, _ref(12)), (BOMBEROS, _ref(13, BOMBEROS))))
+
+    assert r.status_code == 409 and "RESERVADA" in r.json()["detail"]
+    assert _inv(client)["cantidad_comprometida"] == 4  # la de Cruz Roja no se cerró
+    assert client.get(f"/ongs/{CRUZ_ROJA}/cierres").json() == []
+
+
+def test_el_lote_valida_existencia_repetidos_y_forma(client):
+    _adjudicar(client, 12, (CRUZ_ROJA, 2))
+
+    assert client.post("/cierres/lote", json=_lote((CRUZ_ROJA, "no-existe"))).status_code == 404
+    assert client.post("/cierres/lote", json=_lote(("00-0-0", _ref(12)))).status_code == 404
+    assert client.post("/cierres/lote", json=_lote((BOMBEROS, _ref(12)))).status_code == 404  # es de otra ONG
+    assert client.post("/cierres/lote", json=_lote((CRUZ_ROJA, _ref(12)), (CRUZ_ROJA, _ref(12)))).status_code == 400
+    assert client.post("/cierres/lote", json={"cierres": []}).status_code == 422
+    assert _inv(client)["cantidad_comprometida"] == 2
