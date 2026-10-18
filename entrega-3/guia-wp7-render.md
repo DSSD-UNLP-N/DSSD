@@ -2,6 +2,12 @@
 
 Guía para quien nunca tocó Render. No hace falta saber programar: son clics en un panel web y un comando al final para comprobar.
 
+> **Estado (18/10):** hecho. El servicio de imagen (`sistema_nacional:v1.0.0`) no se puede pasar a Git, así que se creó uno nuevo,
+> `rescuesync-nacional` (`https://rescuesync-nacional.onrender.com`), que construye `nacional/Dockerfile` desde la rama `dev` con
+> auto-deploy y usa la misma Postgres. El viejo quedó suspendido. Los pasos de abajo sirven para rehacerlo o para el cambio a `main`.
+> Al crear un servicio nuevo en el panel: *New +* → *Web Service* → repo público `DSSD-UNLP-N/DSSD` → rama `dev` → *Language: Docker* →
+> *Dockerfile Path* `./nacional/Dockerfile` y *Docker Build Context* `./nacional`.
+
 ## 1. Qué es esto y por qué hay que hacerlo
 
 La consigna de la Entrega 3 pide la **API del Sistema Nacional corriendo en la nube, dockerizada, con JWT y Swagger**. Hoy la API

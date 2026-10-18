@@ -10,7 +10,7 @@ Rama `modelado-tomas-e-3`. El [PR #10](https://github.com/FrancoCirielli16/DSSD/
 > (importado y ejecutado en Studio el 18/10). **Probado todo con Bonita real y bases nuevas (18/10):** evaluación 26/26 · tope 39/39 ·
 > adjudicación 34/34 · cierre 28/28 · variantes 175/175 · `escenario_jwt.py` 39/39 (clave de Bonita rotada, secreto distinto, token
 > vencido) · UI `e2e_ui` 59/59 · UI parada 2 46/46 · UI ejecución 25/25 · `verificar_despliegue.py` 72/72 · backend 222, nacional 126, tipos del front.
-> Falta: pasar las credenciales y URLs de los conectores a parámetros del proceso (WP12), desplegar en Render (WP7) y el resto de la entrega.
+> Falta: pasar las credenciales y URLs de los conectores a parámetros del proceso (WP12), el resto de la entrega (WP7 hecho: API Nacional en Render, 72/72).
 
 **En una línea:** el flujo completo funciona en local con Bonita real, de la emergencia al cierre y la liberación del stock.
 Falta JWT, el deploy en la nube, Docker Compose, la entrega (README, video, prueba en limpio) y las variantes de prueba.
@@ -41,7 +41,7 @@ La tabla de paquetes de trabajo con responsables y horas está en [`plan-cierre-
 | WP | Qué | h | Quién |
 |---|---|---|---|
 | WP11 | **JWT**: cuentas, `POST /login`, `POST /ongs`, protección por rol. Sin empezar y la consigna lo pide | 8 | Sin responsable (propuesta: Franco C., base `franco_v`) |
-| WP7 | Redesplegar la API Nacional en Render con el código nuevo y Postgres; `verificar_despliegue.py` contra la URL | 4 | Alguien con acceso a Render y a los secrets de GitHub |
+| ~~WP7~~ | **Hecho 18/10**: API Nacional en Render (`https://rescuesync-nacional.onrender.com`, Docker construido desde `dev`, auto-deploy en cada commit, Postgres), `verificar_despliegue.py` 72/72. El servicio viejo (imagen de Docker Hub) quedó suspendido. **La Postgres gratis vence el 15/11**, antes del coloquio (26/11): recrearla o pasarla a plan pago | 0 | Hecho |
 | WP8 | Docker Compose completo (hoy solo hay Postgres), Dockerfile del backend y del front; probar la concurrencia en Postgres | 4 | Alguien con Docker |
 | WP9 | `ui_parada3.py` completo, variantes (cobertura completa, API Nacional caída), repetir contra la nube | 4 | Tomás/Claude |
 | WP10 | README de la raíz y del backend (son de la Entrega 2), guía de la Parada 3, guion de demo, video, prueba en limpio, merge a `main`, tag | 7 | Todos |
