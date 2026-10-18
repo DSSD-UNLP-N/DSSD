@@ -102,24 +102,17 @@ def registrar_cierre(db: Session, emergencia_id: int, cuits: list[str]) -> bool:
         return True
     if e.estado is not EstadoEmergencia.EN_EJECUCION:
         raise ConsolidadoError(f"La emergencia está en {e.estado.value}: no se puede cerrar")
-    # Notificar solo a las ONGs que aún no tienen notificación de cierre para esta emergencia.
-    ong_ids_ya_notificadas: set[int] = set()
-    for n in db.scalars(select(Notificacion).where(
-        Notificacion.emergencia_id == e.id,
-        Notificacion.texto.like("%cerrada%"),
-    )):
-        ong_ids_ya_notificadas.add(n.ong_id)
     if cuits:
         ongs = db.scalars(
             select(Ong).where(Ong.cuit.in_(cuits))
         ).all()
         for ong in ongs:
-            if ong.id not in ong_ids_ya_notificadas:
-                db.add(Notificacion(
-                    ong_id=ong.id,
-                    emergencia_id=e.id,
-                    texto=f"La emergencia #{e.id} fue cerrada. Gracias por tu colaboración.",
-                ))
+            # Idempotent: a repeated event returns early above, once the emergency is RESUELTA.
+            db.add(Notificacion(
+                ong_id=ong.id,
+                emergencia_id=e.id,
+                texto=f"La emergencia #{e.id} fue cerrada. Gracias por tu colaboración.",
+            ))
     e.estado = EstadoEmergencia.RESUELTA
     db.commit()
     return True

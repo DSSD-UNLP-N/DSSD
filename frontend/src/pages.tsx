@@ -1,4 +1,4 @@
-import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from "react";
+import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { api, type Emergencia, type Meta, type Notificacion, type Oferta, type Rol, type TipoRecurso } from "./api";
@@ -129,6 +129,7 @@ function EvaluacionPanel({ e }: { e: Emergencia }) {
 function NotificationBell() {
   const [notifs, setNotifs] = useState<Notificacion[]>([]);
   const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(() => {
     api.listNotificaciones().then(setNotifs).catch(() => {});
@@ -140,6 +141,23 @@ function NotificationBell() {
     return () => clearInterval(t);
   }, [refresh]);
 
+  // Close the dropdown on a click outside it or on Escape.
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (ev: MouseEvent) => {
+      if (ref.current && !ref.current.contains(ev.target as Node)) setOpen(false);
+    };
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
   const unread = notifs.filter((n) => !n.leida).length;
 
   async function markRead(id: number) {
@@ -148,7 +166,7 @@ function NotificationBell() {
   }
 
   return (
-    <div style={{ position: "relative" }}>
+    <div style={{ position: "relative" }} ref={ref}>
       <button
         className="btn btn-ghost light"
         type="button"
