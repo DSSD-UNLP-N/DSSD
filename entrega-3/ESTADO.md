@@ -48,6 +48,14 @@ La tabla de paquetes de trabajo con responsables y horas está en [`plan-cierre-
    usuario de la ONG ya está adoptada). Falta que el equipo lo confirme.
 2. ¿Quién hace JWT? 3. ¿Quién tiene Render y de qué rama se construye? 4. ¿Quién prueba Docker y Postgres?
 
+## CI en GitHub
+`.github/workflows/ci.yml` corre en cada PR y push a `dev`/`main`: tests del backend (incluye migraciones y contratos con Bonita), tests de la
+API Nacional y tipos + build del front. Un job final, **CI verde**, resume todo; ese es el chequeo que exige la regla de las ramas
+(`.github/rulesets/proteger-dev-y-main.json`: nadie pushea directo a `dev`/`main` y el merge queda bloqueado si CI no está verde).
+La regla la tiene que activar un administrador del repo (Franco):
+`gh api -X POST repos/FrancoCirielli16/DSSD/rulesets --input .github/rulesets/proteger-dev-y-main.json`.
+No corren en CI los escenarios con Bonita real ni `verificar_despliegue.py`: se corren a mano antes de mergear a `main`.
+
 ## Cómo se verifica
 ```
 python scripts/verificar_todo.py                                              # tests backend + nacional + tipos del front (~26 s)

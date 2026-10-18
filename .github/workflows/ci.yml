@@ -1,0 +1,79 @@
+name: CI
+
+# Todo PR a dev o main tiene que pasar "CI verde" para poder mergearse (ver .github/rulesets/).
+# No lleva filtros de rutas: tiene que correr siempre, aunque el PR solo toque documentación.
+on:
+  pull_request:
+    branches: [main, dev]
+  push:
+    branches: [main, dev]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      # Incluye las migraciones (una sola cabeza, upgrade/downgrade, modelos = migraciones) y los contratos con Bonita.
+      # test_bonita_integration.py se salta solo: necesita RUN_BONITA_INTEGRATION=1 y Bonita Studio corriendo.
+      - run: python -m pytest -q
+
+  nacional:
+    name: API Nacional (pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nacional
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: nacional/requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      # Las pruebas de concurrencia con Postgres se saltan solas: necesitan POSTGRES_TEST_DATABASE_URL.
+      - run: python -m pytest -q
+
+  frontend:
+    name: Front (tipos y build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+
+  # Un solo chequeo para exigir: si se suma o renombra un job de arriba, la regla de la rama no cambia.
+  ci-verde:
+    name: CI verde
+    needs: [backend, nacional, frontend]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Falla si algún job falló, se canceló o no corrió
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
+        run: |
+          echo "${{ toJSON(needs) }}"
+          exit 1
