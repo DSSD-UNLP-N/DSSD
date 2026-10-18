@@ -54,6 +54,21 @@ def sin_tareas(admin: BonitaClient, caso: int, segundos: int = 40) -> bool:
     return False
 
 
+def esperar_resuelta(api: str, emergencia: int, segundos: int = 60) -> bool:
+    """La tarea humana ya terminó, pero el servicio «Liberar Recursos y Notificar Cierre» (login, cierre en Nacional, aviso
+    a la app) corre después en el motor: hasta que la app recibe el evento CIERRE la emergencia no está RESUELTA."""
+    from app.seed import DEMO_PASSWORD
+
+    sesion = requests.Session()
+    sesion.post(f"{api}/api/auth/login", json={"username": "coordinador.regional", "password": DEMO_PASSWORD}, timeout=30)
+    limite = time.monotonic() + segundos
+    while time.monotonic() < limite:
+        if sesion.get(f"{api}/api/emergencias/{emergencia}", timeout=30).json().get("estado") == "RESUELTA":
+            return True
+        time.sleep(1)
+    return False
+
+
 def contador(page: Page) -> int:
     loc = page.get_by_test_id("campana-contador")
     return int(loc.inner_text()) if loc.count() else 0
@@ -147,6 +162,7 @@ def main() -> int:
                                    json={"tipo": "CIERRE", "cuits": [args.cuit]})
                 r.check("La app acepta el evento CIERRE (204)", ev.status_code == 204, ev.status_code)
 
+            r.check("Bonita liberó y avisó: la app marca la emergencia RESUELTA", esperar_resuelta(args.api, emg))
             page.reload()
             u.ve("Emergencia resuelta", "La emergencia queda «Resuelta»", timeout=30000)
             u.foto("coordinador-resuelta")
