@@ -6,6 +6,9 @@ lo que difiere:
   cerrarAdjudicaciones   POST http://localhost:8002/cierres/lote   {cierres: [{cuit, referencia}]} de las ONGs adjudicadas
   avisarCierre           POST http://localhost:8001/api/bonita/emergencias/${emergenciaId}/eventos   {tipo: CIERRE, cuits}
 
+Además pasa «Confirmar Finalizacion de Actividades» de multi-instancia (sin cardinalidad ni colección, Studio la marca
+con error) a tarea estándar: la app la completa una sola vez, cuando terminaron todas las ONGs.
+
 No modifica el archivo de entrada: escribe uno nuevo para importarlo en Studio (Archivo > Importar) y volver a
 ejecutar. Si el servicio ya tiene conectores, no hace nada.
 
@@ -22,6 +25,7 @@ from xml.dom import minidom
 
 ORIGEN = "Notificar Adjudicacion y Registrar Compromiso Nacional"
 DESTINO = "Liberar Recursos y Notificar Cierre"
+FINALIZACION = "Confirmar Finalizacion de Actividades"
 
 BODY_CERRAR = """def ev = new groovy.json.JsonSlurper().parseText(evaluacionJson)
 def elegidas = new groovy.json.JsonSlurper().parseText(ongsAdjudicadas)
@@ -87,6 +91,13 @@ def cambiar_parametro(texto: str, clave: str, nuevo_contenido: str) -> str:
     return texto[:ini] + nuevo_contenido + texto[fin:]
 
 
+def quitar_multiinstancia(proc: str) -> str:
+    """Quita `type="PARALLEL"` de la tarea de finalización (sin ese atributo Studio la trata como estándar)."""
+    ini = proc.rindex("<elements ", 0, proc.index(f'name="{FINALIZACION}"'))
+    fin = proc.index(">", ini)
+    return proc[:ini] + proc[ini:fin].replace(' type="PARALLEL"', "") + proc[fin:]
+
+
 def agregar(proc: str) -> str:
     t_ini = proc.index(f'name="{DESTINO}"')
     t_ini = proc.rindex("<elements ", 0, t_ini)
@@ -119,7 +130,7 @@ def main(entrada: str, salida: str) -> None:
     with zipfile.ZipFile(entrada) as zin:
         nombre = next(n for n in zin.namelist() if n.endswith(".proc"))
         proc = zin.read(nombre).decode("utf-8")
-        nuevo = agregar(proc)
+        nuevo = quitar_multiinstancia(agregar(proc))
         minidom.parseString(nuevo.encode("utf-8"))  # que siga siendo XML válido
         with zipfile.ZipFile(salida, "w") as zout:
             for info in zin.infolist():
@@ -127,6 +138,7 @@ def main(entrada: str, salida: str) -> None:
                 zout.writestr(info, datos, compress_type=info.compress_type)
     print(f"Listo: {salida}")
     print(f"  «{DESTINO}» ahora tiene los conectores cerrarAdjudicaciones y avisarCierre.")
+    print(f"  «{FINALIZACION}» quedó como tarea estándar.")
 
 
 if __name__ == "__main__":
