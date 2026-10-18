@@ -9,16 +9,22 @@ from datetime import date, timedelta
 from sqlalchemy import select
 
 from app.db import SessionLocal
+from app.config import get_settings
 from app.models import (
     CategoriaRecurso as Cat,
     Certificacion,
+    Cuenta,
     EstadoOng,
     Inventario,
     Ong,
     OngCertificacion,
     Riesgo,
+    RolCuenta,
     TipoRecurso,
 )
+from app.security import hash_password
+
+DEMO_PASSWORD = "demo1234"
 
 CERTIFICACIONES = [
     ("SALUD_PREHOSP", "Atención de salud prehospitalaria", "Emergencias médicas en terreno y traslado"),
@@ -73,6 +79,7 @@ ONGS = [
 
 def seed(session_factory=SessionLocal) -> None:
     hoy = date.today()
+    settings = get_settings()
     with session_factory() as db:
         certs = {}
         for codigo, nombre, descripcion in CERTIFICACIONES:
@@ -94,18 +101,52 @@ def seed(session_factory=SessionLocal) -> None:
             tipos[codigo] = tipo
 
         for cuit, nombre, estado, certificaciones, inventario in ONGS:
-            if db.scalar(select(Ong).where(Ong.cuit == cuit)) is not None:
-                continue
-            db.add(Ong(
-                cuit=cuit, nombre=nombre, estado=estado,
-                certificaciones=[
-                    OngCertificacion(certificacion=certs[c], riesgo_max=riesgo, vence_el=hoy + timedelta(days=dias))
-                    for c, (riesgo, dias) in certificaciones.items()
-                ],
-                inventario=[
-                    Inventario(tipo_recurso=tipos[t], cantidad_total=cantidad) for t, cantidad in inventario.items()
-                ],
-            ))
+            ong = db.scalar(select(Ong).where(Ong.cuit == cuit))
+            if ong is None:
+                ong = Ong(
+                    cuit=cuit, nombre=nombre, estado=estado,
+                    certificaciones=[
+                        OngCertificacion(certificacion=certs[c], riesgo_max=riesgo,
+                                         vence_el=hoy + timedelta(days=dias))
+                        for c, (riesgo, dias) in certificaciones.items()
+                    ],
+                    inventario=[
+                        Inventario(tipo_recurso=tipos[t], cantidad_total=cantidad)
+                        for t, cantidad in inventario.items()
+                    ],
+                )
+                db.add(ong)
+                db.flush()
+            username = {
+                "30-54666544-5": "ong.cruzroja",
+                "30-68522415-9": "ong.bomberos",
+            }.get(cuit)
+            if username and db.scalar(select(Cuenta.id).where(Cuenta.username == username)) is None:
+                db.add(Cuenta(
+                    username=username, password_hash=hash_password(DEMO_PASSWORD),
+                    rol=RolCuenta.ONG, ong=ong,
+                ))
+
+        usuarios_demo = [
+            ("operador.municipal", RolCuenta.MUNICIPIO),
+            ("operador.municipal2", RolCuenta.MUNICIPIO),
+            ("coordinador.regional", RolCuenta.COORDINADOR),
+            ("auditor", RolCuenta.AUDITOR),
+        ]
+        for username, rol in usuarios_demo:
+            if db.scalar(select(Cuenta.id).where(Cuenta.username == username)) is None:
+                db.add(Cuenta(username=username, password_hash=hash_password(DEMO_PASSWORD), rol=rol))
+
+        # Cuentas de servicio: la clave sale del entorno y se vuelve a fijar en cada seed (así se rota).
+        for username, password in (
+            (settings.bonita_service_username, settings.bonita_service_password),
+            (settings.app_service_username, settings.app_service_password),
+        ):
+            servicio = db.scalar(select(Cuenta).where(Cuenta.username == username))
+            if servicio is None:
+                db.add(Cuenta(username=username, password_hash=hash_password(password), rol=RolCuenta.BONITA))
+            else:
+                servicio.password_hash = hash_password(password)
         db.commit()
 
 

@@ -16,9 +16,10 @@ from app.schemas import (
     OngOut,
     TipoRecursoOut,
 )
+from app.security import get_current_account
 from app.services.catalogo import riesgo_permitido
 
-router = APIRouter(tags=["catálogo"])
+router = APIRouter(tags=["catálogo"], dependencies=[Depends(get_current_account)])
 
 
 def _tipo_out(t: TipoRecurso) -> TipoRecursoOut:

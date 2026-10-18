@@ -8,9 +8,10 @@ from app.db import get_db
 from app.models import CierreItem, CierreOperativo, Ong
 from app.routers.reservas import _ERRORES, _http
 from app.schemas import CierreIn, CierreItemOut, CierreLoteIn, CierreOut
+from app.security import require_servicio
 from app.services import reservas
 
-router = APIRouter(tags=["cierre"])
+router = APIRouter(tags=["cierre"], dependencies=[Depends(require_servicio)])
 
 
 def _out(cierre: CierreOperativo) -> CierreOut:

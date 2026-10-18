@@ -2,7 +2,7 @@
 
 API externa de la consigna (servicio 3): catálogo de certificaciones y recursos, inventario de las
 ONGs y validación de ofertas por niveles de competencia. Corre aparte de `backend/` (la app local).
-SQLite en desarrollo y Postgres en la nube. JWT todavía no está: entra como `Depends` sin cambiar estos contratos.
+SQLite en desarrollo y Postgres en la nube. Emite los JWT que la app local reenvía en sus llamadas.
 
 ## Correr
 
@@ -16,6 +16,12 @@ uvicorn app.main:app --port 8002 --reload
 
 `DATABASE_URL` (en `nacional/.env` o el entorno) por defecto es `nacional/nacional.db` (SQLite). Ojo: `backend/`
 lee la misma variable; si exportás una en la terminal, la leen los dos.
+Configurar el mismo `JWT_SECRET` y `JWT_EXPIRATION_MINUTES` en `backend/.env` y
+`nacional/.env`: Nacional firma el JWT de `/login` y el backend local lo valida
+con esos mismos valores. En desarrollo, ambos usan `dev-only-change-me` y 60
+minutos por defecto. Después de migrar y ejecutar el seed, las cuentas de demo
+(`demo1234`) y la cuenta indicada por `BONITA_SERVICE_USERNAME` /
+`BONITA_SERVICE_PASSWORD` están creadas.
 
 - Swagger: http://localhost:8002/docs
 - Estado: http://localhost:8002/health
@@ -24,18 +30,37 @@ lee la misma variable; si exportás una en la terminal, la leen los dos.
 
 | Método | Ruta | Qué hace |
 |---|---|---|
-| GET | `/tipos-recurso` | Catálogo: código, nombre, categoría, unidad, certificación requerida |
-| GET | `/certificaciones` | Catálogo, con los tipos de recurso que habilita cada una |
-| GET | `/ongs?estado=HABILITADA` | ONGs del registro (filtro opcional por estado) |
-| GET | `/ongs/{cuit}` | Ficha: certificaciones (vigente o no), inventario y riesgo permitido por recurso |
-| PUT | `/ongs/{cuit}/inventario` | Declara `cantidad_total` por tipo de recurso (upsert); 409 si queda por debajo de lo comprometido |
-| GET | `/recursos/disponibilidad?tipo_recurso=` | Disponibilidad global (solo ONGs habilitadas) con desglose por ONG |
-| POST | `/validaciones` | Valida cantidades y competencia; **no guarda nada** |
-| POST | `/adjudicaciones` | Compromete inventario de forma atómica e idempotente |
-| POST | `/cierres` | Cierra una adjudicación (`{cuit, referencia}`) y libera exactamente lo que tenía comprometido |
-| POST | `/cierres/lote` | Lo mismo para varias ONGs en una llamada (`{cierres: [{cuit, referencia}]}`); todo o nada, idempotente |
-| GET | `/cierres/{id}` | Un cierre ya informado |
-| GET | `/ongs/{cuit}/cierres` | Cierres de una ONG |
+| POST | `/login` | Público: valida una cuenta y emite un JWT con usuario, rol, ONG y vencimiento |
+| POST | `/ongs` | Público: registra la ONG junto con su cuenta representante y emite un JWT |
+| GET | `/tipos-recurso` | JWT de cualquier rol: catálogo de recursos |
+| GET | `/certificaciones` | JWT de cualquier rol: catálogo de certificaciones |
+| GET | `/ongs?estado=HABILITADA` | JWT de cualquier rol: ONGs del registro |
+| GET | `/ongs/{cuit}` | JWT de cualquier rol: ficha de la ONG |
+| PUT | `/ongs/{cuit}/inventario` | Solo la cuenta ONG cuyo CUIT coincide con `{cuit}` |
+| GET | `/recursos/disponibilidad?tipo_recurso=` | JWT de cualquier rol: disponibilidad global |
+| POST | `/validaciones` | Cualquier JWT: valida cantidades y competencia; **no guarda nada** |
+| POST | `/evaluaciones` | Solo cuentas de servicio |
+| POST | `/adjudicaciones` | Solo cuentas de servicio: compromete inventario de forma atómica |
+| POST | `/adjudicaciones/{referencia}/confirmar` | Solo cuentas de servicio |
+| POST | `/adjudicaciones/{referencia}/liberar` | Solo cuentas de servicio |
+| POST | `/adjudicaciones/resolucion` | Solo cuentas de servicio |
+| POST | `/cierres` | Solo cuentas de servicio: informa el cierre de una adjudicación (`{cuit, referencia}`) y libera exactamente lo que tenía comprometido |
+| POST | `/cierres/lote` | Solo cuentas de servicio: lo mismo para varias ONGs en una llamada (`{cierres: [{cuit, referencia}]}`); todo o nada, idempotente |
+| GET | `/cierres/{id}` | Solo cuentas de servicio |
+| GET | `/ongs/{cuit}/cierres` | Solo cuentas de servicio |
+
+Los endpoints protegidos exigen `Authorization: Bearer <access_token>`. La API valida firma, vencimiento,
+identidad y rol contra la tabla `cuenta`. El JWT debe incluir `sub`, `username`, `rol`, `cuit`, `iat` y `exp`.
+Un token ONG solo puede modificar el inventario de la ONG que tiene asociada; los endpoints de evaluación,
+adjudicación y cierre exigen específicamente la cuenta BONITA.
+`/health` también es público.
+
+Hay dos cuentas de servicio (rol `BONITA`): `bonita-service`, para los conectores de Bonita, y `app-service`, para la
+app local. Las personas (Municipio, Coordinador, ONG, Auditor) inician sesión en la app, no acá: la app valida sus
+credenciales con su propia base y, cuando necesita al Sistema Nacional, hace `POST /login` con `app-service`. Bonita hace
+lo mismo con `bonita-service`: sus parámetros de proceso `nacionalServiceUsername` y `nacionalServicePassword` van a
+`/login` y el JWT devuelto se manda en las llamadas protegidas. Las cuentas de ONG (`POST /ongs`) sirven para usar esta
+API directamente, por ejemplo desde Swagger.
 
 ### `POST /validaciones`
 
@@ -99,9 +124,9 @@ pytest
 ```
 app/
   main.py      # app FastAPI
-  config.py    # variables de entorno (DATABASE_URL)
+  config.py    # variables de entorno (DATABASE_URL, JWT y cuenta de Bonita)
   db.py        # engine, sesión, Base
-  models.py    # ong, certificacion, tipo_recurso, ong_certificacion, inventario, cierre
+  models.py    # cuenta, ong, certificacion, tipo_recurso, inventario, cierre
   schemas.py   # entrada/salida de la API
   routers/     # catalogo, inventario, validacion, cierre
   services/    # reglas (competencia y validación), sin HTTP

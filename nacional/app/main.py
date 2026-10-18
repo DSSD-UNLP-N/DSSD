@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 
 from app.config import get_settings
-from app.routers import adjudicacion, catalogo, cierre, inventario, reservas, validacion
+from app.routers import adjudicacion, auth, catalogo, cierre, inventario, reservas, validacion
 
 
 app = FastAPI(
@@ -10,6 +10,7 @@ app = FastAPI(
     "validación de ofertas por niveles de competencia y cierre operativo (libera recursos bloqueados).",
 )
 
+app.include_router(auth.router)
 app.include_router(catalogo.router)
 app.include_router(inventario.router)
 app.include_router(validacion.router)

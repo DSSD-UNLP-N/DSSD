@@ -42,6 +42,14 @@ class CategoriaRecurso(str, enum.Enum):
     INSUMO = "INSUMO"
 
 
+class RolCuenta(str, enum.Enum):
+    ONG = "ONG"
+    MUNICIPIO = "MUNICIPIO"
+    COORDINADOR = "COORDINADOR"
+    AUDITOR = "AUDITOR"
+    BONITA = "BONITA"
+
+
 class Ong(Base):
     __tablename__ = "ong"
 
@@ -54,6 +62,18 @@ class Ong(Base):
         back_populates="ong", cascade="all, delete-orphan"
     )
     inventario: Mapped[list["Inventario"]] = relationship(back_populates="ong", cascade="all, delete-orphan")
+
+
+class Cuenta(Base):
+    __tablename__ = "cuenta"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(String(60), unique=True)
+    password_hash: Mapped[str] = mapped_column(String(200))
+    rol: Mapped[RolCuenta] = mapped_column(_enum(RolCuenta))
+    ong_id: Mapped[int | None] = mapped_column(ForeignKey("ong.id"))
+
+    ong: Mapped[Ong | None] = relationship()
 
 
 class Certificacion(Base):

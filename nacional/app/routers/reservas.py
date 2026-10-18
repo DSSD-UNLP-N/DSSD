@@ -7,10 +7,11 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.schemas import EvaluacionIn, EvaluacionOut, LiberacionOut, ReservaOut, ResolucionIn, ResolucionOut
+from app.security import require_servicio
 from app.services import reservas
 from app.services.validacion import TipoRecursoDesconocido
 
-router = APIRouter(tags=["Reservas"])
+router = APIRouter(tags=["Reservas"], dependencies=[Depends(require_servicio)])
 
 
 def _http(exc: Exception) -> HTTPException:
@@ -78,4 +79,3 @@ def resolver_reservas(body: ResolucionIn, db: Session = Depends(get_db)):
         return reservas.resolver(db, body.confirmar, body.liberar)
     except _ERRORES as exc:
         raise _http(exc) from exc
-

@@ -8,8 +8,9 @@ from sqlalchemy.orm import Session, selectinload
 from app.db import get_db
 from app.models import Adjudicacion, AdjudicacionItem, Inventario
 from app.schemas import AdjudicacionIn, AdjudicacionItemOut, AdjudicacionOut
+from app.security import require_servicio
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_servicio)])
 
 
 def _obtener_adjudicacion(db: Session, referencia_id: str) -> Adjudicacion | None:
@@ -42,6 +43,7 @@ def adjudicar(
     db: Session = Depends(get_db),
 ) -> AdjudicacionOut:
     """Compromete inventario bajo locks pesimistas e idempotencia por referencia."""
+    db.rollback()
     cantidades: dict[int, int] = {}
     for item in body.items:
         if item.inventario_id in cantidades:

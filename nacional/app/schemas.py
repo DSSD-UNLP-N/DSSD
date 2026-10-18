@@ -1,8 +1,38 @@
 import enum
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.models import CategoriaRecurso, EstadoAdjudicacion, EstadoOng, Riesgo
+
+
+class LoginIn(BaseModel):
+    username: str = Field(min_length=1)
+    password: str = Field(min_length=1)
+
+
+class RegisterOngIn(BaseModel):
+    ong_nombre: str = Field(min_length=2, max_length=120)
+    cuit: str = Field(pattern=r"^\d{2}-?\d{8}-?\d$")
+    nombre: str = Field(min_length=2, max_length=120)
+    username: str = Field(min_length=3, max_length=60)
+    password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("ong_nombre", "nombre", "username", "cuit", mode="before")
+    @classmethod
+    def strip_text(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
+class CuentaOut(BaseModel):
+    username: str
+    rol: str
+    cuit: str | None = None
+
+
+class TokenOut(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: CuentaOut
 
 
 class TipoRecursoOut(BaseModel):
@@ -265,4 +295,3 @@ class ResolucionIn(BaseModel):
 class ResolucionOut(BaseModel):
     confirmadas: list[ReservaOut]
     liberadas: list[LiberacionOut]
-
