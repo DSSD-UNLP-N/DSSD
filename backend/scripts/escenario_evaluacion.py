@@ -13,6 +13,7 @@ seed y sin nada comprometido. Tarda unos 3 minutos.
 """
 from __future__ import annotations
 
+import os
 import argparse
 import sys
 import time
@@ -32,7 +33,7 @@ from app.core.config import get_settings  # noqa: E402
 from app.integrations.bonita import BonitaClient  # noqa: E402
 
 CRUZ_ROJA, BOMBEROS = "30-54666544-5", "30-68522415-9"
-VENTANA_S = 150  # alcanza para crear las dos emergencias, cargar las ofertas y esperar el temporizador
+VENTANA_S = int(os.environ.get("ESCENARIO_VENTANA_S", 60))  # alcanza para crear las dos emergencias y cargar las ofertas
 
 
 def comprometido(nacional: str, cuit: str, tipo: str) -> int:

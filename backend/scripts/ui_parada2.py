@@ -123,7 +123,7 @@ def adjudicar(u: Ui, app: str, emergencia: int, cuit: str, foto_antes: str, foto
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--app", default="http://localhost:5173")
-    ap.add_argument("--ventana", type=int, default=5, help="minutos hasta el cierre de la primera ventana")
+    ap.add_argument("--ventana", type=int, default=2, help="minutos hasta el cierre de la primera ventana")
     ap.add_argument("--visible", action="store_true", help="navegador visible")
     args = ap.parse_args()
 
@@ -227,7 +227,7 @@ def main() -> int:
             r.check("B: Bonita volvió a «Revisar Informacion»", tarea_activa(admin, caso_b).startswith("Revisar Informacion"),
                     tarea_activa(admin, caso_b))
             u.foto("coordinador-reformulada-b")
-            fin2 = (datetime.now().astimezone() + timedelta(minutes=3)).replace(second=0, microsecond=0)
+            fin2 = (datetime.now().astimezone() + timedelta(minutes=2)).replace(second=0, microsecond=0)
             publicar(u, fin2)
             u.foto("coordinador-ronda-2-b")
             u.salir()

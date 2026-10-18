@@ -23,6 +23,7 @@ seed y nada comprometido, las dos locales con SQLite. D y D2 apagan y vuelven a 
 """
 from __future__ import annotations
 
+import os
 import argparse
 import sqlite3
 import subprocess
@@ -51,7 +52,7 @@ from app.core.config import get_settings  # noqa: E402
 from app.integrations.bonita import BonitaClient  # noqa: E402
 from app.seed import DEMO_PASSWORD  # noqa: E402
 
-VENTANA_S = 140
+VENTANA_S = int(os.environ.get("ESCENARIO_VENTANA_S", 60)) + 15  # la primera emergencia vence a los 75 s
 ESCALON_S = 12  # cada emergencia vence unos segundos después de la anterior
 NACIONAL_DB = REPO / "nacional" / "nacional.db"
 CLAVES = [(CRUZ_ROJA, "PARAMEDICO"), (BOMBEROS, "PARAMEDICO"), (CRUZ_ROJA, "AGUA_POTABLE")]

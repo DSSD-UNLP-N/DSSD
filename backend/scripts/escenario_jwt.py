@@ -3,7 +3,7 @@
   G  clave de Bonita rotada   Nacional cambia la clave de `bonita-service` justo antes de validar el cierre: `loginNacional`
                               recibe 401 y el nodo de Bonita queda fallido. No se cerró nada en Nacional, la app sigue
                               funcionando (usa su propia cuenta) y, con la clave de vuelta, `recuperar_cierre.py` lo termina.
-  H  token inválido o vencido La API Nacional se reinicia con otro `JWT_SECRET` y tokens de 1 minuto: la app, que tenía un token
+  H  token inválido o vencido La API Nacional se reinicia con otro `JWT_SECRET` y tokens de 15 segundos: la app, que tenía un token
                               guardado, vuelve a entrar sola (401 -> login -> reintento), y lo vuelve a hacer cuando vence.
 
 Al final: nada comprometido en la API Nacional, ninguna reserva abierta y ningún caso abierto en Bonita.
@@ -110,15 +110,15 @@ def escenario_g(ctx: Ctx) -> None:
 
 def escenario_h(ctx: Ctx) -> None:
     e = ctx.e
-    print("\n== H: Nacional se reinicia con otro secreto y tokens de 1 minuto")
+    print("\n== H: Nacional se reinicia con otro secreto y tokens de 15 segundos")
     e.check("H: el catálogo responde (la app inicia sesión en Nacional)", e.get(COORDINADOR, "/tipos-recurso").status_code == 200)
     e.check("H: se apagó la API Nacional", apagar(8002))
-    e.check("H: se levantó con otro JWT_SECRET y tokens de 1 minuto",
-            levantar_nacional_con({"JWT_SECRET": "otro-secreto-de-prueba", "JWT_EXPIRATION_MINUTES": "1"}))
+    e.check("H: se levantó con otro JWT_SECRET y tokens de 15 segundos",
+            levantar_nacional_con({"JWT_SECRET": "otro-secreto-de-prueba", "JWT_EXPIRATION_MINUTES": "0.25"}))
     e.check("H: el token que la app tenía ya no vale, vuelve a entrar sola y responde 200",
             e.get(COORDINADOR, "/tipos-recurso").status_code == 200)
-    print("     esperando 70 s a que venza el token de 1 minuto…")
-    time.sleep(70)
+    print("     esperando 20 s a que venza el token de 15 segundos…")
+    time.sleep(20)
     e.check("H: con el token vencido, la app vuelve a entrar sola y responde 200", e.get(COORDINADOR, "/tipos-recurso").status_code == 200)
     e.check("H: se apagó la API Nacional de prueba", apagar(8002))
     e.check("H: se levantó la API Nacional normal", levantar("nacional", 8002, "/health"))

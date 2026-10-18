@@ -15,6 +15,7 @@ Nacional"; app en :8001; API Nacional en :8002 con el seed y nada comprometido. 
 """
 from __future__ import annotations
 
+import os
 import argparse
 import sys
 import time
@@ -34,7 +35,9 @@ from app.core.config import get_settings  # noqa: E402
 from app.integrations.bonita import BonitaClient  # noqa: E402
 
 CRUZ_ROJA, BOMBEROS = "30-54666544-5", "30-68522415-9"
-VENTANA_S = 130
+# Segundos de la ventana de ofertas. Tiene que alcanzar para crear las emergencias y cargar las ofertas (unos 20 s en una PC
+# cargada); es casi todo lo que tarda cada escenario, así que se puede achicar o agrandar con ESCENARIO_VENTANA_S.
+VENTANA_S = int(os.environ.get("ESCENARIO_VENTANA_S", 60))
 
 
 def comprometido(nacional: str, cuit: str, tipo: str) -> int:

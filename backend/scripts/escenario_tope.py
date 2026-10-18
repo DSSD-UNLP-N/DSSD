@@ -12,6 +12,7 @@ datos del seed (Cruz Roja: 4 paramédicos, 3000 L de agua; Bomberos: 6 paramédi
 """
 from __future__ import annotations
 
+import os
 import argparse
 import sys
 import time
@@ -27,7 +28,7 @@ from app.core.config import get_settings  # noqa: E402
 from app.integrations.bonita import BonitaClient  # noqa: E402
 from app.seed import DEMO_PASSWORD  # noqa: E402
 
-VENTANA_CORTA_S = 100  # la tercera convocatoria vence durante la corrida
+VENTANA_CORTA_S = int(os.environ.get("ESCENARIO_VENTANA_S", 60)) + 20  # la tercera convocatoria vence durante la corrida
 
 
 class Escenario:
