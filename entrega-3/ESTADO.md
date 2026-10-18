@@ -5,12 +5,12 @@ Rama `modelado-tomas-e-3`. El [PR #10](https://github.com/FrancoCirielli16/DSSD/
 (cierre, ejecución, conectores, scripts, docs) está commiteado en la rama y **sin pushear**.
 
 > **Rama `integracion-jwt` (18/10)**, salida del tag `e3-estable-20261017` (la versión estable, sin JWT). Trae `nacional/` de `dev`
-> (JWT: `/login`, `/ongs`, cuentas, 126 tests) y deja la app con su sesión por cookie. La app y Bonita entran a Nacional con cuentas de
-> servicio (`app-service`, `bonita-service`); las personas no necesitan cuenta ahí. Hecho y probado: Nacional 126 tests,
-> `verificar_despliegue.py` 72/72 contra una API local con JWT, backend 222 tests, cliente de la app con renovación del token ante 401,
-> escenarios con el token. **Falta probar con Bonita real**: importar `entrega41_20261017_1311_cierre_jwt.bos` en Studio, Run, y repetir
-> `escenario_cierre.py` y `escenario_cierre_variantes.py` (ver [`CAMBIOS-BONITA.md`](CAMBIOS-BONITA.md), «Login a la API Nacional»).
-> Hasta entonces los conectores del `.bos` desplegado reciben 401 de una API Nacional con JWT.
+> (JWT: `/login`, `/ongs`, cuentas) y deja la app con su sesión por cookie. La app y Bonita entran a Nacional con cuentas de servicio
+> (`app-service`, `bonita-service`); las personas no necesitan cuenta ahí. Bonita usa `entrega41_20261017_1311_cierre_jwt.bos`
+> (importado y ejecutado en Studio el 18/10). **Probado todo con Bonita real y bases nuevas (18/10):** evaluación 26/26 · tope 39/39 ·
+> adjudicación 34/34 · cierre 28/28 · variantes 175/175 · `escenario_jwt.py` 39/39 (clave de Bonita rotada, secreto distinto, token
+> vencido) · UI `e2e_ui` 59/59 · UI parada 2 46/46 · UI ejecución 25/25 · `verificar_despliegue.py` 72/72 · backend 222, nacional 126, tipos del front.
+> Falta: pasar las credenciales y URLs de los conectores a parámetros del proceso (WP12), desplegar en Render (WP7) y el resto de la entrega.
 
 **En una línea:** el flujo completo funciona en local con Bonita real, de la emergencia al cierre y la liberación del stock.
 Falta JWT, el deploy en la nube, Docker Compose, la entrega (README, video, prueba en limpio) y las variantes de prueba.
