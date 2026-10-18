@@ -4,12 +4,12 @@ Parte de una emergencia ya adjudicada (EN_EJECUCION) cuyo caso de Bonita espera 
 Despliegue", y la lleva hasta RESUELTA con tres perfiles: Coordinador, ONG y Municipio. En cada paso verifica lo que
 se ve en pantalla y en qué tarea quedó el caso de Bonita (y con qué usuario la completó el motor).
 
-Mientras el conector "Liberar Recursos y Notificar Cierre" no exista en Bonita, el aviso `CIERRE` no llega solo:
-con --simular-cierre el script lo manda como lo mandaría el conector.
+Con los conectores de cierre desplegados en Bonita el aviso `CIERRE` llega solo. Con un `.bos` anterior, que no los tiene,
+--simular-cierre manda el aviso como lo mandaría el conector.
 
 Requisitos: Bonita con el proceso desplegado, app en :8001 y front en :5173; Chrome o Chromium.
 
-    python scripts/ui_ejecucion.py --emergencia 22 --caso 12001 --ong ong.cruzroja --simular-cierre
+    python scripts/ui_ejecucion.py --emergencia 22 --caso 12001 --ong ong.cruzroja
 """
 from __future__ import annotations
 
