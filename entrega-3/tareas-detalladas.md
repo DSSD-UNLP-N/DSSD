@@ -266,8 +266,9 @@ recorrido completo anda con Bonita en el host.
 **Para qué**: la consigna espera que todo funcione de punta a punta; esto lo demuestra y deja la evidencia.
 
 **Hecho**: `escenario_tope.py` (39), `escenario_evaluacion.py` (26/26), `escenario_adjudicacion.py` (34/34), `ui_parada2.py`
-(46/46, con guía ilustrada), `escenario_cierre.py` (28/28), `ui_ejecucion.py` (24/25) y `verificar_despliegue.py` (61/61 en local).
-**Falta**: `ui_parada3.py` completo por la interfaz, las variantes (cobertura completa, API Nacional caída) y repetir todo contra la nube.
+(46/46, con guía ilustrada), `escenario_cierre.py` (28/28), `escenario_cierre_variantes.py` (subconjunto de ONGs, cobertura completa, ronda 2, API Nacional
+caída, app caída, finalizaciones simultáneas, eventos a mano), `ui_ejecucion.py` y `verificar_despliegue.py` (61/61 en local).
+**Falta**: `ui_parada3.py` completo por la interfaz y repetir todo contra la nube (y contra Postgres).
 
 **Qué había que hacer**
 1. **`backend/scripts/escenario_completo.py`** (Bonita real + API Nacional): crea la emergencia, lotes, publica con

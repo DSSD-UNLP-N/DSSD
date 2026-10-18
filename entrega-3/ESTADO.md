@@ -18,7 +18,13 @@ La tabla de paquetes de trabajo con responsables y horas está en [`plan-cierre-
 - **Pruebas con Bonita real**: Parada 1 26/26 · Parada 2 34/34 por API y 46/46 por la interfaz (guía ilustrada
   [`guia-parada-2.html`](guia-parada-2.html)) · **cierre `escenario_cierre.py` 28/28** (las dos ONGs, Bonita libera sola y avisa) ·
   ejecución por la interfaz `ui_ejecucion.py` 24/25 (la falla era una espera del script, ya corregida).
-- **Tests**: backend 205 pasan / 2 se saltean (16 s) · API Nacional 99 / 3 · tipos del front sin errores ·
+- **Todo de nuevo desde cero (17/10 noche)**: bases locales nuevas (migraciones + seed) y `escenario_cierre.py` 28/28, más la batería
+  `escenario_cierre_variantes.py` con Bonita real: subconjunto de ONGs, cobertura completa en la ronda 1, reformulación y cierre de la
+  referencia `r2`, permisos y repeticiones, dos ONGs finalizando a la vez, API Nacional caída, app caída y eventos `CIERRE` a mano.
+  Dejó el stock en cero y ningún caso abierto en Bonita.
+- **Carrera corregida**: si las dos ONGs finalizaban en el mismo instante, ninguna completaba «Confirmar Finalizacion» y el caso
+  quedaba trabado con las dos ofertas FINALIZADAS. Hay un test que fuerza ese orden.
+- **Tests**: backend 206 pasan / 2 se saltean (17 s) · API Nacional 99 / 3 · tipos del front sin errores ·
   `verificar_despliegue.py` en local 61/61.
 - Hallazgo: «Confirmar Finalizacion» sigue marcada multi-instancia sin configurar y el motor crea una sola instancia; la app la completa
   con el usuario de la ONG que finaliza última. Alcanza; en Studio se puede cambiar a «Estándar» para sacar el aviso rojo.
@@ -32,13 +38,14 @@ La tabla de paquetes de trabajo con responsables y horas está en [`plan-cierre-
 | WP9 | `ui_parada3.py` completo, variantes (cobertura completa, API Nacional caída), repetir contra la nube | 4 | Tomás/Claude |
 | WP10 | README de la raíz y del backend (son de la Entrega 2), guía de la Parada 3, guion de demo, video, prueba en limpio, merge a `main`, tag | 7 | Todos |
 | WP12 | Parámetros de Bonita por entorno y prueba contra la nube (M14) | 3 | Tomás (Studio) |
-| WP4 | Re-exportar el `.bos` final desde Studio y commitearlo | 0,5 | Tomás |
+| WP4 | Importar `entrega41_20261017_1311_cierre_v2.bos` en Studio (trae «Confirmar Finalizacion» como tarea estándar), repetir los escenarios y re-exportar el `.bos` final | 1 | Tomás |
 
 ## Decisiones abiertas
-1. **Dos implementaciones de WP3 + WP6**: esta rama y el [PR #11](https://github.com/FrancoCirielli16/DSSD/pull/11). Las dos funcionan con
-   Bonita real hasta validar el cierre. Esta rama además trae `/cierres/lote`, los conectores de cierre, el resumen de ejecución para
-   todos los roles y los escenarios. **Las dos agregan una migración `0006` con distinto nombre**: juntas dejan Alembic con dos
-   cabezas. Hay que quedarse con una antes de mergear nada a `dev`.
+1. **Dos implementaciones de WP3 + WP6**: esta rama y el [PR #11](https://github.com/FrancoCirielli16/DSSD/pull/11). Comparadas a fondo
+   el 17/10: esta rama es un superconjunto (el PR #11 no tiene `/cierres/lote`, así que Bonita no puede liberar sola; ni el estado de
+   cierre validado, ni el resumen para todos los roles, ni escenarios). **Las dos agregan una migración `0006` con distinto nombre**:
+   juntas dejan Alembic con dos cabezas. Propuesta: quedarse con esta rama y cerrar el PR #11 (la idea de completar la tarea con el
+   usuario de la ONG ya está adoptada). Falta que el equipo lo confirme.
 2. ¿Quién hace JWT? 3. ¿Quién tiene Render y de qué rama se construye? 4. ¿Quién prueba Docker y Postgres?
 
 ## Cómo se verifica
@@ -47,6 +54,8 @@ python scripts/verificar_todo.py                                              # 
 python backend/scripts/escenario_evaluacion.py                                # Parada 1 (Bonita real)
 python backend/scripts/escenario_adjudicacion.py                              # Parada 2 por API (Bonita real, ~8 min)
 python backend/scripts/escenario_cierre.py                                    # de la adjudicación al cierre (Bonita real, ~6 min)
+python backend/scripts/escenario_cierre_variantes.py                          # todas las variantes del cierre (Bonita real, ~17 min; apaga y levanta Nacional y app)
+python backend/scripts/recuperar_cierre.py 12                                 # destraba un cierre cuyo nodo de Bonita quedó fallido
 python backend/scripts/ui_parada2.py                                          # Parada 2 por la interfaz, con capturas (~15 min)
 python backend/scripts/ui_ejecucion.py --emergencia N --caso C --simular-cierre   # ejecución y cierre por la interfaz
 python backend/scripts/escenario_tope.py                                      # tope de ofertas
@@ -66,6 +75,9 @@ Los escenarios necesitan Bonita (`:8080`) con el proceso desplegado, la app (`:8
 - Nube: la base de Render persiste. Una referencia ya `LIBERADA` o `CERRADA` da 409. No reiniciar la base local al probar contra la nube
   (los ids de emergencia se reusarían y chocarían con las referencias viejas).
 - Nunca apuntar `POSTGRES_TEST_DATABASE_URL` a la base de la demo: las pruebas de concurrencia hacen `drop_all`.
+- Si la API Nacional o la app no responden cuando se valida el cierre, Bonita deja «Liberar Recursos y Notificar Cierre» como nodo
+  fallido y la API REST no permite reintentarlo: se destraba con `recuperar_cierre.py` (ver `CAMBIOS-BONITA.md`). En la demo en la
+  nube, despertar la API Nacional de Render antes de validar el cierre.
 - Windows: correr los scripts con `PYTHONIOENCODING=utf-8` si fallan por un carácter.
 - El `.bos` es binario: edita una sola persona a la vez.
 

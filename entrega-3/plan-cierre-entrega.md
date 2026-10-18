@@ -22,7 +22,7 @@ JWT (servicio 1) quedó fuera por decisión del 15/10 y **sigue sin hacerse: es 
 | **WP6** Notificaciones, ejecución y cierre | Evento `CIERRE`, avisos, monitorear, finalizar, validar cierre, campana | ✅ Hecho | — (ver "Decisiones abiertas") | — | 0 |
 | **WP7** Deploy en Render | Código nuevo, Postgres, deploy hook; `verificar_despliegue.py` (61 chequeos) contra la URL | ⏳ Pendiente | Todo. **La nube corre código viejo** | Alguien con acceso a Render y a los secrets de GitHub | 4 |
 | **WP8** Docker Compose | Compose completo (hoy solo hay Postgres), Dockerfile del backend y del front, probarlo | ⏳ Pendiente | Todo | Alguien con Docker funcionando | 4 |
-| **WP9** Pruebas end to end | Hechos: Parada 1 (26/26), Parada 2 (34/34 y 46/46 por UI), cierre (28/28), tope (39) | 🔶 Parcial | `ui_parada3.py` completo por la interfaz; variantes: cobertura completa, API Nacional caída; resultados contra la nube | Tomás/Claude | 4 |
+| **WP9** Pruebas end to end | Hechos: Parada 1 (26/26), Parada 2 (34/34 y 46/46 por UI), cierre (28/28), tope (39), variantes del cierre con Bonita real (`escenario_cierre_variantes.py`: subconjunto, cobertura completa, ronda 2, Nacional caída, app caída, concurrencia, eventos) | 🔶 Parcial | `ui_parada3.py` completo por la interfaz; repetir contra la nube | Tomás/Claude | 4 |
 | **WP10** Entrega | README, guion de demo, video, prueba en limpio, merge a `main`, tag | ⏳ Pendiente | Todo (los README de la raíz y del backend son de la Entrega 2) | Todos | 7 |
 | **WP11** JWT | Cuentas, `POST /login`, `POST /ongs`, protección por rol | ❌ **Sin empezar** | Todo. Lo pide la consigna de la Entrega 3 | **Sin responsable** | 8 |
 | **WP12** Parámetros por entorno | `nacionalBaseUrl`, `appBaseUrl`, `bonitaApiKey`; prueba contra la nube | ⏳ Al final | Todo; depende de WP7 | Tomás (Studio) | 3 |
@@ -316,10 +316,12 @@ tests (backend 205, API Nacional 99) y los tipos del front en unos 26 s.
 | `backend/scripts/ui_parada2.py` | Parada 2 por la interfaz, con capturas (guía `guia-parada-2.html`) | 46/46 |
 | `backend/scripts/escenario_cierre.py` | De la adjudicación al cierre con las dos ONGs; Bonita libera con sus conectores | 28/28 |
 | `backend/scripts/ui_ejecucion.py` | Monitorear, finalizar, validar cierre y avisos por la interfaz | 24/25 (falla de espera del script, corregida) |
+| `backend/scripts/escenario_cierre_variantes.py` | Siete emergencias a la vez y todas las variantes del cierre (ver su docstring); apaga y levanta Nacional y la app | 17/10: verde (en dos tandas) |
+| `backend/scripts/recuperar_cierre.py <emergencia>` | Destraba un cierre cuyo nodo de Bonita quedó fallido | probado dentro de la batería |
 | `nacional/scripts/verificar_despliegue.py <url>` | Los endpoints de la API Nacional, local o en la nube; deja el inventario como estaba | 61/61 en local |
 
-**Falta (WP9):** `ui_parada3.py` completo, y las variantes: cobertura completa que va directo a adjudicación y API Nacional
-caída durante la evaluación. `e2e_ui.py` (Entrega 2) no se amplió: lo cubren los `ui_*`.
+**Falta (WP9):** `ui_parada3.py` completo y repetir todo contra la nube. Quedan sin probar la API Nacional caída *durante la
+evaluación* (el cierre sí está probado) y Postgres. `e2e_ui.py` (Entrega 2) no se amplió: lo cubren los `ui_*`.
 
 ---
 
