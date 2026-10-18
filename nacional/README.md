@@ -16,12 +16,16 @@ uvicorn app.main:app --port 8002 --reload
 
 `DATABASE_URL` (en `nacional/.env` o el entorno) por defecto es `nacional/nacional.db` (SQLite). Ojo: `backend/`
 lee la misma variable; si exportás una en la terminal, la leen los dos.
-Configurar el mismo `JWT_SECRET` y `JWT_EXPIRATION_MINUTES` en `backend/.env` y
-`nacional/.env`: Nacional firma el JWT de `/login` y el backend local lo valida
-con esos mismos valores. En desarrollo, ambos usan `dev-only-change-me` y 60
-minutos por defecto. Después de migrar y ejecutar el seed, las cuentas de demo
-(`demo1234`) y la cuenta indicada por `BONITA_SERVICE_USERNAME` /
-`BONITA_SERVICE_PASSWORD` están creadas.
+`JWT_SECRET` y `JWT_EXPIRATION_MINUTES` son solo de esta API: ella firma y ella valida los tokens (la app local y Bonita
+los presentan sin conocer el secreto, así que no hay que copiarlo en `backend/.env`). En desarrollo valen
+`dev-only-change-me` y 60 minutos. Después de migrar y ejecutar el seed están creadas las cuentas de demo (`demo1234`) y
+las dos cuentas de servicio: `BONITA_SERVICE_USERNAME` / `BONITA_SERVICE_PASSWORD` (conectores de Bonita) y
+`APP_SERVICE_USERNAME` / `APP_SERVICE_PASSWORD` (la app local; en `backend/.env`: `NACIONAL_SERVICE_USERNAME` /
+`NACIONAL_SERVICE_PASSWORD`). El seed vuelve a fijar la clave de las cuentas de servicio desde el entorno, así que
+cambiarla y reiniciar la rota.
+
+Con Postgres (la nube) la API **no arranca** si `JWT_SECRET`, `BONITA_SERVICE_PASSWORD` o `APP_SERVICE_PASSWORD` siguen
+con el valor de ejemplo: están a la vista en el repositorio y con ellos cualquiera podría firmar un token.
 
 - Swagger: http://localhost:8002/docs
 - Estado: http://localhost:8002/health
@@ -109,7 +113,9 @@ docker run --rm -p 8002:8002 rescuesync-nacional
 
 Al arrancar corre `alembic upgrade head` y el seed. `DATABASE_URL` en Postgres (`postgres://` de Render se normaliza a `postgresql+psycopg://`). Sin esa variable usa SQLite dentro del contenedor.
 
-El blueprint está en `render.yaml` (servicio web + Postgres free). En Render: New → Blueprint, con este repo. La URL pública es la del servicio `rescuesync-nacional` (`/health` y `/docs`).
+El blueprint está en `render.yaml` (servicio web + Postgres free). En Render: New → Blueprint, con este repo; pide
+`BONITA_SERVICE_PASSWORD` y `APP_SERVICE_PASSWORD` (las mismas que van en los conectores de Bonita y en
+`NACIONAL_SERVICE_PASSWORD` de la app) y genera solo el `JWT_SECRET`. La URL pública es la del servicio `rescuesync-nacional` (`/health` y `/docs`).
 
 Para que un push a `main` o `dev` despliegue solo: en el servicio, Settings → Deploy Hook, y guardar esa URL como secret `RENDER_DEPLOY_HOOK_URL` del repo. El workflow `.github/workflows/deploy-nacional.yml` construye la imagen en cada PR y, si el secret existe, dispara el hook.
 

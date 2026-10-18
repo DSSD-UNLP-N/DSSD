@@ -27,11 +27,13 @@ Convenciones
 
 Además se agregan al proceso **parámetros** (Configuración del proceso → Parámetros): `appBaseUrl`
 (`http://localhost:8001`), `nacionalBaseUrl` (`http://localhost:8002` o la URL de Render), `bonitaApiKey`,
-`nacionalServiceUsername` y `nacionalServicePassword`. Los dos últimos son las credenciales de la cuenta
-`BONITA` creada en el Sistema Nacional; guardarlas como parámetros del proceso, no en scripts ni en el repositorio.
-Cada conector de Bonita que llame a la API Nacional primero hace `POST {nacionalBaseUrl}/login` con esos parámetros,
-conserva `access_token` durante la ejecución y manda `Authorization: Bearer <access_token>` en cada llamada posterior.
-Un parámetro se cambia desde el portal sin volver a desplegar el diagrama.
+`nacionalServiceUsername` y `nacionalServicePassword`. Los dos últimos son las credenciales de la cuenta de servicio
+`bonita-service` del Sistema Nacional; en la nube no pueden quedar escritas en el diagrama ni en el repositorio.
+Cada tarea que llame a la API Nacional empieza con el conector `loginNacional` (`POST {nacionalBaseUrl}/login`), que deja la
+respuesta en la variable `nacionalLoginJson`, y manda `Authorization: Bearer <access_token>` en la llamada que sigue
+(ver `CAMBIOS-BONITA.md`). Un parámetro se cambia desde el portal sin volver a desplegar el diagrama.
+**Estado:** hoy las URLs, la clave y esas credenciales están escritas en los conectores (valores de desarrollo); pasarlas a
+parámetros es el trabajo de «Local vs Production» (WP12).
 
 ---
 
