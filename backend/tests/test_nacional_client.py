@@ -1,4 +1,6 @@
 """Cliente HTTP de la API Nacional, con HTTP simulado (`responses`)."""
+import json
+
 import pytest
 import requests
 import responses
@@ -67,3 +69,84 @@ def test_adjudicar_recursos_manda_el_payload():
     }
 
     assert NacionalClient(BASE).adjudicar_recursos_nacional(datos) == resultado
+
+
+# --- JWT: la app entra con su cuenta de servicio -------------------------------------------------------------------
+
+def _login(token="t1", **extra):
+    responses.add(responses.POST, f"{BASE}/login", json={"access_token": token, "token_type": "bearer", **extra})
+
+
+def _cliente():
+    return NacionalClient(BASE, username="app-service", password="clave")
+
+
+def _auth(i):
+    return responses.calls[i].request.headers.get("Authorization")
+
+
+@responses.activate
+def test_sin_usuario_no_inicia_sesion_ni_manda_token():
+    responses.add(responses.GET, f"{BASE}/tipos-recurso", json=[])
+    NacionalClient(BASE).tipos_recurso()
+    assert [c.request.url for c in responses.calls] == [f"{BASE}/tipos-recurso"]
+    assert _auth(0) is None
+
+
+@responses.activate
+def test_inicia_sesion_con_la_cuenta_de_servicio_y_manda_el_token():
+    _login("t1")
+    responses.add(responses.GET, f"{BASE}/tipos-recurso", json=[TIPO])
+    assert _cliente().tipos_recurso() == [TIPO]
+    assert responses.calls[0].request.url == f"{BASE}/login"
+    assert json.loads(responses.calls[0].request.body) == {"username": "app-service", "password": "clave"}
+    assert _auth(1) == "Bearer t1"
+
+
+@responses.activate
+def test_el_login_se_hace_una_vez_por_proceso_aunque_el_cliente_sea_nuevo_cada_vez():
+    _login("t1")
+    responses.add(responses.GET, f"{BASE}/tipos-recurso", json=[])
+    _cliente().tipos_recurso()
+    _cliente().tipos_recurso()
+    assert [c.request.url for c in responses.calls].count(f"{BASE}/login") == 1
+    assert _auth(2) == "Bearer t1"
+
+
+@responses.activate
+def test_si_nacional_contesta_401_vuelve_a_entrar_una_vez_y_reintenta():
+    _login("viejo")
+    _login("nuevo")  # el segundo login (Nacional sirve las respuestas en el orden en que se registran)
+    responses.add(responses.GET, f"{BASE}/tipos-recurso", status=401)
+    responses.add(responses.GET, f"{BASE}/tipos-recurso", json=[TIPO])
+    assert _cliente().tipos_recurso() == [TIPO]
+    assert [c.request.url.removeprefix(BASE) for c in responses.calls] == ["/login", "/tipos-recurso", "/login", "/tipos-recurso"]
+    assert (_auth(1), _auth(3)) == ("Bearer viejo", "Bearer nuevo")
+
+
+@responses.activate
+def test_dos_401_seguidos_no_entran_en_bucle():
+    _login("t1")
+    responses.add(responses.GET, f"{BASE}/tipos-recurso", status=401)
+    with pytest.raises(NacionalError):
+        _cliente().tipos_recurso()
+    assert len(responses.calls) == 4  # login, pedido, login, pedido: corta en el segundo 401
+
+
+@responses.activate
+@pytest.mark.parametrize("falla", [{"status": 401}, {"status": 500}, {"body": requests.ConnectionError("sin red")},
+                                   {"json": {"sin_token": True}}])
+def test_si_el_login_falla_sale_como_nacional_error(falla):
+    responses.add(responses.POST, f"{BASE}/login", **falla)
+    with pytest.raises(NacionalError, match="iniciar sesión"):
+        _cliente().tipos_recurso()
+
+
+@responses.activate
+def test_get_nacional_usa_la_cuenta_de_servicio_de_la_configuracion():
+    from app.core.config import get_settings
+    from app.integrations.nacional import get_nacional
+
+    s = get_settings()
+    c = get_nacional(s)
+    assert (c.username, c.password) == (s.nacional_service_username, s.nacional_service_password)
