@@ -8,7 +8,7 @@ Bitácora de lo que se tocó en `RescueSync-1.0.proc` desde el export de la Entr
 | 15-17/10 | Cinco conectores REST: `get obteber ofertas` (GET a la app), `evaluarOfertas` (POST `/evaluaciones`), `avisarEvaluacion` (evento `EVALUACION`), `resolverReservas` (POST `/adjudicaciones/resolucion`), `avisarAdjudicacion` (evento `ADJUDICACION`). Variable nueva `evaluacionJson`. Timeouts de 60 s. | En Studio |
 | 17/10 | Dos conectores en «Liberar Recursos y Notificar Cierre»: `cerrarAdjudicaciones` (POST `/cierres/lote` con un `{cuit, referencia}` por cada ONG adjudicada) y `avisarCierre` (evento `CIERRE` con los CUIT adjudicados). Son clones de `resolverReservas` y `avisarAdjudicacion` con otra URL y otro cuerpo. | `bonita/scripts/agregar_conector_cierre.py` genera el `.bos` nuevo; se importa en Studio |
 | 17/10 | «Confirmar Finalizacion de Actividades» pasa de multi-instancia a tarea estándar (se le saca `type="PARALLEL"`). | El mismo script, en `entrega41_20261017_1311_cierre_v2.bos`. Falta importarlo en Studio y repetir `escenario_cierre_variantes.py` |
-| 18/10 | JWT en la API Nacional: un conector `loginNacional` (POST `/login` con la cuenta `bonita-service`) al principio de cada tarea que llama a Nacional (`evaluarOfertas`, `resolverReservas`, `cerrarAdjudicaciones`), y la cabecera `Authorization: Bearer <token>` en esas tres llamadas. Variable nueva `nacionalLoginJson` (Text) con la respuesta del login. | `bonita/scripts/agregar_login_nacional.py` sobre el `_v2.bos` genera `entrega41_20261017_1311_cierre_jwt.bos`; se importa en Studio. **Sin importarlo, los conectores reciben 401** de una API Nacional con JWT |
+| 18/10 | JWT en la API Nacional: un conector `loginNacional` (POST `/login` con la cuenta `bonita-service`) al principio de cada tarea que llama a Nacional (`evaluarOfertas`, `resolverReservas`, `cerrarAdjudicaciones`), y la cabecera `Authorization: Bearer <token>` en esas tres llamadas. Variable nueva `nacionalLoginJson` (Text) con la respuesta del login. | `bonita/scripts/agregar_login_nacional.py` sobre el `_cierre.bos` (el ya probado en Studio) genera `entrega41_20261017_1311_cierre_jwt.bos`; se importa en Studio. **Sin importarlo, los conectores reciben 401** de una API Nacional con JWT |
 
 ## Para volver atrás
 El `.bos` anterior queda en el repo hasta que el nuevo se pruebe con Bonita real (`escenario_cierre.py`).
@@ -25,10 +25,11 @@ horas, así que no se guarda uno fijo: **cada tarea que llama a Nacional empieza
 conector siguiente lo manda como `Authorization: Bearer`. El token queda en `nacionalLoginJson` (el JSON del login) y se saca con
 Groovy: `new groovy.json.JsonSlurper().parseText(nacionalLoginJson).access_token`. Las llamadas a la app siguen con `X-Api-Key`.
 
-Cómo se arma y se prueba:
+Cómo se arma y se prueba (parte del `_cierre.bos`, el que ya se importó y ejecutó, así lo único nuevo es el login; el `_v2.bos`
+que saca la multi-instancia se puede aplicar después con el mismo método):
 
 ```
-python bonita/scripts/agregar_login_nacional.py entrega-3/entrega41_20261017_1311_cierre_v2.bos entrega-3/entrega41_20261017_1311_cierre_jwt.bos
+python bonita/scripts/agregar_login_nacional.py entrega-3/entrega41_20261017_1311_cierre.bos entrega-3/entrega41_20261017_1311_cierre_jwt.bos
 ```
 
 En Studio: importar el `.bos` nuevo, Run, y con la API Nacional (con JWT) y la app arriba, `escenario_cierre.py` y
