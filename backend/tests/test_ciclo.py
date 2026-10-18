@@ -134,7 +134,7 @@ def test_un_lote_con_ofertas_en_el_historial_no_se_puede_borrar(login, seeded, n
     c = login("coordinador.regional")
     c.post(f"/api/emergencias/{emergencia_id}/decision", json={"decision": "REFORMULAR"})
 
-    r = c.delete(f"/api/emergencias/{emergencia_id}/lotes/{lote}")
+    r = login("ong.cruzroja").delete(f"/api/emergencias/{emergencia_id}/lotes/{lote}")
 
     assert r.status_code == 400 and "historial" in r.json()["detail"]
 
@@ -163,9 +163,10 @@ def test_no_se_decide_fuera_de_la_evaluacion_ni_con_la_cobertura_completa(login,
 @responses.activate
 def test_si_la_api_nacional_no_responde_al_reformular_no_cambia_nada(login, seeded, nacional, evaluada):
     emergencia_id, _ = evaluada
+    c = login("coordinador.regional")
     nacional.caido = True
 
-    r = login("coordinador.regional").post(f"/api/emergencias/{emergencia_id}/decision", json={"decision": "REFORMULAR"})
+    r = c.post(f"/api/emergencias/{emergencia_id}/decision", json={"decision": "REFORMULAR"})
 
     assert r.status_code == 503
     assert _estado(seeded, emergencia_id) is EstadoEmergencia.EN_EVALUACION

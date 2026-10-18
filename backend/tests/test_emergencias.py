@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 import responses
 
 from app.core.config import get_settings
-from app.models import Emergencia
+from app.models import Emergencia, Gravedad, Usuario
 
 BASE = get_settings().bonita_base_url
 BASE_PATH = urlparse(BASE).path  # "/bonita"
@@ -60,6 +60,73 @@ def test_alta_crea_emergencia_instancia_y_completa_registrar(login, seeded):
         "/API/bpm/humanTask", "/API/system/session/unusedid",
         "/API/bpm/userTask/9001", "/API/bpm/userTask/9001/execution",
     ]
+
+
+@responses.activate
+def test_alta_limpia_la_asociacion_bonita_obsoleta_si_reutiliza_case_id(login, seeded):
+    case_id = "4242"
+    with seeded() as s:
+        operador = s.query(Usuario).filter_by(username="operador.municipal").one()
+        anterior = Emergencia(
+            municipio_id=operador.municipio_id,
+            tipo="inundacion",
+            nivel_gravedad=Gravedad.ALTO,
+            zona_afectada="Centro",
+            descripcion="Emergencia anterior",
+            bonita_case_id=int(case_id),
+        )
+        s.add(anterior)
+        s.commit()
+        emergencia_nueva_id = anterior.id + 1
+
+    _mock_alta_ok(case_id=case_id)
+    responses.add(
+        responses.GET,
+        f"{BASE}/API/bpm/caseVariable",
+        json=[{"name": "emergenciaId", "value": str(emergencia_nueva_id)}],
+    )
+
+    response = login("operador.municipal").post(ALTA, json=DATOS)
+
+    assert response.status_code == 201
+    assert response.json()["bonita_case_id"] == int(case_id)
+    with seeded() as s:
+        emergencias = s.query(Emergencia).order_by(Emergencia.id).all()
+        assert len(emergencias) == 2
+        assert emergencias[0].bonita_case_id is None
+        assert emergencias[1].bonita_case_id == int(case_id)
+
+
+@responses.activate
+def test_alta_no_limpia_asociacion_si_el_caso_no_corresponde_a_la_emergencia(login, seeded):
+    case_id = "4242"
+    with seeded() as s:
+        operador = s.query(Usuario).filter_by(username="operador.municipal").one()
+        s.add(Emergencia(
+            municipio_id=operador.municipio_id,
+            tipo="inundacion",
+            nivel_gravedad=Gravedad.ALTO,
+            zona_afectada="Centro",
+            descripcion="Emergencia anterior",
+            bonita_case_id=int(case_id),
+        ))
+        s.commit()
+
+    _mock_alta_ok(case_id=case_id)
+    responses.add(
+        responses.GET,
+        f"{BASE}/API/bpm/caseVariable",
+        json=[{"name": "emergenciaId", "value": "9999"}],
+    )
+    responses.add(responses.DELETE, f"{BASE}/API/bpm/case/{case_id}", status=200)
+
+    response = login("operador.municipal").post(ALTA, json=DATOS)
+
+    assert response.status_code == 502
+    with seeded() as s:
+        emergencias = s.query(Emergencia).all()
+        assert len(emergencias) == 1
+        assert emergencias[0].bonita_case_id == int(case_id)
 
 
 @responses.activate
@@ -201,6 +268,7 @@ def test_usuario_municipio_sin_municipio_asignado_no_rompe(login, seeded):
     c.post("/api/auth/logout")
     r = c.post("/api/auth/login", json={"username": "sin.municipio", "password": DEMO_PASSWORD})
     assert r.status_code == 200
+    c.headers["Authorization"] = f"Bearer {r.json()['access_token']}"
 
     r = c.post(ALTA, json=DATOS)
     assert r.status_code == 502

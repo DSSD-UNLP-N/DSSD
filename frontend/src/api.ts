@@ -7,6 +7,12 @@ export type Usuario = {
   rol: Rol;
 };
 
+type TokenResponse = {
+  access_token: string;
+  token_type: "bearer";
+  user: Usuario;
+};
+
 export type Lote = {
   id: number;
   recurso: string;
@@ -113,12 +119,27 @@ export type OngEjecucion = {
   estado_oferta: "ADJUDICADA" | "FINALIZADA";
 };
 
+let accessToken: string | null = null;
+
+function getAccessToken() {
+  if (accessToken !== null) return accessToken;
+  return typeof window === "undefined" ? null : window.sessionStorage.getItem("access_token");
+}
+
+function clearAccessToken() {
+  accessToken = null;
+  if (typeof window !== "undefined") window.sessionStorage.removeItem("access_token");
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
+  const token = getAccessToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
   if (init.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  const res = await fetch(path, { ...init, headers, credentials: "include" });
+  const res = await fetch(path, { ...init, headers });
+  if (res.status === 401) clearAccessToken();
   if (res.status === 204) return undefined as T;
   const text = await res.text();
   let data: unknown = null;
@@ -152,13 +173,40 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 export const api = {
   meta: () => request<Meta>("/api/meta"),
   me: () => request<Usuario>("/api/auth/me"),
-  login: (username: string, password: string) =>
-    request<Usuario>("/api/auth/login", {
+  login: async (username: string, password: string) => {
+    const response = await request<TokenResponse>("/login", {
       method: "POST",
       body: JSON.stringify({ username, password }),
-    }),
-  logout: () => request<void>("/api/auth/logout", { method: "POST" }),
+    });
+    window.sessionStorage.setItem("access_token", response.access_token);
+    accessToken = response.access_token;
+    return response.user;
+  },
+  registerOng: async (body: {
+    ong_nombre: string;
+    cuit?: string;
+    nombre: string;
+    username: string;
+    password: string;
+  }) => {
+    const response = await request<TokenResponse>("/ongs", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    window.sessionStorage.setItem("access_token", response.access_token);
+    accessToken = response.access_token;
+    return response.user;
+  },
+  logout: async () => {
+    try {
+      await request<void>("/api/auth/logout", { method: "POST" });
+    } finally {
+      clearAccessToken();
+    }
+  },
   listEmergencias: () => request<Emergencia[]>("/api/emergencias"),
+  listConvocatoriasAbiertas: () =>
+    request<Emergencia[]>("/api/emergencias/convocatorias/abiertas"),
   getEmergencia: (id: number) => request<Emergencia>(`/api/emergencias/${id}`),
   createEmergencia: (body: {
     tipo: string;

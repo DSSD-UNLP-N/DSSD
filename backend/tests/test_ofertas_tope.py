@@ -34,6 +34,7 @@ def api_login(client):
         client.post("/api/auth/logout")
         r = client.post("/api/auth/login", json={"username": username, "password": PASSWORD})
         assert r.status_code == 200, r.text
+        client.headers["Authorization"] = f"Bearer {r.json()['access_token']}"
         return client
 
     return _login
@@ -142,19 +143,21 @@ def test_los_lotes_sin_tipo_no_se_validan(api_login, seeded, nacional):
 
 def test_con_el_sistema_nacional_caido_no_se_publica_nada(api_login, seeded, nacional):
     em, (lote,) = _emergencia(seeded, ("PARAMEDICO", 10))
+    client = api_login("ong.cruzroja")
     nacional.caido = True
-    r = _ofrecer(api_login("ong.cruzroja"), em, (lote, 1))
+    r = _ofrecer(client, em, (lote, 1))
     assert r.status_code == 503 and "Sistema Nacional no responde" in r.json()["detail"]
     assert _ofertas(seeded) == 0
 
 
-def test_sin_cuit_no_se_puede_validar_el_inventario(api_login, seeded):
+def test_el_token_ong_se_invalida_si_se_desasocia_el_cuit(api_login, seeded):
     em, (lote,) = _emergencia(seeded, ("PARAMEDICO", 10))
     with seeded() as s:
         s.query(Ong).filter_by(nombre="Cruz Roja Argentina").one().cuit = None
         s.commit()
     r = _ofrecer(api_login("ong.cruzroja"), em, (lote, 1))
-    assert r.status_code == 400 and "CUIT" in r.json()["detail"]
+    assert r.status_code == 401
+    assert _ofertas(seeded) == 0
 
 
 # --- retirar ---------------------------------------------------------------

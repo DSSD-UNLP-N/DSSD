@@ -12,6 +12,10 @@ class Settings(BaseSettings):
 
     app_name: str = "Sistema Nacional de Gestión de Recursos y Riesgos"
     database_url: str = f"sqlite:///{NACIONAL_DIR / 'nacional.db'}"
+    jwt_secret: str = "dev-only-change-me"
+    jwt_expiration_minutes: int = 60
+    bonita_service_username: str = "bonita-service"
+    bonita_service_password: str = "change-me"
 
     @field_validator("database_url", mode="before")
     @classmethod

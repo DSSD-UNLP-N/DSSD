@@ -105,8 +105,9 @@ def test_tipo_de_recurso_fuera_del_catalogo_no_crea_lote(login, emergencia, seed
 
 
 def test_con_el_sistema_nacional_caido_no_se_crea_el_lote(login, emergencia, seeded, nacional):
+    c = login("coordinador.regional")
     nacional.caido = True
-    r = login("coordinador.regional").post(_lotes(emergencia), json=LOTE)
+    r = c.post(_lotes(emergencia), json=LOTE)
     assert r.status_code == 503 and "Sistema Nacional no responde" in r.json()["detail"]
     with seeded() as s:
         assert s.query(Lote).count() == 0
@@ -147,19 +148,41 @@ def test_borrar_lote(login, emergencia, seeded):
     _con_lote(seeded, emergencia)
     with seeded() as s:
         lote_id = s.query(Lote).one().id
-    r = login("coordinador.regional").delete(f"{_lotes(emergencia)}/{lote_id}")
+    r = login("ong.cruzroja").delete(f"{_lotes(emergencia)}/{lote_id}")
     assert r.status_code == 204
     with seeded() as s:
         assert s.query(Lote).count() == 0
 
 
+def test_solo_ong_puede_borrar_lotes(login, emergencia, seeded):
+    _con_lote(seeded, emergencia)
+    with seeded() as s:
+        lote_id = s.query(Lote).one().id
+
+    for usuario in ("operador.municipal", "coordinador.regional", "auditor"):
+        response = login(usuario).delete(f"{_lotes(emergencia)}/{lote_id}")
+        assert response.status_code == 403, usuario
+
+    with seeded() as s:
+        assert s.query(Lote).count() == 1
+
+
 def test_no_se_puede_borrar_un_lote_de_otra_emergencia(login, emergencia, seeded):
-    r = login("coordinador.regional").delete(f"{_lotes(emergencia)}/999")
+    r = login("ong.cruzroja").delete(f"{_lotes(emergencia)}/999")
     assert r.status_code == 400 and "no pertenece a esta emergencia" in r.json()["detail"]
 
 
 def test_emergencia_inexistente_da_404(login):
     assert login("coordinador.regional").post(_lotes(999), json=LOTE).status_code == 404
+
+
+def test_solo_coordinador_puede_publicar(login, emergencia):
+    for usuario in ("operador.municipal", "ong.cruzroja", "auditor"):
+        response = login(usuario).post(
+            _publicar(emergencia),
+            json={"ventana_fin": _futuro()},
+        )
+        assert response.status_code == 403, usuario
 
 
 # --- publicación ---------------------------------------------------------
@@ -272,5 +295,5 @@ def test_al_publicar_las_ongs_ven_la_emergencia(login, emergencia, seeded):
     login("coordinador.regional").post(_publicar(emergencia), json={"ventana_fin": _futuro()})
 
     ong = login("ong.cruzroja")
-    assert emergencia in [e["id"] for e in ong.get("/api/emergencias").json()]
+    assert ong.get("/api/emergencias").status_code == 403
     assert ong.get(f"/api/emergencias/{emergencia}").json()["estado"] == "CONVOCATORIA"

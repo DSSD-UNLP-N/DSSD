@@ -446,14 +446,16 @@ export function EmergenciasPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    void Promise.all([api.listEmergencias(), api.meta()])
+    const emergencias =
+      user!.rol === "ONG" ? api.listConvocatoriasAbiertas() : api.listEmergencias();
+    void Promise.all([emergencias, api.meta()])
       .then(([list, m]) => {
         setItems(list);
         setMeta(m);
       })
       .catch((err) => setError(String(err.message || err)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [user]);
 
   return (
     <Shell>

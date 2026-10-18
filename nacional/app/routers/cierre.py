@@ -7,9 +7,10 @@ from sqlalchemy.orm import Session, selectinload
 from app.db import get_db
 from app.models import CierreItem, CierreOperativo, Ong
 from app.schemas import CierreIn, CierreItemOut, CierreOut
+from app.security import require_bonita
 from app.services import cierres
 
-router = APIRouter(tags=["cierre"])
+router = APIRouter(tags=["cierre"], dependencies=[Depends(require_bonita)])
 
 
 def _out(cierre: CierreOperativo) -> CierreOut:

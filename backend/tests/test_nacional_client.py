@@ -3,7 +3,12 @@ import pytest
 import requests
 import responses
 
-from app.integrations.nacional import NacionalClient, NacionalError
+from app.integrations.nacional import (
+    NacionalClient,
+    NacionalError,
+    NacionalLoginEndpointMissing,
+    NacionalLoginRejected,
+)
 
 BASE = "http://nacional.test"
 TIPO = {"codigo": "PARAMEDICO", "nombre": "Paramédico", "categoria": "PERSONAL", "unidad": "personas",
@@ -14,6 +19,58 @@ TIPO = {"codigo": "PARAMEDICO", "nombre": "Paramédico", "categoria": "PERSONAL"
 def test_tipos_recurso_devuelve_el_catalogo():
     responses.add(responses.GET, f"{BASE}/tipos-recurso", json=[TIPO])
     assert NacionalClient(BASE).tipos_recurso() == [TIPO]
+
+
+@responses.activate
+def test_login_a_nacional_y_propaga_el_token_en_llamadas_siguientes():
+    responses.add(
+        responses.POST,
+        f"{BASE}/login",
+        json={"access_token": "national-token", "token_type": "bearer"},
+    )
+    responses.add(responses.GET, f"{BASE}/tipos-recurso", json=[TIPO])
+
+    client = NacionalClient(BASE)
+    result = client.login("ong.cruzroja", "demo1234")
+    assert client.tipos_recurso() == [TIPO]
+
+    assert "Authorization" not in responses.calls[0].request.headers
+    assert responses.calls[1].request.headers["Authorization"] == "Bearer national-token"
+
+
+@responses.activate
+def test_login_distigue_credenciales_rechazadas_de_endpoint_no_desplegado():
+    client = NacionalClient(BASE)
+    responses.add(responses.POST, f"{BASE}/login", status=401)
+    with pytest.raises(NacionalLoginRejected):
+        client.login("usuario", "incorrecta")
+
+    responses.reset()
+    responses.add(responses.POST, f"{BASE}/login", status=404)
+    with pytest.raises(NacionalLoginEndpointMissing):
+        client.login("usuario", "clave")
+
+
+def test_get_nacional_reutiliza_el_bearer_de_la_llamada_actual():
+    from starlette.requests import Request
+
+    from app.core.config import Settings
+    from app.integrations.nacional import get_nacional
+
+    request = Request({
+        "type": "http",
+        "headers": [(b"authorization", b"Bearer usuario-token")],
+        "method": "GET",
+        "path": "/api/tipos-recurso",
+        "query_string": b"",
+        "server": ("test", 80),
+        "client": ("test", 80),
+        "scheme": "http",
+        "http_version": "1.1",
+    })
+
+    client = get_nacional(request, Settings(_env_file=None))
+    assert client.access_token == "usuario-token"
 
 
 @responses.activate

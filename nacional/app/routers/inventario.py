@@ -5,9 +5,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
-from app.models import Inventario, Ong, OngCertificacion, TipoRecurso
+from app.models import Cuenta, Inventario, Ong, OngCertificacion, TipoRecurso
 from app.routers.catalogo import inventario_out
 from app.schemas import InventarioIn, InventarioOut
+from app.security import require_ong_account
 
 router = APIRouter(tags=["inventario"])
 
@@ -16,7 +17,12 @@ router = APIRouter(tags=["inventario"])
     "/ongs/{cuit}/inventario", response_model=list[InventarioOut],
     summary="Declarar el inventario de una ONG (upsert por tipo de recurso)",
 )
-def declarar_inventario(cuit: str, body: InventarioIn, db: Session = Depends(get_db)):
+def declarar_inventario(
+    cuit: str,
+    body: InventarioIn,
+    db: Session = Depends(get_db),
+    _cuenta: Cuenta = Depends(require_ong_account),
+):
     """Fija `cantidad_total` por tipo de recurso. No toca `cantidad_comprometida`: no se puede declarar
     menos de lo ya comprometido (409). Devuelve el inventario completo de la ONG."""
     ong = db.scalar(

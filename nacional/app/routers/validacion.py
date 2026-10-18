@@ -5,9 +5,10 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.schemas import ValidacionIn, ValidacionOut
+from app.security import get_current_account
 from app.services.validacion import TipoRecursoDesconocido, validar
 
-router = APIRouter(tags=["validación"])
+router = APIRouter(tags=["validación"], dependencies=[Depends(get_current_account)])
 
 
 @router.post("/validaciones", response_model=ValidacionOut, summary="Validar ofertas por cantidad y competencia")

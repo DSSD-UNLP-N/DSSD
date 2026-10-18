@@ -10,6 +10,7 @@ from sqlalchemy.orm import sessionmaker  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
 from app.db import Base, get_db  # noqa: E402
+from app.config import get_settings  # noqa: E402
 from app.main import app  # noqa: E402
 from app.seed import seed  # noqa: E402
 
@@ -39,5 +40,29 @@ def client(session_factory):
 
     app.dependency_overrides[get_db] = _get_db
     with TestClient(app) as c:
+        settings = get_settings()
+        response = c.post(
+            "/login",
+            json={
+                "username": settings.bonita_service_username,
+                "password": settings.bonita_service_password,
+            },
+        )
+        assert response.status_code == 200, response.text
+        c.headers.update({"Authorization": f"Bearer {response.json()['access_token']}"})
         yield c
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def ong_headers(client):
+    def _headers(cuit: str) -> dict[str, str]:
+        username = {
+            "30-54666544-5": "ong.cruzroja",
+            "30-68522415-9": "ong.bomberos",
+        }[cuit]
+        response = client.post("/login", json={"username": username, "password": "demo1234"})
+        assert response.status_code == 200, response.text
+        return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+    return _headers

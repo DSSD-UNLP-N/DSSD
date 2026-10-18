@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
 
 from app.models import EstadoEmergencia, EstadoOferta, Gravedad, Rol, TipoLote
 from app.schemas.evaluacion import Evaluacion
@@ -26,6 +26,32 @@ class UsuarioOut(BaseModel):
 class LoginIn(BaseModel):
     username: str = Field(min_length=1)
     password: str = Field(min_length=1)
+
+
+class RegisterOngIn(BaseModel):
+    ong_nombre: str = Field(min_length=2, max_length=120)
+    cuit: str | None = Field(default=None, pattern=r"^\d{2}-?\d{8}-?\d$")
+    nombre: str = Field(min_length=2, max_length=120)
+    username: str = Field(min_length=3, max_length=60)
+    password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("ong_nombre", "nombre", "username", mode="before")
+    @classmethod
+    def strip_required_text(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("cuit", mode="before")
+    @classmethod
+    def normalize_cuit(cls, value):
+        if isinstance(value, str):
+            return value.strip() or None
+        return value
+
+
+class TokenOut(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UsuarioOut
 
 
 class TipoRecursoOut(BaseModel):

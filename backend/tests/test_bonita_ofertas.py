@@ -110,6 +110,7 @@ def test_en_evaluacion_la_ong_ya_no_puede_ofertar(client, seeded, vencida):
     client.get(f"/api/bonita/emergencias/{vencida[0]}/ofertas", headers=CLAVE)
     r = client.post("/api/auth/login", json={"username": "ong.bomberos", "password": PASSWORD})
     assert r.status_code == 200
+    client.headers["Authorization"] = f"Bearer {r.json()['access_token']}"
     r = client.post(f"/api/emergencias/{vencida[0]}/ofertas",
                     json={"items": [{"lote_id": vencida[1], "recurso": "p", "cantidad": 1}]})
     assert r.status_code == 400 and "cerró" in r.json()["detail"]
@@ -144,7 +145,9 @@ def _evento(client, emergencia_id, resultado, clave=CLAVE):
 
 def _ver(client, username, emergencia_id):
     client.post("/api/auth/logout")
-    assert client.post("/api/auth/login", json={"username": username, "password": PASSWORD}).status_code == 200
+    response = client.post("/api/auth/login", json={"username": username, "password": PASSWORD})
+    assert response.status_code == 200
+    client.headers["Authorization"] = f"Bearer {response.json()['access_token']}"
     return client.get(f"/api/emergencias/{emergencia_id}").json()
 
 

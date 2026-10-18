@@ -3,15 +3,15 @@ services:
     image: postgres:16-alpine
     container_name: rescuesync-db
     environment:
-      POSTGRES_USER: rescuesync
-      POSTGRES_PASSWORD: rescuesync
-      POSTGRES_DB: rescuesync
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: postgres
     ports:
       - "5432:5432"
     volumes:
       - rescuesync-pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U rescuesync -d rescuesync"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
       interval: 5s
       timeout: 3s
       retries: 10
