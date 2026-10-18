@@ -3,34 +3,51 @@ validación de ofertas. No deja datos modificados: lecturas, `POST /validaciones
 fallan antes de escribir y, en la sección R, una reserva que se libera al final. Espera los datos del seed
 (app/seed.py) sin nada comprometido.
 
-    python scripts/verificar_despliegue.py https://sistema-nacional-latest.onrender.com
+    python scripts/verificar_despliegue.py https://sistema-nacional-latest.onrender.com --clave <BONITA_SERVICE_PASSWORD>
     python scripts/verificar_despliegue.py http://localhost:8002
+
+La API exige JWT: entra como la cuenta de servicio de Bonita (por defecto `bonita-service` con la clave de ejemplo, que
+sirve contra una API local; contra la nube pasar `--clave` o la variable NACIONAL_VERIFY_PASSWORD). Para las pruebas de
+inventario usa la cuenta de ONG de demo del seed (`ong.cruzroja`).
 
 Solo usa la biblioteca estándar: corre con cualquier Python 3.11+.
 """
+import argparse
 import json
+import os
 import sys
 import time
 import urllib.error
 import urllib.request
 
 CRUZ_ROJA, BOMBEROS, SUSPENDIDA = "30-54666544-5", "30-68522415-9", "30-70000000-1"
+ONG_DEMO, CLAVE_DEMO = "ong.cruzroja", "demo1234"
 
 
 class Verificador:
-    def __init__(self, base: str) -> None:
+    def __init__(self, base: str, usuario: str = "bonita-service", clave: str = "change-me") -> None:
         self.base = base.rstrip("/")
+        self.usuario, self.clave = usuario, clave
+        self.token: str | None = None
         self.ok = self.total = 0
 
-    def pedir(self, metodo: str, ruta: str, cuerpo=None, timeout: float = 90) -> tuple[int, object]:
+    def pedir(self, metodo: str, ruta: str, cuerpo=None, timeout: float = 90, token: str | None = "servicio") -> tuple[int, object]:
+        """`token`: "servicio" (el de la cuenta de servicio), None (sin cabecera) o un JWT puntual."""
         datos = json.dumps(cuerpo).encode() if cuerpo is not None else None
-        req = urllib.request.Request(f"{self.base}{ruta}", data=datos, method=metodo,
-                                     headers={"Content-Type": "application/json"})
+        headers = {"Content-Type": "application/json"}
+        jwt = self.token if token == "servicio" else token
+        if jwt:
+            headers["Authorization"] = f"Bearer {jwt}"
+        req = urllib.request.Request(f"{self.base}{ruta}", data=datos, method=metodo, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=timeout) as r:
                 return r.status, json.loads(r.read() or b"null")
         except urllib.error.HTTPError as e:
             return e.code, json.loads(e.read() or b"null")
+
+    def entrar(self, usuario: str, clave: str) -> str | None:
+        status, r = self.pedir("POST", "/login", {"username": usuario, "password": clave}, token=None)
+        return r["access_token"] if status == 200 else None
 
     def check(self, nombre: str, condicion: bool, detalle: object = "") -> None:
         self.total += 1
@@ -51,7 +68,12 @@ class Verificador:
 
 
 def main() -> int:
-    v = Verificador(sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8002")
+    ap = argparse.ArgumentParser()
+    ap.add_argument("url", nargs="?", default="http://localhost:8002")
+    ap.add_argument("--usuario", default=os.environ.get("NACIONAL_VERIFY_USER", "bonita-service"))
+    ap.add_argument("--clave", default=os.environ.get("NACIONAL_VERIFY_PASSWORD", "change-me"))
+    args = ap.parse_args()
+    v = Verificador(args.url, args.usuario, args.clave)
     print(f"API Nacional en {v.base}")
 
     print("\n== A1. Estado y Swagger")
@@ -62,10 +84,33 @@ def main() -> int:
     status, api = v.pedir("GET", "/openapi.json")
     rutas = set(api["paths"]) if status == 200 else set()
     esperadas = {"/tipos-recurso", "/certificaciones", "/ongs", "/ongs/{cuit}", "/ongs/{cuit}/inventario",
-                 "/recursos/disponibilidad", "/validaciones", "/evaluaciones",
-                 "/adjudicaciones/{referencia}/confirmar", "/adjudicaciones/{referencia}/liberar", "/cierres"}
+                 "/recursos/disponibilidad", "/validaciones", "/evaluaciones", "/login",
+                 "/adjudicaciones/{referencia}/confirmar", "/adjudicaciones/{referencia}/liberar", "/cierres", "/cierres/lote"}
     v.check("Swagger expone catálogo, inventario, validación, reservas y cierre", esperadas <= rutas, sorted(esperadas - rutas))
     print(f"     endpoints: {', '.join(sorted(rutas))}")
+
+    print("\n== A0. Autenticación (JWT)")
+    v.check("Sin token → 401", v.pedir("GET", "/tipos-recurso", token=None)[0] == 401)
+    v.check("Token inválido → 401", v.pedir("GET", "/tipos-recurso", token="no.es.un.jwt")[0] == 401)
+    v.check("Login con clave incorrecta → 401",
+            v.pedir("POST", "/login", {"username": v.usuario, "password": "incorrecta"}, token=None)[0] == 401)
+    v.token = v.entrar(v.usuario, v.clave)
+    v.check(f"Login de la cuenta de servicio {v.usuario}", v.token is not None)
+    if v.token is None:
+        print("     sin token no se puede seguir (¿clave de la cuenta de servicio? ver --clave)")
+        return 1
+    ong = v.entrar(ONG_DEMO, CLAVE_DEMO)
+    v.check(f"Hay una cuenta de ONG de demo ({ONG_DEMO}) con clave {CLAVE_DEMO}", ong is not None)
+    v.check("Una ONG no puede liberar reservas → 403",
+            v.pedir("POST", "/adjudicaciones/no-existe/liberar", token=ong)[0] == 403)
+    v.check("La cuenta de servicio sí pasa (404: la reserva no existe)",
+            v.pedir("POST", "/adjudicaciones/no-existe/liberar")[0] == 404)
+    v.check("Registro de ONG con un CUIT que ya existe → 409 (sin crear nada)",
+            v.pedir("POST", "/ongs", {"ong_nombre": "Otra ONG", "cuit": CRUZ_ROJA, "nombre": "Alguien",
+                                      "username": "verificador.despliegue", "password": "una-clave-larga"}, token=None)[0] == 409)
+    v.check("Registro de ONG con un CUIT mal formado → 422",
+            v.pedir("POST", "/ongs", {"ong_nombre": "Otra ONG", "cuit": "123", "nombre": "Alguien",
+                                      "username": "verificador.despliegue", "password": "una-clave-larga"}, token=None)[0] == 422)
 
     print("\n== A2-A3. Catálogo")
     _, tipos = v.pedir("GET", "/tipos-recurso")
@@ -107,14 +152,16 @@ def main() -> int:
     v.check("Raciones: la ONG suspendida no suma (5000, no 5800)", raciones[0]["cantidad_total"] == 5000, raciones)
     v.check("Tipo inexistente → 404", v.pedir("GET", "/recursos/disponibilidad?tipo_recurso=NADA")[0] == 404)
 
-    print("\n== A7. PUT de inventario que falla antes de escribir")
-    v.check("ONG inexistente → 404",
-            v.pedir("PUT", "/ongs/00-0-0/inventario", {"items": [{"tipo_recurso": "PARAMEDICO", "cantidad_total": 1}]})[0] == 404)
+    print("\n== A7. PUT de inventario: solo la propia ONG, y falla antes de escribir")
+    uno = {"items": [{"tipo_recurso": "PARAMEDICO", "cantidad_total": 1}]}
+    v.check("Sin token → 401", v.pedir("PUT", f"/ongs/{CRUZ_ROJA}/inventario", uno, token=None)[0] == 401)
+    v.check("La cuenta de servicio no declara inventarios → 403", v.pedir("PUT", f"/ongs/{CRUZ_ROJA}/inventario", uno)[0] == 403)
+    v.check("Una ONG no toca el inventario de otra → 403", v.pedir("PUT", f"/ongs/{BOMBEROS}/inventario", uno, token=ong)[0] == 403)
     v.check("Tipo inexistente → 404 (y no guarda el resto)",
             v.pedir("PUT", f"/ongs/{CRUZ_ROJA}/inventario", {"items": [
-                {"tipo_recurso": "PARAMEDICO", "cantidad_total": 99}, {"tipo_recurso": "NADA", "cantidad_total": 1}]})[0] == 404)
+                {"tipo_recurso": "PARAMEDICO", "cantidad_total": 99}, {"tipo_recurso": "NADA", "cantidad_total": 1}]}, token=ong)[0] == 404)
     v.check("Cantidad negativa → 422",
-            v.pedir("PUT", f"/ongs/{CRUZ_ROJA}/inventario", {"items": [{"tipo_recurso": "PARAMEDICO", "cantidad_total": -1}]})[0] == 422)
+            v.pedir("PUT", f"/ongs/{CRUZ_ROJA}/inventario", {"items": [{"tipo_recurso": "PARAMEDICO", "cantidad_total": -1}]}, token=ong)[0] == 422)
 
     print("\n== V. Validación de ofertas (POST /validaciones)")
     r = v.uno("ALTO", CRUZ_ROJA, "PARAMEDICO", 10)
