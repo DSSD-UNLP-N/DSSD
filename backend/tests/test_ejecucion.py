@@ -1,14 +1,20 @@
 """Después de adjudicar: monitoreo, finalización de cada ONG, cierre bilateral, evento CIERRE y avisos.
 Bonita va mockeado (`responses`); la secuencia real se prueba con los escenarios contra Bonita."""
+import threading
 from urllib.parse import urlparse
 
 import pytest
 import responses
-from sqlalchemy import select
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import sessionmaker
 
+from app.core.config import get_settings
+from app.db import Base
 from app.models import (
-    Emergencia, EstadoEmergencia, EstadoOferta, Gravedad, Lote, Municipio, Notificacion, Oferta, OfertaItem, Ong,
+    Emergencia, EstadoEmergencia, EstadoOferta, Gravedad, Lote, Municipio, Notificacion, Oferta, OfertaItem, Ong, Usuario,
 )
+from app.seed import seed
+from app.services import ejecucion
 from tests.test_ciclo import BASE, CASE, CLAVE, BOMBEROS, CRUZ_ROJA, _estado, _mock_tarea, _tarea_completada
 
 TAREA_MONITOREAR = "Monitorear Ejecucion del Despliegue"
@@ -171,6 +177,61 @@ def test_si_bonita_falla_al_finalizar_la_ultima_la_oferta_no_queda_marcada(login
 
     assert r.status_code == 409
     assert _estado_oferta(seeded, en_ejecucion, CRUZ_ROJA) is EstadoOferta.ADJUDICADA
+
+
+def test_dos_ongs_que_finalizan_a_la_vez_completan_la_tarea_de_bonita_una_sola_vez(tmp_path, monkeypatch):
+    """Cada ONG leía a la otra como pendiente y ninguna completaba «Confirmar Finalizacion»: el caso quedaba trabado
+    con las dos ofertas FINALIZADAS. Se fuerza el peor orden (las dos leen antes de que escriba cualquiera) con dos
+    sesiones sobre un archivo SQLite."""
+    engine = create_engine(f"sqlite:///{tmp_path / 'carrera.db'}", connect_args={"check_same_thread": False, "timeout": 30})
+    Base.metadata.create_all(engine)
+    sf = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    seed(sf)
+    with sf() as s:
+        e = Emergencia(municipio_id=s.query(Municipio).one().id, tipo="inundacion", nivel_gravedad=Gravedad.ALTO,
+                       zona_afectada="Centro", descripcion="d", bonita_case_id=CASE,
+                       estado=EstadoEmergencia.EN_EJECUCION, monitoreo_iniciado_en=_ahora())
+        e.lotes = [Lote(recurso="Paramédico", tipo_recurso="PARAMEDICO", cantidad=10, unidad="personas")]
+        s.add(e)
+        s.flush()
+        for cuit in (CRUZ_ROJA, BOMBEROS):
+            o = Oferta(emergencia_id=e.id, ong_id=s.query(Ong).filter_by(cuit=cuit).one().id, estado=EstadoOferta.ADJUDICADA)
+            o.items = [OfertaItem(version=1, lote_id=e.lotes[0].id, recurso="Paramédico", cantidad=1)]
+            s.add(o)
+        s.commit()
+        emergencia_id = e.id
+
+    completadas, errores = [], []
+    monkeypatch.setattr(ejecucion, "completar_en_bonita", lambda *args, **kwargs: completadas.append(args[2]))
+    barrera = threading.Barrier(2, timeout=15)
+    leer = ejecucion._adjudicadas
+
+    def leer_y_esperar_a_la_otra(db, emergencia):
+        ofertas = leer(db, emergencia)
+        barrera.wait()
+        return ofertas
+
+    monkeypatch.setattr(ejecucion, "_adjudicadas", leer_y_esperar_a_la_otra)
+
+    def finalizar_como(username):
+        try:
+            with sf() as s:
+                ejecucion.finalizar(s, get_settings(), emergencia=s.get(Emergencia, emergencia_id),
+                                    usuario=s.scalar(select(Usuario).where(Usuario.username == username)))
+        except Exception as exc:  # noqa: BLE001
+            errores.append(exc)
+
+    hilos = [threading.Thread(target=finalizar_como, args=(u,)) for u in ("ong.cruzroja", "ong.bomberos")]
+    for h in hilos:
+        h.start()
+    for h in hilos:
+        h.join()
+
+    assert errores == []
+    with sf() as s:
+        assert [o.estado for o in s.scalars(select(Oferta))] == [EstadoOferta.FINALIZADA] * 2
+    assert completadas == [ejecucion.TAREA_FINALIZAR]
+    engine.dispose()
 
 
 # --- validar el cierre ---

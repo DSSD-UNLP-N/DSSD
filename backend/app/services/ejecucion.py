@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import Settings
@@ -33,6 +33,7 @@ def _adjudicadas(db: Session, emergencia: Emergencia) -> list[Oferta]:
         .where(Oferta.emergencia_id == emergencia.id, Oferta.estado.in_(ADJUDICADAS))
         .options(selectinload(Oferta.ong))
         .order_by(Oferta.id)
+        .execution_options(populate_existing=True)
     ))
 
 
@@ -73,14 +74,19 @@ def finalizar(db: Session, settings: Settings, *, emergencia: Emergencia, usuari
     _en_ejecucion(emergencia)
     if emergencia.monitoreo_iniciado_en is None:
         raise CicloError("El Coordinador todavía no empezó el monitoreo de la ejecución.")
-    ofertas = _adjudicadas(db, emergencia)
-    propia = next((o for o in ofertas if o.ong_id == usuario.ong_id), None)
+    # Las ONGs que finalizan a la vez se atienden de a una: la última en confirmar es la que ve a todas terminadas y
+    # completa la tarea. Sin esto cada una leía a la otra como pendiente y el caso quedaba trabado en Bonita.
+    db.execute(select(Emergencia.id).where(Emergencia.id == emergencia.id).with_for_update())
+    propia = next((o for o in _adjudicadas(db, emergencia) if o.ong_id == usuario.ong_id), None)
     if propia is None:
         raise CicloError("Tu ONG no fue adjudicada en esta emergencia.", 403)
     if propia.estado is EstadoOferta.FINALIZADA:
         return
     propia.estado = EstadoOferta.FINALIZADA
-    if all(o.estado is EstadoOferta.FINALIZADA for o in ofertas):
+    db.flush()
+    pendientes = db.scalar(select(func.count()).select_from(Oferta).where(
+        Oferta.emergencia_id == emergencia.id, Oferta.estado == EstadoOferta.ADJUDICADA))
+    if not pendientes:
         completar_en_bonita(settings, emergencia.bonita_case_id, TAREA_FINALIZAR, usuario.username, {})
     db.commit()
 
