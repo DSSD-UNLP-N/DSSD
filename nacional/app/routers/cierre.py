@@ -1,17 +1,17 @@
-"""Cierre operativo: la ONG informa que terminó una actividad y se liberan los recursos bloqueados."""
-from datetime import datetime, timezone
-
-from fastapi import APIRouter, Depends, HTTPException
+"""Cierre operativo: terminó la actividad de una adjudicación y se libera exactamente lo que tenía comprometido."""
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
-from app.models import CierreItem, CierreOperativo, Inventario, Ong, TipoRecurso
-from app.schemas import CierreIn, CierreItemOut, CierreOut
-from app.security import require_bonita
+from app.models import CierreItem, CierreOperativo, Ong
+from app.routers.reservas import _ERRORES, _http
+from app.schemas import CierreIn, CierreItemOut, CierreLoteIn, CierreOut
+from app.security import require_servicio
+from app.services import reservas
 
-router = APIRouter(tags=["cierre"], dependencies=[Depends(require_bonita)])
+router = APIRouter(tags=["cierre"], dependencies=[Depends(require_servicio)])
 
 
 def _out(cierre: CierreOperativo) -> CierreOut:
@@ -51,70 +51,45 @@ def _cargar_cierre(db: Session, cierre_id: int) -> CierreOperativo | None:
     )
 
 
-@router.post("/cierres", response_model=CierreOut, status_code=201, summary="Informar el cierre de una actividad y liberar recursos")
-def informar_cierre(body: CierreIn, db: Session = Depends(get_db)):
-    """Resta `cantidad_comprometida` de cada ítem. La misma referencia no se puede informar dos veces."""
-    ong = db.scalar(
-        select(Ong).where(Ong.cuit == body.cuit).options(selectinload(Ong.inventario))
-    )
-    if ong is None:
-        raise HTTPException(status_code=404, detail="ONG no registrada")
+@router.post("/cierres", response_model=CierreOut, status_code=201,
+             summary="Cerrar una adjudicación y liberar lo que tenía comprometido")
+def informar_cierre(body: CierreIn, response: Response, db: Session = Depends(get_db)):
+    """Fin de la actividad (servicio 5). Exige que la `referencia` esté `ADJUDICADA`: resta del inventario
+    exactamente lo que esa referencia tenía comprometido y la pasa a `CERRADA`. No se indican ítems.
 
-    codigos = [i.tipo_recurso for i in body.items]
-    if len(set(codigos)) != len(codigos):
-        raise HTTPException(status_code=422, detail="Hay tipos de recurso repetidos")
-    tipos = {t.codigo: t for t in db.scalars(select(TipoRecurso).where(TipoRecurso.codigo.in_(codigos)))}
-    desconocidos = sorted(set(codigos) - tipos.keys())
-    if desconocidos:
-        raise HTTPException(status_code=404, detail=f"Tipo de recurso inexistente: {', '.join(desconocidos)}")
-
-    ya = db.scalar(
-        select(CierreOperativo.id).where(
-            CierreOperativo.ong_id == ong.id, CierreOperativo.referencia == body.referencia
-        )
-    )
-    if ya is not None:
-        raise HTTPException(status_code=409, detail="Ese cierre ya fue informado")
-
-    stmt = (
-        select(Inventario)
-        .where(
-            Inventario.ong_id == ong.id,
-            Inventario.tipo_recurso_id.in_([tipos[c].id for c in codigos]),
-        )
-        .order_by(Inventario.id)
-        .options(selectinload(Inventario.tipo_recurso))
-    )
-    # En Postgres toma la fila; SQLite no tiene FOR UPDATE y los tests corren ahí.
-    if db.get_bind().dialect.name != "sqlite":
-        stmt = stmt.with_for_update()
-    filas = {f.tipo_recurso.codigo: f for f in db.scalars(stmt)}
-
-    for item in body.items:
-        fila = filas.get(item.tipo_recurso)
-        bloqueados = 0 if fila is None else fila.cantidad_comprometida
-        if fila is None or bloqueados < item.cantidad:
-            raise HTTPException(
-                status_code=409,
-                detail=f"{item.tipo_recurso}: se pidió liberar {item.cantidad} y hay {bloqueados} bloqueados",
-            )
-
-    cierre = CierreOperativo(
-        ong=ong, referencia=body.referencia, informado_en=datetime.now(timezone.utc)
-    )
-    for item in body.items:
-        fila = filas[item.tipo_recurso]
-        fila.cantidad_comprometida -= item.cantidad
-        cierre.items.append(CierreItem(tipo_recurso=tipos[item.tipo_recurso], cantidad=item.cantidad))
-    db.add(cierre)
+    `201` con el cierre. Repetirlo responde `200` con el mismo cierre, sin restar de nuevo. `404` si la ONG o la
+    referencia no existen (o la referencia es de otra ONG); `409` si la referencia no está `ADJUDICADA`."""
     try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=409, detail="Ese cierre ya fue informado") from None
+        try:
+            cierre, nuevo = reservas.cerrar(db, body.cuit, body.referencia)
+        except IntegrityError:
+            # Dos cierres iguales a la vez (reintento de Bonita): el otro ganó; esta vez encuentra el cierre hecho.
+            db.rollback()
+            cierre, nuevo = reservas.cerrar(db, body.cuit, body.referencia)
+    except _ERRORES as exc:
+        raise _http(exc) from exc
+    if not nuevo:
+        response.status_code = 200
+    return _out(_cargar_cierre(db, cierre.id))
 
-    cargado = _cargar_cierre(db, cierre.id)
-    return _out(cargado)
+
+@router.post("/cierres/lote", response_model=list[CierreOut],
+             summary="Cerrar varias adjudicaciones de una emergencia en una sola llamada")
+def informar_cierres(body: CierreLoteIn, db: Session = Depends(get_db)):
+    """Lo que Bonita manda al validarse el cierre bilateral: un `{cuit, referencia}` por cada ONG adjudicada, y un
+    solo pedido en vez de uno por ONG. Valida todo antes de cambiar nada (`404` si una ONG o referencia no existe,
+    `409` si alguna no está `ADJUDICADA`, `400` si repite una referencia) y es idempotente: repetir la llamada
+    completa devuelve los mismos cierres sin restar de nuevo. Cada cierre se comporta como en `POST /cierres`."""
+    pedidos = [(c.cuit, c.referencia) for c in body.cierres]
+    try:
+        try:
+            cerrados = reservas.cerrar_varias(db, pedidos)
+        except IntegrityError:
+            db.rollback()
+            cerrados = reservas.cerrar_varias(db, pedidos)
+    except _ERRORES as exc:
+        raise _http(exc) from exc
+    return [_out(_cargar_cierre(db, cierre.id)) for cierre, _ in cerrados]
 
 
 @router.get("/cierres/{cierre_id}", response_model=CierreOut, summary="Ver un cierre ya informado")

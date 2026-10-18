@@ -137,18 +137,16 @@ def seed(session_factory=SessionLocal) -> None:
             if db.scalar(select(Cuenta.id).where(Cuenta.username == username)) is None:
                 db.add(Cuenta(username=username, password_hash=hash_password(DEMO_PASSWORD), rol=rol))
 
-        cuenta_bonita = db.scalar(
-            select(Cuenta).where(Cuenta.username == settings.bonita_service_username)
-        )
-        if cuenta_bonita is None:
-            cuenta_bonita = Cuenta(
-                username=settings.bonita_service_username,
-                password_hash=hash_password(settings.bonita_service_password),
-                rol=RolCuenta.BONITA,
-            )
-            db.add(cuenta_bonita)
-        else:
-            cuenta_bonita.password_hash = hash_password(settings.bonita_service_password)
+        # Cuentas de servicio: la clave sale del entorno y se vuelve a fijar en cada seed (así se rota).
+        for username, password in (
+            (settings.bonita_service_username, settings.bonita_service_password),
+            (settings.app_service_username, settings.app_service_password),
+        ):
+            servicio = db.scalar(select(Cuenta).where(Cuenta.username == username))
+            if servicio is None:
+                db.add(Cuenta(username=username, password_hash=hash_password(password), rol=RolCuenta.BONITA))
+            else:
+                servicio.password_hash = hash_password(password)
         db.commit()
 
 

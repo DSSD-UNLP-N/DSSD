@@ -82,10 +82,6 @@ def test_adjudicacion_y_cierre_exigen_cuenta_de_servicio_bonita(client, ong_head
         "/adjudicaciones/no-existe/confirmar",
         headers=bonita,
     ).status_code == 404
-    cierre = {
-        "cuit": "30-54666544-5",
-        "referencia": "no-existe",
-        "items": [{"tipo_recurso": "PARAMEDICO", "cantidad": 1}],
-    }
+    cierre = {"cuit": "30-54666544-5", "referencia": "no-existe"}
     assert client.post("/cierres", json=cierre, headers=ong).status_code == 403
-    assert client.post("/cierres", json=cierre, headers=bonita).status_code == 409
+    assert client.post("/cierres", json=cierre, headers=bonita).status_code == 404  # pasó la autorización; no hay reserva

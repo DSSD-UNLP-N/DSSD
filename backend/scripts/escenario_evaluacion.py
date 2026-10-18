@@ -13,6 +13,7 @@ seed y sin nada comprometido. Tarda unos 3 minutos.
 """
 from __future__ import annotations
 
+import os
 import argparse
 import sys
 import time
@@ -27,15 +28,16 @@ sys.path.insert(0, str(HERE))
 
 from escenario_tope import Escenario, crear_y_publicar, retirar_previas  # noqa: E402
 
+from nacional_auth import nacional_get, nacional_post  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
 from app.integrations.bonita import BonitaClient  # noqa: E402
 
 CRUZ_ROJA, BOMBEROS = "30-54666544-5", "30-68522415-9"
-VENTANA_S = 150  # alcanza para crear las dos emergencias, cargar las ofertas y esperar el temporizador
+VENTANA_S = int(os.environ.get("ESCENARIO_VENTANA_S", 60))  # alcanza para crear las dos emergencias y cargar las ofertas
 
 
 def comprometido(nacional: str, cuit: str, tipo: str) -> int:
-    ficha = requests.get(f"{nacional}/ongs/{cuit}", timeout=60).json()
+    ficha = nacional_get(f"{nacional}/ongs/{cuit}", timeout=60).json()
     return next(i["cantidad_comprometida"] for i in ficha["inventario"] if i["tipo_recurso"] == tipo)
 
 
@@ -137,7 +139,7 @@ def main() -> int:
     print("\n== Limpieza: se liberan las reservas de la prueba")
     for emergencia in (ea, eb):
         for o in evaluadas[emergencia]["evaluacion"]["ongs"]:
-            r = requests.post(f"{nacional}/adjudicaciones/{o['referencia']}/liberar", timeout=60)
+            r = nacional_post(f"{nacional}/adjudicaciones/{o['referencia']}/liberar", timeout=60)
             e.check(f"Liberar {o['referencia']}", r.status_code == 200 and r.json()["estado"] == "LIBERADA", r.text)
     e.check("La API Nacional quedó como al empezar",
             {k: comprometido(nacional, *k) for k in previos} == previos)

@@ -13,7 +13,6 @@ from datetime import datetime, timedelta, timezone
 
 import requests
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -137,33 +136,7 @@ def registrar_emergencia(
             "ventanaOfertasISO": _ventana_provisoria(settings),
         })
         _completar_registrar_emergencia(bonita, case_id)
-        bonita_case_id = int(case_id)
-        emergencia_previa = db.scalar(
-            select(Emergencia).where(
-                Emergencia.bonita_case_id == bonita_case_id,
-                Emergencia.id != emergencia.id,
-            )
-        )
-        if emergencia_previa is not None:
-            variables = bonita.get_case_variables(case_id)
-            if variables.get("emergenciaId") != str(emergencia.id):
-                raise BonitaError(
-                    f"El caso {case_id} de Bonita no corresponde a la emergencia recién creada"
-                )
-            log.warning(
-                "El caso Bonita %s ya estaba asociado a la emergencia local %s; "
-                "se limpia esa asociación obsoleta antes de guardar la emergencia %s",
-                bonita_case_id,
-                emergencia_previa.id,
-                emergencia.id,
-            )
-            emergencia_previa.bonita_case_id = None
-            db.flush()
-
-        emergencia.bonita_case_id = bonita_case_id
-        db.commit()
-        db.refresh(emergencia)
-    except (BonitaError, requests.RequestException, IntegrityError, ValueError) as exc:
+    except (BonitaError, requests.RequestException) as exc:
         db.rollback()
         if case_id is not None:
             _borrar_caso_huerfano(settings, case_id)
@@ -171,6 +144,9 @@ def registrar_emergencia(
             "No se pudo iniciar el caso en Bonita. La emergencia no se registró; probá de nuevo."
         ) from exc
 
+    emergencia.bonita_case_id = int(case_id)
+    db.commit()
+    db.refresh(emergencia)
     return emergencia
 
 

@@ -1,7 +1,54 @@
 # Plan para cerrar la Entrega 3: flujo completo, reparto, pruebas end to end y entrega
 
-Versión del 15/10/2026. Base: `modelado-tomas-e-3` (= `dev` + arreglo de migraciones, PR #8). Entrega: 22/10.
-JWT (servicio 1) queda fuera de este plan por decisión del 15/10; tiene su paquete al final para cuando se retome.
+Versión del 15/10/2026, **estado actualizado el 17/10/2026 (noche)**. Entrega: **jueves 22/10**.
+JWT (servicio 1) quedó fuera por decisión del 15/10 y **sigue sin hacerse: es el mayor riesgo que queda**.
+
+---
+
+## Estado al 17/10: qué está hecho y qué falta
+
+**Resumen**: el flujo completo funciona en local con Bonita real, de la emergencia al cierre y la liberación del stock
+(`escenario_cierre.py` 28/28). Falta lo que no es el flujo en sí: JWT, el deploy en la nube, Docker Compose, la entrega
+(README, video, prueba en limpio) y las pruebas de variantes.
+
+| WP | Qué | Estado | Qué falta | Quién | h que quedan |
+|---|---|---|---|---|---|
+| **WP0** Contratos | `contratos.md` | ✅ Hecho | — | — | 0 |
+| **WP1** Consolidado de ofertas | App: GET para Bonita, `EN_EVALUACION`, tope | ✅ Hecho | — | — | 0 |
+| **WP2** Reserva en la API Nacional | `evaluaciones`, `confirmar`, `liberar`, `resolucion` | ✅ Hecho | Probar la concurrencia contra una Postgres real (va con WP8) | Quien tenga Docker | (en WP8) |
+| **WP3** Cierre atado a la referencia | `POST /cierres` y `POST /cierres/lote` | ✅ Hecho | — (ver "Decisiones abiertas": hay dos implementaciones) | — | 0 |
+| **WP4** Conectores de Bonita | Siete conectores: obtener ofertas, evaluar, avisar evaluación, resolver reservas, avisar adjudicación, cerrar y avisar cierre | ✅ Casi | Re-exportar el `.bos` final desde Studio y commitearlo; en Studio, sacar el tipo multi-instancia de «Confirmar Finalizacion» | Tomás (Studio) | 0,5 |
+| **WP5** Decisión y adjudicación | Coordinador decide, Municipio adjudica, ronda 2 | ✅ Hecho | — | — | 0 |
+| **WP6** Notificaciones, ejecución y cierre | Evento `CIERRE`, avisos, monitorear, finalizar, validar cierre, campana | ✅ Hecho | — (ver "Decisiones abiertas") | — | 0 |
+| **WP7** Deploy en Render | Código nuevo, Postgres, deploy hook; `verificar_despliegue.py` (61 chequeos) contra la URL | ⏳ Pendiente | Todo. **La nube corre código viejo** | Alguien con acceso a Render y a los secrets de GitHub | 4 |
+| **WP8** Docker Compose | Compose completo (hoy solo hay Postgres), Dockerfile del backend y del front, probarlo | ⏳ Pendiente | Todo | Alguien con Docker funcionando | 4 |
+| **WP9** Pruebas end to end | Hechos: Parada 1 (26/26), Parada 2 (34/34 y 46/46 por UI), cierre (28/28), tope (39), variantes del cierre con Bonita real (`escenario_cierre_variantes.py`: subconjunto, cobertura completa, ronda 2, Nacional caída, app caída, concurrencia, eventos) | 🔶 Parcial | `ui_parada3.py` completo por la interfaz; repetir contra la nube | Tomás/Claude | 4 |
+| **WP10** Entrega | README, guion de demo, video, prueba en limpio, merge a `main`, tag | ⏳ Pendiente | Todo (los README de la raíz y del backend son de la Entrega 2) | Todos | 7 |
+| **WP11** JWT | Cuentas, `POST /login`, `POST /ongs`, protección por rol | ❌ **Sin empezar** | Todo. Lo pide la consigna de la Entrega 3 | **Sin responsable** | 8 |
+| **WP12** Parámetros por entorno | `nacionalBaseUrl`, `appBaseUrl`, `bonitaApiKey`; prueba contra la nube | ⏳ Al final | Todo; depende de WP7 | Tomás (Studio) | 3 |
+
+Total que queda: unas **30 h**, la mayoría repartibles en paralelo.
+
+### Decisiones abiertas (resolverlas ya)
+
+1. **Dos implementaciones de WP3 + WP6.** Existen la de la rama `modelado-tomas-e-3` y la del PR #11 (`franco/e3-wp3-wp6-cierre`).
+   Las dos funcionan con Bonita real hasta validar el cierre; la de esta rama además trae `/cierres/lote`, los conectores de
+   cierre en el `.bos`, el resumen de ejecución en todos los roles y los escenarios de prueba. **Las dos agregan una migración
+   `0006` con distinto nombre**: si entran las dos, Alembic queda con dos cabezas y la app no migra. Hay que quedarse con una
+   antes de mergear nada.
+2. **¿Quién hace JWT (WP11)?** Propuesta: Franco C., con la rama `franco_v` como base.
+3. **¿Quién tiene acceso a Render y a los secrets de GitHub (WP7)?** Y de qué rama se construye el servicio.
+4. **¿Quién prueba Docker (WP8) y la concurrencia en Postgres?** En la PC de Tomás Docker no arranca.
+
+### Cronograma desde hoy
+
+| Día | Qué |
+|---|---|
+| Sáb 17 – Dom 18 | Decidir el #11 · JWT (WP11) · Render (WP7) · Docker Compose (WP8) · Tomás/Claude: documentación y WP9 |
+| Lun 19 | WP12 (parámetros) y primera prueba contra la nube (M14) |
+| Mar 20 | WP9: corrida completa final, variantes y correcciones |
+| Mié 21 | WP10: prueba en limpio en otra PC, video, merge a `main` y tag |
+| Jue 22 | Entrega |
 
 ---
 
@@ -127,7 +174,10 @@ notificaciones y actualiza estados.
 
 ---
 
-## 4. Paquetes de trabajo y reparto (propuesta: ajustar con el equipo)
+## 4. Paquetes de trabajo y reparto (propuesta original del 15/10)
+
+> El estado actual y lo que falta están arriba, en «Estado al 17/10». Varias tareas se hicieron en la rama de Tomás y no
+> con las personas propuestas acá.
 
 | WP | Qué | Responsable propuesto | Depende de | h |
 |---|---|---|---|---|
@@ -145,7 +195,7 @@ notificaciones y actualiza estados.
 | WP11 | JWT (un token por usuario; emite la API Nacional; Bonita con cuenta de servicio). Base: rama `franco_v` | Franco V. (cuando se retome) | — | 8 |
 | WP12 | Bonita con parámetros por entorno (`nacionalBaseUrl`, `appBaseUrl`, `bonitaApiKey`; Local y Production) para pasar a la nube sin editar conectores. **Al final**, con todo probado en local | Tomás (tiene Studio) | WP1–WP6, WP7, WP9 | 1 |
 
-### Cronograma
+### Cronograma original (15/10)
 
 | Día | Qué |
 |---|---|
@@ -253,13 +303,25 @@ finaliza); el Auditor ve todo y no opera; una ONG no ve las ofertas ni notificac
 
 **M14. Contra la nube** — repetir M1–M10 con el backend apuntando a Render y Bonita llamando a la URL pública.
 
-### Automatización
+### Automatización (estado al 17/10)
 
-- `backend/scripts/escenario_tope.py` (hoy: M1–M4, 39 verificaciones) → ampliarlo o sumar `escenario_completo.py`
-  con M5–M10 (Bonita real; completa las tareas de cada rol por la API de la app).
-- `backend/scripts/e2e_ui.py` (navegador): sumar las pantallas nuevas.
-- `nacional/scripts/verificar_despliegue.py <url>`: sumar evaluación, confirmar, liberar y cierre (con datos de prueba
-  que deja el inventario como estaba).
+Todo corre con Bonita real, la app (`:8001`) y la API Nacional (`:8002`) arriba. `python scripts/verificar_todo.py` corre los
+tests (backend 205, API Nacional 99) y los tipos del front en unos 26 s.
+
+| Script | Qué recorre | Resultado |
+|---|---|---|
+| `backend/scripts/escenario_tope.py` | M1–M4: tope por inventario, retiros, permisos, timer | 39 verificaciones |
+| `backend/scripts/escenario_evaluacion.py` | Parada 1: evaluación con reserva | 26/26 |
+| `backend/scripts/escenario_adjudicacion.py` | Parada 2 por API: decisión, adjudicación, reformular y ronda 2 | 34/34 |
+| `backend/scripts/ui_parada2.py` | Parada 2 por la interfaz, con capturas (guía `guia-parada-2.html`) | 46/46 |
+| `backend/scripts/escenario_cierre.py` | De la adjudicación al cierre con las dos ONGs; Bonita libera con sus conectores | 28/28 |
+| `backend/scripts/ui_ejecucion.py` | Monitorear, finalizar, validar cierre y avisos por la interfaz | 24/25 (falla de espera del script, corregida) |
+| `backend/scripts/escenario_cierre_variantes.py` | Siete emergencias a la vez y todas las variantes del cierre (ver su docstring); apaga y levanta Nacional y la app | 17/10: verde (en dos tandas) |
+| `backend/scripts/recuperar_cierre.py <emergencia>` | Destraba un cierre cuyo nodo de Bonita quedó fallido | probado dentro de la batería |
+| `nacional/scripts/verificar_despliegue.py <url>` | Los endpoints de la API Nacional, local o en la nube; deja el inventario como estaba | 61/61 en local |
+
+**Falta (WP9):** `ui_parada3.py` completo y repetir todo contra la nube. Quedan sin probar la API Nacional caída *durante la
+evaluación* (el cierre sí está probado) y Postgres. `e2e_ui.py` (Entrega 2) no se amplió: lo cubren los `ui_*`.
 
 ---
 
@@ -279,15 +341,18 @@ Los profesores tienen que poder levantarlo y usarlo:
 
 ---
 
-## 8. Riesgos y decisiones abiertas
+## 8. Riesgos y decisiones abiertas (17/10)
 
-- **Lane de "Evaluar Cobertura"**: verificar en Studio que sea del Coordinador.
-- **Multi-instancia de "Confirmar Finalización"**: configurarla bien lleva tiempo; la alternativa simple es una tarea
-  única que la app completa cuando todas las ONGs marcaron finalizada.
-- **REFORMULAR** es el camino más caro (ronda nueva de ofertas): si no llega, dejarlo para la entrega final y decirlo.
-- **Conectores**: si Studio no trae el conector REST, usar conector de script Groovy; probar temprano (WP4 es el de
-  mayor riesgo).
-- **Nube**: arranque en frío ~45 s; el conector de Bonita y el backend necesitan timeout largo.
-- **Docker** no arranca en la PC de Tomás: la prueba del compose y la prueba en limpio las hace otro integrante.
-- **Tiempo**: ~60 h de trabajo en 6 días repartidas entre 5. Si no alcanza, prioridad: WP7 → WP1/WP2/WP4 (lo que pide
-  la Entrega 3: la API funcionando e integrada) → WP5 → WP6 → WP8/WP10.
+- **JWT (WP11) sin empezar**: la consigna lo incluye en la Entrega 3 («API JWT dockerizada»). Es el riesgo más grande; hace falta un
+  responsable ya. Lo ideal es que arranque por archivos nuevos (cuentas, `/login`) y proteja los endpoints después de resolver el #11.
+- **Dos implementaciones de WP3 + WP6** (rama `modelado-tomas-e-3` y PR #11): dos migraciones `0006` chocan. Decidir antes de mergear.
+- **La nube corre código viejo** (WP7): hasta redesplegar, `verificar_despliegue.py` falla contra Render en lo nuevo (reservas, cierres).
+  La prueba completa contra la nube (M14) depende de eso y de WP12.
+- **Docker** no arranca en la PC de Tomás: el compose (WP8), la concurrencia en Postgres y la prueba en limpio las hace otro integrante.
+- **Nube**: arranque en frío de 45 a 60 s; los conectores de Bonita ya tienen timeout de 60 s y el backend usa 60 s para la nube.
+- **Bonita**: cada «Ejecutar» en Studio borra los casos y puede tardar hasta 4 minutos; no tocar Studio mientras arranca. El `.bos` es binario:
+  edita una sola persona a la vez.
+- ✅ Resueltos: la lane de «Evaluar Cobertura» (es del Coordinador); la multi-instancia de «Confirmar Finalizacion» (versión simple, la
+  completa la app cuando terminan todas); REFORMULAR (hecho y probado, ronda 2); los conectores REST de Studio (siete, funcionando).
+- **Tiempo**: quedan unas 30 h de trabajo en cinco días. Si no alcanza, prioridad: JWT y WP7 (lo que pide la Entrega 3) → WP10 →
+  WP8 → WP9 (variantes).

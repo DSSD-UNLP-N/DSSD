@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
 from app.models import EstadoEmergencia, EstadoOferta, Gravedad, Rol, TipoLote
 from app.schemas.evaluacion import Evaluacion
@@ -28,32 +28,6 @@ class LoginIn(BaseModel):
     password: str = Field(min_length=1)
 
 
-class RegisterOngIn(BaseModel):
-    ong_nombre: str = Field(min_length=2, max_length=120)
-    cuit: str | None = Field(default=None, pattern=r"^\d{2}-?\d{8}-?\d$")
-    nombre: str = Field(min_length=2, max_length=120)
-    username: str = Field(min_length=3, max_length=60)
-    password: str = Field(min_length=8, max_length=128)
-
-    @field_validator("ong_nombre", "nombre", "username", mode="before")
-    @classmethod
-    def strip_required_text(cls, value):
-        return value.strip() if isinstance(value, str) else value
-
-    @field_validator("cuit", mode="before")
-    @classmethod
-    def normalize_cuit(cls, value):
-        if isinstance(value, str):
-            return value.strip() or None
-        return value
-
-
-class TokenOut(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    user: UsuarioOut
-
-
 class TipoRecursoOut(BaseModel):
     codigo: str
     nombre: str
@@ -69,6 +43,30 @@ class LoteOut(BaseModel):
     cantidad: int
     unidad: str
     tipo: TipoLote
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OngEjecucionOut(BaseModel):
+    cuit: str | None
+    nombre: str
+    estado: EstadoOferta  # ADJUDICADA mientras trabaja, FINALIZADA cuando informó que terminó
+
+
+class EjecucionOut(BaseModel):
+    """Cómo va la ejecución de una emergencia adjudicada. La ONG solo ve su propia fila."""
+    monitoreo_iniciado: bool
+    cierre_validado: bool
+    todas_finalizadas: bool
+    ongs: list[OngEjecucionOut]
+
+
+class NotificacionOut(BaseModel):
+    id: int
+    emergencia_id: int
+    texto: str
+    creada_en: UtcDatetime
+    leida: bool
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -90,6 +88,8 @@ class EmergenciaOut(BaseModel):
     tarea_bonita: str | None = None
     # Cobertura y ofertas validadas por la API Nacional; solo el detalle la trae, y no para la ONG.
     evaluacion: Evaluacion | None = None
+    # Ejecución y cierre; solo el detalle, y solo desde que la emergencia está en ejecución.
+    ejecucion: EjecucionOut | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

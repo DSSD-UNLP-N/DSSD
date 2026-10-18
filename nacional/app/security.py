@@ -81,12 +81,14 @@ def get_current_account(
     return cuenta
 
 
-def require_bonita(
+def require_servicio(
     cuenta: Cuenta = Depends(get_current_account),
     settings: Settings = Depends(get_settings),
 ) -> Cuenta:
-    if cuenta.rol is not RolCuenta.BONITA or cuenta.username != settings.bonita_service_username:
-        raise HTTPException(status_code=403, detail="Se requiere la cuenta de servicio de Bonita")
+    """Solo las cuentas de servicio: la de Bonita (conectores) y la de la app local. Las personas entran a la app."""
+    servicios = (settings.bonita_service_username, settings.app_service_username)
+    if cuenta.rol is not RolCuenta.BONITA or cuenta.username not in servicios:
+        raise HTTPException(status_code=403, detail="Se requiere una cuenta de servicio (Bonita o la app)")
     return cuenta
 
 

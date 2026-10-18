@@ -2,7 +2,7 @@ import os
 
 # Antes de importar la app: que ningún test toque dev.db ni un Postgres real.
 os.environ["DATABASE_URL"] = "sqlite://"
-os.environ["JWT_SECRET"] = "test-secret"
+os.environ["SESSION_SECRET"] = "test-secret"
 os.environ["BONITA_BASE_URL"] = "http://bonita.test/bonita"  # nunca pegarle a un Bonita real en los tests
 os.environ["NACIONAL_BASE_URL"] = "http://nacional.test"  # nunca pegarle a una API Nacional real en los tests
 os.environ["SHOW_DEMO_USERS"] = "false"  # que el .env local de cada uno no cambie lo que ven los tests
@@ -13,12 +13,22 @@ from sqlalchemy import create_engine  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
+from app.core import security  # noqa: E402
 from app.db import Base, get_db  # noqa: E402
-from app.integrations.nacional import NacionalError, get_nacional  # noqa: E402
+from app.integrations.nacional import NacionalError, get_nacional, olvidar_tokens  # noqa: E402
 from app.main import app  # noqa: E402
 from app.seed import DEMO_PASSWORD, seed  # noqa: E402
 
 PASSWORD = DEMO_PASSWORD
+
+# El PBKDF2 real tarda ~0,3 s por hash y `seeded` lo paga 6 veces por test (y cada login una más): era la mayor
+# parte del tiempo de la suite. El hash guarda sus iteraciones, así que verificar también usa este valor chico.
+security._ITERATIONS = 1_000
+
+
+@pytest.fixture(autouse=True)
+def _nacional_sin_sesion():
+    olvidar_tokens()
 
 
 @pytest.fixture(autouse=True)
@@ -72,51 +82,6 @@ class FakeNacional:
         }
         self.validaciones = []  # (gravedad, items) de cada llamada a validar()
         self.liberadas = []  # referencia de cada llamada a liberar()
-        self.login_calls = []
-        self.registration_calls = []
-
-    @staticmethod
-    def _token(username, role, cuit=None):
-        from datetime import datetime, timedelta, timezone
-
-        import jwt
-
-        now = datetime.now(timezone.utc)
-        return jwt.encode(
-            {
-                "sub": username,
-                "username": username,
-                "rol": role,
-                "cuit": cuit,
-                "iat": now,
-                "exp": now + timedelta(minutes=60),
-            },
-            "test-secret",
-            algorithm="HS256",
-        )
-
-    def login(self, username, password):
-        self._verificar()
-        self.login_calls.append((username, password))
-        roles = {
-            "operador.municipal": ("MUNICIPIO", None),
-            "operador.municipal2": ("MUNICIPIO", None),
-            "coordinador.regional": ("COORDINADOR", None),
-            "ong.cruzroja": ("ONG", "30-54666544-5"),
-            "ong.bomberos": ("ONG", "30-68522415-9"),
-            "auditor": ("AUDITOR", None),
-            "sin.municipio": ("MUNICIPIO", None),
-        }
-        role, cuit = roles[username]
-        return {"access_token": self._token(username, role, cuit), "token_type": "bearer"}
-
-    def registrar_ong(self, datos):
-        self._verificar()
-        self.registration_calls.append(datos)
-        return {
-            "access_token": self._token(datos["username"], "ONG", datos["cuit"]),
-            "token_type": "bearer",
-        }
 
     def _verificar(self):
         if self.caido:
@@ -173,7 +138,6 @@ def login(client):
     def _login(username: str):
         r = client.post("/api/auth/login", json={"username": username, "password": PASSWORD})
         assert r.status_code == 200, f"login de {username} falló: {r.status_code}"
-        client.headers["Authorization"] = f"Bearer {r.json()['access_token']}"
         return client
 
     return _login

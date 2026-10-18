@@ -149,15 +149,14 @@ class ValidacionOut(BaseModel):
     resultados: list[ResultadoValidacionOut]
 
 
-class CierreItemIn(BaseModel):
-    tipo_recurso: str
-    cantidad: int = Field(gt=0)
-
-
 class CierreIn(BaseModel):
     cuit: str = Field(min_length=1, max_length=13)
     referencia: str = Field(min_length=1, max_length=80)
-    items: list[CierreItemIn] = Field(min_length=1)
+
+
+class CierreLoteIn(BaseModel):
+    """Los cierres de varias ONGs de una emergencia, para que un solo pedido de Bonita los resuelva."""
+    cierres: list[CierreIn] = Field(min_length=1)
 
 
 class CierreItemOut(BaseModel):

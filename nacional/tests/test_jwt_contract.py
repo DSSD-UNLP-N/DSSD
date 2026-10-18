@@ -15,6 +15,7 @@ PROTECTED_OPERATIONS = {
     ("POST", "/adjudicaciones/{referencia}/liberar"),
     ("POST", "/adjudicaciones/resolucion"),
     ("POST", "/cierres"),
+    ("POST", "/cierres/lote"),
     ("GET", "/cierres/{cierre_id}"),
     ("GET", "/ongs/{cuit}/cierres"),
 }
@@ -72,6 +73,7 @@ def test_todos_los_endpoints_protegidos_rechazan_solicitudes_sin_token(client):
             "referencia": "sin-token",
             "items": [{"tipo_recurso": "PARAMEDICO", "cantidad": 1}],
         }),
+        ("POST", "/cierres/lote", {"cierres": []}),
         ("GET", "/cierres/1", None),
         ("GET", "/ongs/30-54666544-5/cierres", None),
     ]
@@ -146,6 +148,7 @@ def test_operaciones_reservadas_a_bonita_rechazan_otros_roles(client):
             "referencia": "solo-bonita",
             "items": [{"tipo_recurso": "PARAMEDICO", "cantidad": 1}],
         }),
+        ("POST", "/cierres/lote", {"cierres": []}),
         ("GET", "/cierres/1", None),
         ("GET", "/ongs/30-54666544-5/cierres", None),
     ]
@@ -155,7 +158,7 @@ def test_operaciones_reservadas_a_bonita_rechazan_otros_roles(client):
         assert response.status_code == 403, (method, path, response.status_code, response.text)
 
 
-def test_solo_jwt_bonita_puede_listar_cierres(client, ong_headers):
+def test_solo_jwt_de_servicio_puede_listar_cierres(client, ong_headers):
     ong = ong_headers("30-54666544-5")
     settings = get_settings()
     bonita = _token_headers(

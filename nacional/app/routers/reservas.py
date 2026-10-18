@@ -7,11 +7,11 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.schemas import EvaluacionIn, EvaluacionOut, LiberacionOut, ReservaOut, ResolucionIn, ResolucionOut
-from app.security import require_bonita
+from app.security import require_servicio
 from app.services import reservas
 from app.services.validacion import TipoRecursoDesconocido
 
-router = APIRouter(tags=["Reservas"], dependencies=[Depends(require_bonita)])
+router = APIRouter(tags=["Reservas"], dependencies=[Depends(require_servicio)])
 
 
 def _http(exc: Exception) -> HTTPException:
@@ -33,8 +33,9 @@ def evaluar_ofertas(body: EvaluacionIn, db: Session = Depends(get_db)):
     ofreció, sumando por recurso, hasta que se decida. Devuelve la cobertura por lote (promedio simple) y, por ONG,
     su referencia `emg-{emergencia}-r{ronda}-{cuit}`.
 
-    Idempotente: repetir el pedido devuelve lo mismo sin reservar dos veces. Si lo ofrecido supera lo disponible
-    se reserva lo que hay, recortando de los últimos ítems. `409` si la referencia ya fue liberada o cerrada."""
+    Idempotente: repetir el pedido devuelve lo mismo sin reservar dos veces. La oferta de una ONG se reserva entera o
+    no se reserva: si lo ofrecido supera lo disponible queda `NO_RESERVADA` y la ONG la rehace (nunca se recorta).
+    `409` si la referencia ya fue liberada o cerrada."""
     try:
         try:
             return reservas.evaluar(db, body, date.today())

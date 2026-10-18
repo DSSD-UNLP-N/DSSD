@@ -12,7 +12,13 @@ from sqlalchemy.pool import StaticPool  # noqa: E402
 from app.db import Base, get_db  # noqa: E402
 from app.config import get_settings  # noqa: E402
 from app.main import app  # noqa: E402
+from app import security  # noqa: E402
 from app.seed import seed  # noqa: E402
+
+# El PBKDF2 real tarda ~0,3 s por hash y el seed lo paga una vez por cuenta en cada test. El hash guarda sus
+# iteraciones, así que verificar también usa este valor chico.
+security._ITERATIONS = 1_000
+
 
 
 @pytest.fixture

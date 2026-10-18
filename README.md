@@ -119,9 +119,8 @@ una ruta por rol: **`backend/README.md`**.
 La interfaz es una SPA de React (Vite + TypeScript, `react-router`) y es la
 única: el backend no sirve páginas, solo la API bajo `/api`. En desarrollo
 corren dos procesos: el backend en `:8001` y Vite en `:5173`, que reenvía
-`/api` al backend (mismo origen para el navegador, sin necesidad de CORS).
-El inicio de sesión devuelve un JWT que el frontend conserva durante la sesión
-del navegador y envía como `Authorization: Bearer ...` en las llamadas protegidas.
+`/api` al backend (mismo origen para el navegador, así que la cookie de
+sesión funciona sin tokens ni CORS).
 
 Requisitos: Node 20+.
 

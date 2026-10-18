@@ -1,4 +1,4 @@
-"""Evaluación y reserva (eslabón 4, directiva 4), confirmación (eslabón 6) y liberación.
+"""Evaluación y reserva (eslabón 4, directiva 4), confirmación (eslabón 6), liberación y cierre (eslabón 7).
 
 Al vencer la ventana, Bonita manda las ofertas consolidadas. Por cada ONG se calcula con qué nivel de
 competencia opera y se RESERVA lo que ofreció (estado RESERVADA) hasta que se decida: lo elegido pasa a
@@ -20,7 +20,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import (
-    Adjudicacion, AdjudicacionItem, EstadoAdjudicacion, EstadoOng, Inventario, Ong, OngCertificacion, TipoRecurso,
+    Adjudicacion, AdjudicacionItem, CierreItem, CierreOperativo, EstadoAdjudicacion, EstadoOng, Inventario, Ong,
+    OngCertificacion, TipoRecurso,
 )
 from app.schemas import (
     EvaluacionIn, EvaluacionOut, ItemEvaluadoOut, LiberacionOut, LoteCoberturaOut, OngEvaluadaOut, RecursoLiberadoOut,
@@ -206,6 +207,18 @@ def _cargar_bloqueada(db: Session, ref: str) -> Adjudicacion:
     return adj
 
 
+def _devolver_stock(db: Session, adj: Adjudicacion) -> None:
+    """Resta del inventario lo que esta reserva tenía bloqueado, con las filas bloqueadas y ordenadas por id."""
+    ids = sorted(i.inventario_id for i in adj.items)
+    filas = db.scalars(
+        select(Inventario).where(Inventario.id.in_(ids)).order_by(Inventario.id).with_for_update()
+        .execution_options(populate_existing=True)
+    ).all() if ids else []
+    por_id = {f.id: f for f in filas}
+    for it in adj.items:
+        por_id[it.inventario_id].cantidad_comprometida -= it.cantidad
+
+
 def confirmar(db: Session, ref: str) -> Adjudicacion:
     """RESERVADA -> ADJUDICADA. Repetirlo no cambia nada."""
     adj = _cargar_bloqueada(db, ref)
@@ -222,14 +235,7 @@ def liberar(db: Session, ref: str) -> LiberacionOut:
     if adj.estado is EstadoAdjudicacion.CERRADA:
         raise ReservaEnConflicto(f"La referencia {ref} ya está CERRADA; sus recursos ya se liberaron")
     if adj.estado is not EstadoAdjudicacion.LIBERADA:
-        ids = sorted(i.inventario_id for i in adj.items)
-        filas = db.scalars(
-            select(Inventario).where(Inventario.id.in_(ids)).order_by(Inventario.id).with_for_update()
-            .execution_options(populate_existing=True)
-        ).all() if ids else []
-        por_id = {f.id: f for f in filas}
-        for it in adj.items:
-            por_id[it.inventario_id].cantidad_comprometida -= it.cantidad
+        _devolver_stock(db, adj)
         adj.estado = EstadoAdjudicacion.LIBERADA
         db.commit()
     return LiberacionOut(
@@ -237,6 +243,56 @@ def liberar(db: Session, ref: str) -> LiberacionOut:
         liberado=[RecursoLiberadoOut(tipo_recurso=i.inventario.tipo_recurso.codigo, cantidad=i.cantidad)
                   for i in adj.items],
     )
+
+
+def cerrar(db: Session, cuit: str, ref: str) -> tuple[CierreOperativo, bool]:
+    """ADJUDICADA -> CERRADA: la actividad terminó y se libera lo que esa referencia tenía comprometido, ni más ni menos.
+
+    Devuelve el cierre y si se creó recién. Repetirlo devuelve el mismo cierre sin restar de nuevo."""
+    ong = db.scalar(select(Ong).where(Ong.cuit == cuit))
+    if ong is None:
+        raise ReservaNoExiste("ONG no registrada")
+    adj = _cargar_bloqueada(db, ref)
+    if adj.ong_id != ong.id:
+        raise ReservaNoExiste(f"La referencia {ref} no pertenece a la ONG {cuit}")
+    if adj.estado is EstadoAdjudicacion.CERRADA:
+        cierre = db.scalar(select(CierreOperativo).where(
+            CierreOperativo.ong_id == ong.id, CierreOperativo.referencia == ref))
+        if cierre is None:
+            raise ReservaEnConflicto(f"La referencia {ref} está CERRADA pero no tiene un cierre guardado")
+        return cierre, False
+    if adj.estado is not EstadoAdjudicacion.ADJUDICADA:
+        raise ReservaEnConflicto(f"La referencia {ref} está {adj.estado.value}; solo se cierra una ADJUDICADA")
+    _devolver_stock(db, adj)
+    adj.estado = EstadoAdjudicacion.CERRADA
+    cierre = CierreOperativo(ong=ong, referencia=ref, informado_en=datetime.now(timezone.utc))
+    for it in adj.items:
+        cierre.items.append(CierreItem(tipo_recurso=it.inventario.tipo_recurso, cantidad=it.cantidad))
+    db.add(cierre)
+    db.commit()
+    return cierre, True
+
+
+def cerrar_varias(db: Session, pedidos: list[tuple[str, str]]) -> list[tuple[CierreOperativo, bool]]:
+    """Cierra varias adjudicaciones en una llamada (lo que manda Bonita al validarse el cierre bilateral).
+
+    Se valida todo antes de tocar nada: si una ONG o referencia no existe o no se puede cerrar, no se cierra ninguna.
+    Cada cierre es idempotente, así que repetir la llamada completa es seguro."""
+    referencias = [ref for _, ref in pedidos]
+    if len(set(referencias)) != len(referencias):
+        raise ReservaError("Una referencia no puede repetirse")
+    ongs = {o.cuit: o for o in db.scalars(select(Ong).where(Ong.cuit.in_([c for c, _ in pedidos])))}
+    existentes = {a.referencia_id: a for a in db.scalars(
+        select(Adjudicacion).where(Adjudicacion.referencia_id.in_(referencias)))}
+    for cuit, ref in pedidos:
+        if cuit not in ongs:
+            raise ReservaNoExiste("ONG no registrada")
+        if ref not in existentes or existentes[ref].ong_id != ongs[cuit].id:
+            raise ReservaNoExiste(f"La referencia {ref} no existe para la ONG {cuit}")
+        if existentes[ref].estado not in (EstadoAdjudicacion.ADJUDICADA, EstadoAdjudicacion.CERRADA):
+            raise ReservaEnConflicto(
+                f"La referencia {ref} está {existentes[ref].estado.value}; solo se cierra una ADJUDICADA")
+    return [cerrar(db, cuit, ref) for cuit, ref in pedidos]
 
 
 def resolver(db: Session, confirmar_refs: list[str], liberar_refs: list[str]) -> ResolucionOut:

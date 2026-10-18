@@ -3,6 +3,9 @@
 Acompaña a `plan-cierre-entrega.md` (diseño, contratos, escenarios). Cada tarea dice: para qué sirve, qué hay hoy,
 qué hay que hacer, cuándo está terminada y cómo se prueba. Los responsables se asignan después.
 
+**Estado al 17/10** (resumen y responsables en `plan-cierre-entrega.md`): ✅ hecho · 🔶 parcial · ⏳ pendiente · ❌ sin empezar.
+WP0 a WP6 ✅ (WP4 casi: falta el `.bos` final) · WP9 🔶 · WP7, WP8, WP10, WP12 ⏳ · **WP11 (JWT) ❌**.
+
 **Reglas para todos**
 - Una rama por tarea, PR a `dev`, tests en verde y probado contra servicios reales antes de pedir merge.
 - **Migraciones**: nunca editar ni renombrar una ya mergeada; siempre una nueva. Antes de mergear, traer `dev`
@@ -12,7 +15,7 @@ qué hay que hacer, cuándo está terminada y cómo se prueba. Los responsables 
 
 ---
 
-## WP0 — Contratos y chequeos previos
+## WP0 — Contratos y chequeos previos ✅ HECHO
 
 **Para qué**: que cinco personas puedan programar en paralelo sin pisarse. Si el JSON que manda Bonita no es el que
 espera la API, la integración falla el último día.
@@ -36,7 +39,7 @@ espera la API, la integración falla el último día.
 
 ---
 
-## WP1 — App local: consolidado de ofertas para Bonita y reserva hasta la evaluación
+## WP1 — App local: consolidado de ofertas para Bonita y reserva hasta la evaluación ✅ HECHO
 
 **Para qué**: la directiva 3 dice que, al vencer el timer, Bonita le pide las ofertas a la app. Además, entre que vence
 la ventana y Bonita reserva en la API Nacional, la ONG no tiene que poder reofertar lo mismo en otra emergencia.
@@ -70,7 +73,7 @@ con el header y ver el JSON.
 
 ---
 
-## WP2 — API Nacional: evaluación con reserva, y confirmar o liberar
+## WP2 — API Nacional: evaluación con reserva, y confirmar o liberar ✅ HECHO (falta probar la concurrencia en Postgres)
 
 **Para qué**: eslabón 4 y directiva 4: al vencer la ventana, la API valida cada oferta y **bloquea** los recursos
 hasta que se decida. Después, lo elegido queda comprometido (eslabón 6) y lo no elegido se libera.
@@ -105,7 +108,7 @@ ids internos (`ong_id`, `inventario_id`). `POST /validaciones` valida sin guarda
 
 ---
 
-## WP3 — API Nacional: cierre atado a la adjudicación
+## WP3 — API Nacional: cierre atado a la adjudicación ✅ HECHO (17/10)
 
 **Para qué**: servicio 5 y eslabón 7: al terminar la actividad se libera **exactamente** lo que se comprometió para esa
 emergencia y ONG.
@@ -119,13 +122,17 @@ liberar stock de otra adjudicación.
 2. Repetir el cierre de la misma referencia → no vuelve a restar (idempotente). Sin adjudicación confirmada → 409.
 3. Mantener `GET /cierres/{id}` y `GET /ongs/{cuit}/cierres`.
 
+**Hecho (17/10)**: `POST /cierres` por `{cuit, referencia}` (201 la primera vez, 200 si se repite, 404 si no existe, 409 si no
+está `ADJUDICADA`). Se sumó `POST /cierres/lote` (`{cierres: [{cuit, referencia}]}`, todo o nada, idempotente) porque Bonita no
+itera: un solo conector cierra a todas las ONGs adjudicadas, igual que `/adjudicaciones/resolucion`.
+
 **Terminado cuando**: reservar → confirmar → cerrar deja el inventario como al principio; no se puede cerrar algo no
 adjudicado ni dos veces.
 **Depende de**: WP2. **Estimación**: 3 h.
 
 ---
 
-## WP4 — Bonita: conectores de los pasos automáticos
+## WP4 — Bonita: conectores de los pasos automáticos ✅ CASI (falta el `.bos` final desde Studio)
 
 **Para qué**: hoy los cuatro pasos automáticos están vacíos, así que el proceso siempre cae en "Evaluar Cobertura" y
 nunca habla con la API. La consigna exige que Bonita inicie la comunicación.
@@ -141,7 +148,9 @@ nunca habla con la API. La consigna exige que Bonita inicie la comunicación.
 4. **"Notificar Adjudicación y Registrar Compromiso Nacional"**: por cada ONG evaluada, `confirmar` si está en
    `ongsAdjudicadas` y `liberar` si no; después POST a la app `/api/bonita/emergencias/{id}/eventos`
    `{"tipo": "ADJUDICACION"}`.
-5. **"Liberar Recursos y Notificar Cierre"**: `POST /cierres` por cada ONG adjudicada; después evento `CIERRE` a la app.
+5. **"Liberar Recursos y Notificar Cierre"** ✅: conector `cerrarAdjudicaciones` (`POST /cierres/lote` con las referencias de las ONGs
+   adjudicadas) y `avisarCierre` (evento `CIERRE` a la app). Se armaron con `bonita/scripts/agregar_conector_cierre.py`, que clona
+   los dos conectores de la adjudicación sin abrir Studio; probado con Bonita real (`escenario_cierre.py`, 28/28).
 6. Mover "Evaluar Cobertura y Definir Curso de Acción" a la lane del Coordinador (si WP0 lo confirma).
 7. Timeout de los conectores ≥ 60 s (la nube tarda en despertar).
 8. Exportar el `.bos` al repo y anotar en `entrega-2/CAMBIOS-BONITA.md` (o uno nuevo de la E3) qué se cambió.
@@ -154,7 +163,7 @@ primer día.
 
 ---
 
-## WP5 — App: el Coordinador decide y el Municipio adjudica
+## WP5 — App: el Coordinador decide y el Municipio adjudica ✅ HECHO
 
 **Para qué**: eslabón 5 y camino alternativo del timer. Hoy el caso llega a "Evaluar Cobertura" o a "Adjudicar
 Ofertas" y nadie puede seguir porque la app no tiene esas pantallas.
@@ -183,7 +192,7 @@ inventario libre y la emergencia lista para otra ronda; adjudicar deja los estad
 
 ---
 
-## WP6 — App: notificaciones, ejecución y cierre bilateral
+## WP6 — App: notificaciones, ejecución y cierre bilateral ✅ HECHO (17/10)
 
 **Para qué**: eslabones 5 y 7, y el perfil ONG de la consigna ("visualizar notificaciones de adjudicación… marcar
 actividades como finalizadas").
@@ -197,8 +206,10 @@ actividades como finalizadas").
 3. **Coordinador "Monitorear ejecución"**: ve las ONGs adjudicadas y su estado; un botón completa "Monitorear Ejecución
    del Despliegue" (habilita que las ONGs finalicen).
 4. **ONG "Marcar actividad finalizada"** (`POST /api/emergencias/{id}/finalizar`): marca su oferta `FINALIZADA`.
-5. **"Confirmar Finalización de Actividades"** en Bonita: hoy es multi-instancia sin configurar. Opción simple
-   (recomendada): convertirla en tarea común que la app completa cuando **todas** las ONGs adjudicadas finalizaron.
+5. **"Confirmar Finalización de Actividades"** en Bonita ✅ (versión simple): la app la completa cuando **todas** las ONGs
+   adjudicadas finalizaron, con el usuario de la que finalizó última. Probado con Bonita real: aunque el diagrama la marque
+   multi-instancia sin configurar, el motor crea una sola instancia. Opcional: en Studio, cambiar el tipo a «Estándar» para
+   sacar el aviso rojo.
    Opción completa: multi-instancia con cardinalidad desde `ongsAdjudicadas` y que la app complete la instancia de cada
    ONG.
 6. **Coordinador "Validar cierre bilateral"**: habilitado cuando todas finalizaron; completa la tarea → Bonita libera
@@ -211,7 +222,7 @@ emergencia queda "Resuelta", el inventario nacional vuelve al inicio y el caso d
 
 ---
 
-## WP7 — Deploy de la API Nacional
+## WP7 — Deploy de la API Nacional ⏳ PENDIENTE
 
 **Para qué**: la entrega pide la API desplegada con URL y Swagger. Hoy la nube corre código viejo y con el de `dev`
 no arrancaba (lo arregla el PR #8).
@@ -231,7 +242,7 @@ no arrancaba (lo arregla el PR #8).
 
 ---
 
-## WP8 — Docker Compose y Postgres en local
+## WP8 — Docker Compose y Postgres en local ⏳ PENDIENTE
 
 **Para qué**: que los profesores levanten todo con un comando, y el puntaje extra por Postgres dockerizada.
 
@@ -250,11 +261,16 @@ recorrido completo anda con Bonita en el host.
 
 ---
 
-## WP9 — Pruebas end to end
+## WP9 — Pruebas end to end 🔶 PARCIAL
 
 **Para qué**: la consigna espera que todo funcione de punta a punta; esto lo demuestra y deja la evidencia.
 
-**Qué hay que hacer**
+**Hecho**: `escenario_tope.py` (39), `escenario_evaluacion.py` (26/26), `escenario_adjudicacion.py` (34/34), `ui_parada2.py`
+(46/46, con guía ilustrada), `escenario_cierre.py` (28/28), `escenario_cierre_variantes.py` (subconjunto de ONGs, cobertura completa, ronda 2, API Nacional
+caída, app caída, finalizaciones simultáneas, eventos a mano), `ui_ejecucion.py` y `verificar_despliegue.py` (61/61 en local).
+**Falta**: `ui_parada3.py` completo por la interfaz y repetir todo contra la nube (y contra Postgres).
+
+**Qué había que hacer**
 1. **`backend/scripts/escenario_completo.py`** (Bonita real + API Nacional): crea la emergencia, lotes, publica con
    ventana corta, ofertas de dos ONGs, espera el timer y la evaluación de Bonita, verifica las reservas en la API,
    decide (PARCIAL), adjudica (una sí, otra no), verifica compromiso y liberación, notificaciones, monitoreo,
@@ -270,7 +286,7 @@ recorrido completo anda con Bonita en el host.
 
 ---
 
-## WP10 — Preparar la entrega
+## WP10 — Preparar la entrega ⏳ PENDIENTE
 
 **Qué hay que hacer**
 1. **README en la raíz**: qué es cada parte, requisitos, `docker compose up`, cómo importar el `.bos`, `.env.example`,
@@ -283,7 +299,7 @@ recorrido completo anda con Bonita en el host.
 
 ---
 
-## WP11 — JWT (cuando se retome)
+## WP11 — JWT ❌ SIN EMPEZAR (hay que retomarlo ya)
 
 **Para qué**: servicio 1 de la consigna: `/login` con JWT y registro de ONGs en la API Nacional.
 
@@ -300,7 +316,7 @@ recorrido completo anda con Bonita en el host.
 
 ---
 
-## WP12 — Bonita con parámetros por entorno (local y nube). Se hace AL FINAL
+## WP12 — Bonita con parámetros por entorno (local y nube). Se hace AL FINAL ⏳ PENDIENTE
 
 **Cuándo**: recién cuando todo el flujo (WP1 a WP6, WP9) esté probado en local con resultado exitoso, y antes de la
 prueba contra la nube (M14). Decisión del 17/10: hasta entonces los conectores llevan las URL fijas de `localhost`.

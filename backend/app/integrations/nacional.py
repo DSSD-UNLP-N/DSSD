@@ -2,74 +2,69 @@
 
 Cualquier falla (red, timeout, respuesta no 2xx) sale como NacionalError, para que quien llama
 decida: publicar una oferta sin validar nunca es una opción, así que la app responde 503.
+
+La API exige JWT. La app entra con su propia cuenta de servicio (`app-service`), no con la de la persona que está
+usando la pantalla: las personas se autentican contra la base de la app, y la app ya validó su rol antes de llamar.
+El token se pide una vez por proceso y se renueva solo cuando Nacional contesta 401 (vencido o secreto rotado).
 """
+import threading
+
 import requests
-from fastapi import Depends, Request
+from fastapi import Depends
 
 from app.core.config import Settings, get_settings
+
+# Un cliente nuevo por pedido, pero un solo login por proceso: (url, usuario) -> access_token.
+_TOKENS: dict[tuple[str, str], str] = {}
+_CANDADO = threading.Lock()
+
+
+def olvidar_tokens() -> None:
+    """Para los tests: que cada uno empiece sin sesión en Nacional."""
+    with _CANDADO:
+        _TOKENS.clear()
 
 
 class NacionalError(RuntimeError):
     pass
 
 
-class NacionalLoginRejected(NacionalError):
-    pass
-
-
-class NacionalLoginEndpointMissing(NacionalError):
-    pass
-
-
 class NacionalClient:
-    def __init__(self, base_url: str, timeout: float = 5.0, access_token: str | None = None):
+    def __init__(self, base_url: str, timeout: float = 5.0, username: str | None = None, password: str | None = None):
+        """Sin usuario no manda token (para una API Nacional sin JWT)."""
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
-        self.access_token = access_token
+        self.username = username or None
+        self.password = password or ""
 
-    def _request(self, method: str, path: str, *, authenticated: bool = True, **kwargs) -> dict | list:
-        try:
-            headers = dict(kwargs.pop("headers", {}))
-            if authenticated and self.access_token:
-                headers["Authorization"] = f"Bearer {self.access_token}"
-            resp = requests.request(
-                method,
-                f"{self.base_url}{path}",
-                timeout=self.timeout,
-                headers=headers,
-                **kwargs,
-            )
-            resp.raise_for_status()
-            return resp.json()
-        except requests.HTTPError as exc:
-            status_code = exc.response.status_code if exc.response is not None else None
-            message = f"Sistema Nacional: {method} {path} falló (HTTP {status_code})"
-            if method == "POST" and path == "/login" and status_code == 401:
-                raise NacionalLoginRejected(message) from exc
-            if method == "POST" and path == "/login" and status_code == 404:
-                raise NacionalLoginEndpointMissing(message) from exc
-            raise NacionalError(message) from exc
-        except (requests.RequestException, ValueError) as exc:
-            raise NacionalError(f"Sistema Nacional: {method} {path} falló ({exc})") from exc
+    def _token(self, renovar: bool = False) -> str | None:
+        if self.username is None:
+            return None
+        clave = (self.base_url, self.username)
+        with _CANDADO:
+            if renovar or clave not in _TOKENS:
+                try:
+                    resp = requests.post(f"{self.base_url}/login", timeout=self.timeout,
+                                         json={"username": self.username, "password": self.password})
+                    resp.raise_for_status()
+                    _TOKENS[clave] = resp.json()["access_token"]
+                except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
+                    raise NacionalError(
+                        f"Sistema Nacional: no se pudo iniciar sesión como {self.username} ({exc})") from exc
+            return _TOKENS[clave]
 
-    def login(self, username: str, password: str) -> dict:
-        resultado = self._request(
-            "POST",
-            "/login",
-            authenticated=False,
-            json={"username": username, "password": password},
-        )
-        if not isinstance(resultado, dict) or not isinstance(resultado.get("access_token"), str):
-            raise NacionalError("Sistema Nacional: respuesta inválida al iniciar sesión")
-        self.access_token = resultado["access_token"]
-        return resultado
-
-    def registrar_ong(self, datos: dict) -> dict:
-        resultado = self._request("POST", "/ongs", authenticated=False, json=datos)
-        if not isinstance(resultado, dict) or not isinstance(resultado.get("access_token"), str):
-            raise NacionalError("Sistema Nacional: respuesta inválida al registrar la ONG")
-        self.access_token = resultado["access_token"]
-        return resultado
+    def _request(self, method: str, path: str, **kwargs) -> dict | list:
+        for renovar in (False, True):
+            token = self._token(renovar)
+            headers = {"Authorization": f"Bearer {token}"} if token else {}
+            try:
+                resp = requests.request(method, f"{self.base_url}{path}", timeout=self.timeout, headers=headers, **kwargs)
+                if resp.status_code == 401 and token and not renovar:
+                    continue  # vencido o secreto rotado: se vuelve a entrar una sola vez
+                resp.raise_for_status()
+                return resp.json()
+            except (requests.RequestException, ValueError) as exc:
+                raise NacionalError(f"Sistema Nacional: {method} {path} falló ({exc})") from exc
 
     def tipos_recurso(self) -> list[dict]:
         """Catálogo: [{codigo, nombre, categoria, unidad, certificacion_requerida}]."""
@@ -98,11 +93,6 @@ class NacionalClient:
         return resultado
 
 
-def get_nacional(
-    request: Request,
-    settings: Settings = Depends(get_settings),
-) -> NacionalClient:
-    authorization = request.headers.get("Authorization", "")
-    scheme, _, token = authorization.partition(" ")
-    access_token = token if scheme.lower() == "bearer" and token else None
-    return NacionalClient(settings.nacional_base_url, settings.nacional_timeout_seconds, access_token)
+def get_nacional(settings: Settings = Depends(get_settings)) -> NacionalClient:
+    return NacionalClient(settings.nacional_base_url, settings.nacional_timeout_seconds,
+                          settings.nacional_service_username, settings.nacional_service_password)

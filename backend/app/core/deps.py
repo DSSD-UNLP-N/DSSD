@@ -1,10 +1,3 @@
-from fastapi import Depends, HTTPException
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import select
-from sqlalchemy.orm import Session
-
-from app.core.config import Settings, get_settings
-from app.core.security import get_token_claims
 import hmac
 
 from fastapi import Depends, Header, HTTPException, Request
@@ -14,31 +7,15 @@ from app.core.config import Settings, get_settings
 from app.db import get_db
 from app.models import Rol, Usuario
 
-bearer_scheme = HTTPBearer(auto_error=False)
 
-
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
-    db: Session = Depends(get_db),
-    settings: Settings = Depends(get_settings),
-) -> Usuario | None:
-    if credentials is None:
+def get_current_user(request: Request, db: Session = Depends(get_db)) -> Usuario | None:
+    uid = request.session.get("uid")
+    if uid is None:
         return None
-    claims = get_token_claims(credentials.credentials, settings.jwt_secret)
-    if claims is None:
-        return None
-    username = claims.get("username")
-    if isinstance(username, str):
-        user = db.scalar(select(Usuario).where(Usuario.username == username))
-        if user is None or claims.get("rol") != user.rol.value:
-            return None
-        user_cuit = user.ong.cuit if user.ong else None
-        if claims.get("cuit") != user_cuit:
-            return None
-        return user
-
-    user_id = claims.get("sub")
-    return db.get(Usuario, int(user_id)) if isinstance(user_id, str) and user_id.isdecimal() else None
+    user = db.get(Usuario, uid)
+    if user is None:  # usuario borrado con la sesión viva
+        request.session.clear()
+    return user
 
 
 def require_role(*roles: Rol):

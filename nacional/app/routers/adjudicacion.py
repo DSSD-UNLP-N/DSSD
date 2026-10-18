@@ -8,9 +8,9 @@ from sqlalchemy.orm import Session, selectinload
 from app.db import get_db
 from app.models import Adjudicacion, AdjudicacionItem, Inventario
 from app.schemas import AdjudicacionIn, AdjudicacionItemOut, AdjudicacionOut
-from app.security import require_bonita
+from app.security import require_servicio
 
-router = APIRouter(dependencies=[Depends(require_bonita)])
+router = APIRouter(dependencies=[Depends(require_servicio)])
 
 
 def _obtener_adjudicacion(db: Session, referencia_id: str) -> Adjudicacion | None:

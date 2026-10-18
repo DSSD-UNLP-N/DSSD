@@ -27,11 +27,13 @@ Convenciones
 
 Además se agregan al proceso **parámetros** (Configuración del proceso → Parámetros): `appBaseUrl`
 (`http://localhost:8001`), `nacionalBaseUrl` (`http://localhost:8002` o la URL de Render), `bonitaApiKey`,
-`nacionalServiceUsername` y `nacionalServicePassword`. Los dos últimos son las credenciales de la cuenta
-`BONITA` creada en el Sistema Nacional; guardarlas como parámetros del proceso, no en scripts ni en el repositorio.
-Cada conector de Bonita que llame a la API Nacional primero hace `POST {nacionalBaseUrl}/login` con esos parámetros,
-conserva `access_token` durante la ejecución y manda `Authorization: Bearer <access_token>` en cada llamada posterior.
-Un parámetro se cambia desde el portal sin volver a desplegar el diagrama.
+`nacionalServiceUsername` y `nacionalServicePassword`. Los dos últimos son las credenciales de la cuenta de servicio
+`bonita-service` del Sistema Nacional; en la nube no pueden quedar escritas en el diagrama ni en el repositorio.
+Cada tarea que llame a la API Nacional empieza con el conector `loginNacional` (`POST {nacionalBaseUrl}/login`), que deja la
+respuesta en la variable `nacionalLoginJson`, y manda `Authorization: Bearer <access_token>` en la llamada que sigue
+(ver `CAMBIOS-BONITA.md`). Un parámetro se cambia desde el portal sin volver a desplegar el diagrama.
+**Estado:** hoy las URLs, la clave y esas credenciales están escritas en los conectores (valores de desarrollo); pasarlas a
+parámetros es el trabajo de «Local vs Production» (WP12).
 
 ---
 
@@ -173,9 +175,17 @@ la pasa a `CERRADA` y guarda el cierre. Response `201` con el cierre actual de l
 `referencia`, `informado_en`, `items[] {tipo_recurso, nombre, unidad, cantidad_liberada, cantidad_total,
 cantidad_comprometida, disponible}`). Repetido → `200` con el mismo cierre, sin restar. Si no estaba `ADJUDICADA` → `409`.
 
-> Cambio respecto de hoy: `/cierres` recibe `{cuit, referencia, items}` y libera lo que le piden; pasa a recibir solo
-> la referencia y liberar lo que realmente se comprometió (WP3). Hasta que WP3 esté mergeado conviene que Bonita no lo
-> use.
+> Hecho (WP3, 17/10): antes `/cierres` recibía `{cuit, referencia, items}` y liberaba lo que le pedían; ahora recibe solo
+> la referencia y libera lo que realmente se comprometió. Un cuerpo con `items` se ignora el campo extra, pero ya no
+> sirve para nada: Bonita manda solo `{cuit, referencia}`. `404` si la ONG o la referencia no existen o no son de esa ONG.
+
+### 3.4b `POST /cierres/lote` — el cierre de todas las ONGs adjudicadas, en una sola llamada
+
+Request: `{"cierres": [{"cuit": "30-54666544-5", "referencia": "emg-12-r1-30-54666544-5"}, {"cuit": "30-68522415-9", "referencia": "emg-12-r1-30-68522415-9"}]}`.
+Igual que `/adjudicaciones/resolucion` para la adjudicación: Bonita no itera, así que un solo conector arma el cuerpo con
+Groovy a partir de `evaluacionJson` y `ongsAdjudicadas`. Cada cierre se comporta como en 3.4. Valida todo antes de cambiar
+nada (`404` si una ONG o referencia no existe o es de otra ONG, `409` si alguna no está `ADJUDICADA`, `400` si repite una
+referencia) y es idempotente. Response `200`: la lista de cierres, en el orden pedido.
 
 ### 3.5 Transiciones de una reserva
 
@@ -214,8 +224,10 @@ El detalle de la evaluación **no** se guarda en una variable de Bonita: viaja e
 | Publicar convocatoria | Coordinador | Completa "Revisar…" y "Publicar…", setea `ventanaOfertasISO` | Hecho |
 | **Decidir** (`POST /api/emergencias/{id}/decision`) | Coordinador | Setea `decisionCoordinador` = `PARCIAL` \| `REFORMULAR` y completa "Evaluar Cobertura…". REFORMULAR antes libera en la API Nacional las referencias de la ronda | Hecho |
 | **Adjudicar** (`POST /api/emergencias/{id}/adjudicar`) | Municipio | Setea `ongsAdjudicadas` (lista JSON de CUIT) y completa "Adjudicar Ofertas"; solo se puede elegir entre las ONGs `RESERVADA` | Hecho |
-| **Finalizar** (`POST /api/emergencias/{id}/finalizar`) | ONG | Completa su instancia de "Confirmar Finalizacion…" (o, en la versión simple, la completa la app cuando todas terminaron) | WP6 |
-| **Monitorear** y **Validar cierre** | Coordinador | Completa "Monitorear Ejecucion…" y "Validar Cierre Operativo Bilateral" | WP6 |
+| **Monitorear** (`POST /api/emergencias/{id}/monitorear`) | Coordinador | Completa "Monitorear Ejecucion del Despliegue"; desde ahí las ONGs pueden finalizar | Hecho |
+| **Finalizar** (`POST /api/emergencias/{id}/finalizar`) | ONG | Marca su oferta `FINALIZADA`; cuando terminaron **todas** las adjudicadas, la app completa "Confirmar Finalizacion de Actividades" (versión simple, una sola tarea) | Hecho |
+| **Validar cierre** (`POST /api/emergencias/{id}/validar-cierre`) | Coordinador | Con todas finalizadas, completa "Validar Cierre Operativo Bilateral"; Bonita libera en la API Nacional y manda el evento `CIERRE` | Hecho |
+| **Avisos** (`GET /api/notificaciones`, `POST /api/notificaciones/{id}/leida`) | ONG | Solo app local: las notificaciones de adjudicación y de cierre | Hecho |
 
 Cada tarea la ejecuta el usuario del rol correspondiente (mismo username en Bonita), como hoy.
 
@@ -257,6 +269,8 @@ Todo esto va en **una sola migración** de la app (WP1) para que dos tareas no c
 1. **Cobertura**: promedio simple por lote, todos los lotes cuentan (propuesta). ¿Alcanza o se pondera/excluye apoyo?
 2. ~~Recorte de reserva~~ **Resuelto (16/10):** sin recorte. Si el stock no alcanza para la oferta, esa ONG queda `NO_RESERVADA` y rehace la oferta.
 3. **Quién llama a `/liberar` al REFORMULAR**: la app (propuesta, porque el caso vuelve atrás por el modelo) o Bonita.
-4. **Multi-instancia** de "Confirmar Finalizacion": versión simple (una tarea que la app completa cuando todas las ONGs
-   adjudicadas finalizaron) o configurarla con cardinalidad `ongsAdjudicadas`.
+4. ~~Multi-instancia de "Confirmar Finalizacion"~~ **Resuelto (17/10):** versión simple. La app completa la tarea cuando
+   todas las ONGs adjudicadas finalizaron, con el usuario de la ONG que finalizó última (existe en Bonita con el mismo
+   username). Probado con Bonita real: el motor crea una sola instancia aunque el diagrama la marque multi-instancia sin
+   configurar.
 5. **Clave compartida** `X-Api-Key`: solo para el tramo Bonita ↔ app; hasta que llegue JWT, la API Nacional no pide nada.

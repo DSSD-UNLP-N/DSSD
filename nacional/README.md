@@ -16,12 +16,16 @@ uvicorn app.main:app --port 8002 --reload
 
 `DATABASE_URL` (en `nacional/.env` o el entorno) por defecto es `nacional/nacional.db` (SQLite). Ojo: `backend/`
 lee la misma variable; si exportás una en la terminal, la leen los dos.
-Configurar el mismo `JWT_SECRET` y `JWT_EXPIRATION_MINUTES` en `backend/.env` y
-`nacional/.env`: Nacional firma el JWT de `/login` y el backend local lo valida
-con esos mismos valores. En desarrollo, ambos usan `dev-only-change-me` y 60
-minutos por defecto. Después de migrar y ejecutar el seed, las cuentas de demo
-(`demo1234`) y la cuenta indicada por `BONITA_SERVICE_USERNAME` /
-`BONITA_SERVICE_PASSWORD` están creadas.
+`JWT_SECRET` y `JWT_EXPIRATION_MINUTES` son solo de esta API: ella firma y ella valida los tokens (la app local y Bonita
+los presentan sin conocer el secreto, así que no hay que copiarlo en `backend/.env`). En desarrollo valen
+`dev-only-change-me` y 60 minutos. Después de migrar y ejecutar el seed están creadas las cuentas de demo (`demo1234`) y
+las dos cuentas de servicio: `BONITA_SERVICE_USERNAME` / `BONITA_SERVICE_PASSWORD` (conectores de Bonita) y
+`APP_SERVICE_USERNAME` / `APP_SERVICE_PASSWORD` (la app local; en `backend/.env`: `NACIONAL_SERVICE_USERNAME` /
+`NACIONAL_SERVICE_PASSWORD`). El seed vuelve a fijar la clave de las cuentas de servicio desde el entorno, así que
+cambiarla y reiniciar la rota.
+
+Con Postgres (la nube) la API **no arranca** si `JWT_SECRET`, `BONITA_SERVICE_PASSWORD` o `APP_SERVICE_PASSWORD` siguen
+con el valor de ejemplo: están a la vista en el repositorio y con ellos cualquiera podría firmar un token.
 
 - Swagger: http://localhost:8002/docs
 - Estado: http://localhost:8002/health
@@ -39,14 +43,15 @@ minutos por defecto. Después de migrar y ejecutar el seed, las cuentas de demo
 | PUT | `/ongs/{cuit}/inventario` | Solo la cuenta ONG cuyo CUIT coincide con `{cuit}` |
 | GET | `/recursos/disponibilidad?tipo_recurso=` | JWT de cualquier rol: disponibilidad global |
 | POST | `/validaciones` | Cualquier JWT: valida cantidades y competencia; **no guarda nada** |
-| POST | `/evaluaciones` | Solo el JWT de la cuenta de servicio BONITA |
-| POST | `/adjudicaciones` | Solo BONITA: compromete inventario de forma atómica |
-| POST | `/adjudicaciones/{referencia}/confirmar` | Solo BONITA |
-| POST | `/adjudicaciones/{referencia}/liberar` | Solo BONITA |
-| POST | `/adjudicaciones/resolucion` | Solo BONITA |
-| POST | `/cierres` | Solo BONITA: informa el cierre y libera recursos |
-| GET | `/cierres/{id}` | Solo BONITA |
-| GET | `/ongs/{cuit}/cierres` | Solo BONITA |
+| POST | `/evaluaciones` | Solo cuentas de servicio |
+| POST | `/adjudicaciones` | Solo cuentas de servicio: compromete inventario de forma atómica |
+| POST | `/adjudicaciones/{referencia}/confirmar` | Solo cuentas de servicio |
+| POST | `/adjudicaciones/{referencia}/liberar` | Solo cuentas de servicio |
+| POST | `/adjudicaciones/resolucion` | Solo cuentas de servicio |
+| POST | `/cierres` | Solo cuentas de servicio: informa el cierre de una adjudicación (`{cuit, referencia}`) y libera exactamente lo que tenía comprometido |
+| POST | `/cierres/lote` | Solo cuentas de servicio: lo mismo para varias ONGs en una llamada (`{cierres: [{cuit, referencia}]}`); todo o nada, idempotente |
+| GET | `/cierres/{id}` | Solo cuentas de servicio |
+| GET | `/ongs/{cuit}/cierres` | Solo cuentas de servicio |
 
 Los endpoints protegidos exigen `Authorization: Bearer <access_token>`. La API valida firma, vencimiento,
 identidad y rol contra la tabla `cuenta`. El JWT debe incluir `sub`, `username`, `rol`, `cuit`, `iat` y `exp`.
@@ -54,11 +59,12 @@ Un token ONG solo puede modificar el inventario de la ONG que tiene asociada; lo
 adjudicación y cierre exigen específicamente la cuenta BONITA.
 `/health` también es público.
 
-La app local obtiene el token Nacional durante el login (`POST /login`) y reenvía ese mismo Bearer al hacer
-llamadas al catálogo y a `/validaciones`. Bonita debe autenticarse por separado: sus parámetros de proceso
-`nacionalServiceUsername` y `nacionalServicePassword` se envían a `/login`, y los conectores usan el JWT devuelto
-en las llamadas protegidas. El `.bos` del repositorio todavía no tiene conectores REST configurados: esa parte
-debe completarse en Bonita Studio antes de considerar probado el flujo completo de Bonita.
+Hay dos cuentas de servicio (rol `BONITA`): `bonita-service`, para los conectores de Bonita, y `app-service`, para la
+app local. Las personas (Municipio, Coordinador, ONG, Auditor) inician sesión en la app, no acá: la app valida sus
+credenciales con su propia base y, cuando necesita al Sistema Nacional, hace `POST /login` con `app-service`. Bonita hace
+lo mismo con `bonita-service`: sus parámetros de proceso `nacionalServiceUsername` y `nacionalServicePassword` van a
+`/login` y el JWT devuelto se manda en las llamadas protegidas. Las cuentas de ONG (`POST /ongs`) sirven para usar esta
+API directamente, por ejemplo desde Swagger.
 
 ### `POST /validaciones`
 
@@ -75,15 +81,18 @@ abiertas y rechaza si no alcanza. Más adelante lo puede usar Bonita al vencer e
 
 ### `POST /cierres`
 
-Informa al sistema central que la ONG terminó una actividad y libera los recursos que tenía bloqueados.
-Resta `cantidad_comprometida` (el bloqueo, servicio 4, es quien la suma). No toca `cantidad_total`.
+Informa que la ONG terminó la actividad de una adjudicación y libera lo que esa referencia tenía bloqueado. No se
+indican ítems: se resta de `cantidad_comprometida` exactamente lo que la referencia comprometió (con las filas de
+inventario bloqueadas) y la referencia pasa de `ADJUDICADA` a `CERRADA`. No toca `cantidad_total`.
 
 ```json
-{ "cuit": "30-54666544-5", "referencia": "emergencia-12", "items": [{ "tipo_recurso": "PARAMEDICO", "cantidad": 2 }] }
+{ "cuit": "30-54666544-5", "referencia": "emg-12-r1-30-54666544-5" }
 ```
 
 - 201 con lo liberado y el inventario que queda (`comprometida` / `disponible`).
-- 409 si se pide liberar más de lo bloqueado, si el tipo no está en el inventario, o si esa `referencia` ya se informó para la misma ONG. Si un ítem falla, no se libera ninguno.
+- Repetirlo → 200 con el mismo cierre, sin restar de nuevo.
+- 404 si la ONG o la referencia no existen, o la referencia es de otra ONG. 409 si la referencia no está `ADJUDICADA`
+  (reservada sin confirmar, o liberada).
 
 ### `POST /adjudicaciones`
 
@@ -104,7 +113,9 @@ docker run --rm -p 8002:8002 rescuesync-nacional
 
 Al arrancar corre `alembic upgrade head` y el seed. `DATABASE_URL` en Postgres (`postgres://` de Render se normaliza a `postgresql+psycopg://`). Sin esa variable usa SQLite dentro del contenedor.
 
-El blueprint está en `render.yaml` (servicio web + Postgres free). En Render: New → Blueprint, con este repo. La URL pública es la del servicio `rescuesync-nacional` (`/health` y `/docs`).
+El blueprint está en `render.yaml` (servicio web + Postgres free). En Render: New → Blueprint, con este repo; pide
+`BONITA_SERVICE_PASSWORD` y `APP_SERVICE_PASSWORD` (las mismas que van en los conectores de Bonita y en
+`NACIONAL_SERVICE_PASSWORD` de la app) y genera solo el `JWT_SECRET`. La URL pública es la del servicio `rescuesync-nacional` (`/health` y `/docs`).
 
 Para que un push a `main` o `dev` despliegue solo: en el servicio, Settings → Deploy Hook, y guardar esa URL como secret `RENDER_DEPLOY_HOOK_URL` del repo. El workflow `.github/workflows/deploy-nacional.yml` construye la imagen en cada PR y, si el secret existe, dispara el hook.
 

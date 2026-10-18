@@ -13,6 +13,14 @@ services:
         fromDatabase:
           name: rescuesync-nacional-db
           property: connectionString
+      # Con Postgres la API no arranca si estos valores quedan con el de ejemplo (ver nacional/app/config.py).
+      - key: JWT_SECRET
+        generateValue: true
+      # Las cargan personas en el dashboard (sync: false): las usan los conectores de Bonita y la app local.
+      - key: BONITA_SERVICE_PASSWORD
+        sync: false
+      - key: APP_SERVICE_PASSWORD
+        sync: false
 
 databases:
   - name: rescuesync-nacional-db
