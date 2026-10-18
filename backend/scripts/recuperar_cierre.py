@@ -23,6 +23,7 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from nacional_auth import nacional_post  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
 from app.integrations.bonita import BonitaClient  # noqa: E402
 from app.seed import DEMO_PASSWORD  # noqa: E402
@@ -52,7 +53,7 @@ def recuperar(emergencia: int, app: str = "http://localhost:8001", coordinador: 
     referencias = {o["cuit"]: o["referencia"] for o in d["evaluacion"]["ongs"]}
     hecho = []
 
-    r = requests.post(f"{cfg.nacional_base_url.rstrip('/')}/cierres/lote", timeout=60,
+    r = nacional_post(f"{cfg.nacional_base_url.rstrip('/')}/cierres/lote", timeout=60,
                       json={"cierres": [{"cuit": c, "referencia": referencias[c]} for c in cuits]})
     r.raise_for_status()
     hecho.append(f"API Nacional: {len(cuits)} referencia(s) cerradas ({', '.join(referencias[c] for c in cuits)})")

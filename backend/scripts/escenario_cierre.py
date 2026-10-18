@@ -34,6 +34,7 @@ sys.path.insert(0, str(HERE))
 from escenario_adjudicacion import BOMBEROS, CRUZ_ROJA, VENTANA_S, comprometido, esperar  # noqa: E402
 from escenario_tope import Escenario, crear_y_publicar  # noqa: E402
 
+from nacional_auth import nacional_get  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
 from app.integrations.bonita import BonitaClient  # noqa: E402
 
@@ -108,7 +109,7 @@ def main() -> int:
     e.check("C4 Nacional: el inventario volvió a como estaba", {k: comprometido(nacional, *k) for k in claves} == previos,
             {k: comprometido(nacional, *k) for k in claves})
     for nombre, cuit in (("Cruz Roja", CRUZ_ROJA), ("Bomberos", BOMBEROS)):
-        cierres = requests.get(f"{nacional}/ongs/{cuit}/cierres", timeout=60).json()
+        cierres = nacional_get(f"{nacional}/ongs/{cuit}/cierres", timeout=60).json()
         propios = [c for c in cierres if c["referencia"] == f"emg-{emg}-r1-{cuit}"]
         e.check(f"C5 Nacional: hay un cierre de {nombre} para esta emergencia", len(propios) == 1, cierres)
     e.check("C6 Bonita: el caso terminó, sin tareas pendientes", sin_tareas(admin, caso), [t["displayName"] for t in admin.get_human_tasks(caso)])

@@ -46,6 +46,7 @@ from escenario_cierre import sin_tareas  # noqa: E402
 from escenario_tope import Escenario, crear_y_publicar  # noqa: E402
 from recuperar_cierre import recuperar  # noqa: E402
 
+from nacional_auth import nacional_get  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
 from app.integrations.bonita import BonitaClient  # noqa: E402
 from app.seed import DEMO_PASSWORD  # noqa: E402
@@ -88,7 +89,7 @@ class Ctx:
             con.close()
 
     def cierres(self, cuit: str, emg: int) -> list[dict]:
-        todos = requests.get(f"{self.nacional}/ongs/{cuit}/cierres", timeout=60).json()
+        todos = nacional_get(f"{self.nacional}/ongs/{cuit}/cierres", timeout=60).json()
         return [c for c in todos if c["referencia"].startswith(f"emg-{emg}-")]
 
     def avisos(self, usuario: str, emg: int, texto: str = "se cerró") -> list[str]:

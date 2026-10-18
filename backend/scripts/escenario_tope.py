@@ -22,6 +22,7 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from nacional_auth import nacional_post  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
 from app.integrations.bonita import BonitaClient  # noqa: E402
 from app.seed import DEMO_PASSWORD  # noqa: E402
@@ -217,7 +218,7 @@ def main() -> int:
 
     print("\n== Limpieza")
     nacional = settings.nacional_base_url.rstrip("/")
-    r = requests.post(f"{nacional}/adjudicaciones/emg-{e3}-r1-30-68522415-9/liberar", timeout=60)
+    r = nacional_post(f"{nacional}/adjudicaciones/emg-{e3}-r1-30-68522415-9/liberar", timeout=60)
     e.check("Se libera la reserva que Bonita hizo para #3", r.status_code == 200 and r.json()["estado"] == "LIBERADA", r.text)
     retiradas =sum(e.ofrecer(o, i).status_code == 201 for o in ("ong.cruzroja", "ong.bomberos") for i in (e1, e2))
     print(f"     {retiradas} ofertas del escenario retiradas (las convocatorias quedan abiertas 2 h)")

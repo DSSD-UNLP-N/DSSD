@@ -34,6 +34,7 @@ sys.path.insert(0, str(HERE))
 import e2e_ui  # noqa: E402
 from e2e_ui import PLAZO, Reporte, Ui, dato, tarea_activa  # noqa: E402
 
+from nacional_auth import nacional_get, nacional_post  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
 from app.integrations.bonita import BonitaClient  # noqa: E402
 
@@ -43,7 +44,7 @@ e2e_ui.CAPTURAS = IMG
 
 
 def comprometido(nacional: str, cuit: str, tipo: str) -> int:
-    ficha = requests.get(f"{nacional}/ongs/{cuit}", timeout=60).json()
+    ficha = nacional_get(f"{nacional}/ongs/{cuit}", timeout=60).json()
     return next(i["cantidad_comprometida"] for i in ficha["inventario"] if i["tipo_recurso"] == tipo)
 
 
@@ -275,7 +276,7 @@ def main() -> int:
             u.entrar(app, "operador.municipal")
             adjudicar(u, app, eb, CRUZ_ROJA, "municipio-adjudicar-b", "municipio-en-ejecucion-b")
             r.check("B: Nacional: 3000 raciones adjudicadas a Cruz Roja", comprometido(nacional, CRUZ_ROJA, "RACION_ALIMENTO") == 3000)
-            ref2 = requests.post(f"{nacional}/adjudicaciones/emg-{eb}-r2-{CRUZ_ROJA}/confirmar", timeout=60).json()
+            ref2 = nacional_post(f"{nacional}/adjudicaciones/emg-{eb}-r2-{CRUZ_ROJA}/confirmar", timeout=60).json()
             r.check("B: la reserva de la ronda 2 existe y está ADJUDICADA", ref2.get("estado") == "ADJUDICADA", ref2)
             u.salir()
         except Exception as exc:
@@ -287,7 +288,7 @@ def main() -> int:
     r.fase("Limpieza: se liberan las reservas de la prueba (el cierre todavía no existe)")
     for ea_, ronda, cuit in ((ea, 1, CRUZ_ROJA), (eb, 2, CRUZ_ROJA)):
         if ea_:
-            requests.post(f"{nacional}/adjudicaciones/emg-{ea_}-r{ronda}-{cuit}/liberar", timeout=60)
+            nacional_post(f"{nacional}/adjudicaciones/emg-{ea_}-r{ronda}-{cuit}/liberar", timeout=60)
     r.check("La API Nacional quedó como al empezar", {k: comprometido(nacional, *k) for k in previos} == previos)
     return r.resumen()
 

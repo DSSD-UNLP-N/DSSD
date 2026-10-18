@@ -29,6 +29,7 @@ sys.path.insert(0, str(HERE))
 
 from escenario_tope import Escenario, crear_y_publicar  # noqa: E402
 
+from nacional_auth import nacional_get, nacional_post  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
 from app.integrations.bonita import BonitaClient  # noqa: E402
 
@@ -37,7 +38,7 @@ VENTANA_S = 130
 
 
 def comprometido(nacional: str, cuit: str, tipo: str) -> int:
-    ficha = requests.get(f"{nacional}/ongs/{cuit}", timeout=60).json()
+    ficha = nacional_get(f"{nacional}/ongs/{cuit}", timeout=60).json()
     return next(i["cantidad_comprometida"] for i in ficha["inventario"] if i["tipo_recurso"] == tipo)
 
 
@@ -114,8 +115,8 @@ def main() -> int:
     e.check("A11 Bonita: el caso espera en 'Monitorear Ejecucion del Despliegue' (Coordinador)", tarea is not None,
             [t["displayName"] for t in admin.get_human_tasks(caso_a)])
     e.check("A12 Nacional: la reserva de Cruz Roja quedó ADJUDICADA y la de Bomberos LIBERADA",
-            requests.post(f"{nacional}/adjudicaciones/emg-{ea}-r1-{CRUZ_ROJA}/confirmar", timeout=60).json()["estado"] == "ADJUDICADA"
-            and requests.post(f"{nacional}/adjudicaciones/emg-{ea}-r1-{BOMBEROS}/liberar", timeout=60).json()["estado"] == "LIBERADA")
+            nacional_post(f"{nacional}/adjudicaciones/emg-{ea}-r1-{CRUZ_ROJA}/confirmar", timeout=60).json()["estado"] == "ADJUDICADA"
+            and nacional_post(f"{nacional}/adjudicaciones/emg-{ea}-r1-{BOMBEROS}/liberar", timeout=60).json()["estado"] == "LIBERADA")
 
     print("\n== B: el Coordinador reformula")
     d = e.get("coordinador.regional", f"/emergencias/{eb}").json()
@@ -155,7 +156,7 @@ def main() -> int:
 
     print("\n== Limpieza: se liberan las reservas de la prueba (el cierre todavía no existe)")
     for ref in (f"emg-{ea}-r1-{CRUZ_ROJA}", f"emg-{eb}-r2-{CRUZ_ROJA}"):
-        r = requests.post(f"{nacional}/adjudicaciones/{ref}/liberar", timeout=60)
+        r = nacional_post(f"{nacional}/adjudicaciones/{ref}/liberar", timeout=60)
         e.check(f"Liberar {ref}", r.status_code == 200, r.text)
     e.check("La API Nacional quedó como al empezar", {k: comprometido(nacional, *k) for k in previos} == previos)
 
