@@ -24,7 +24,7 @@ from app.seed import seed
 @pytest.mark.integration
 def test_dos_adjudicaciones_concurrentes_solo_una_compromete():
     url = os.environ.get("POSTGRES_TEST_DATABASE_URL")
-    if not url or not url.startswith(("postgres://", "postgresql://")):
+    if not url or not url.startswith(("postgres://", "postgresql://", "postgresql+psycopg://")):
         pytest.skip("requiere POSTGRES_TEST_DATABASE_URL con PostgreSQL")
 
     engine = create_engine(url, poolclass=NullPool, pool_pre_ping=True)
