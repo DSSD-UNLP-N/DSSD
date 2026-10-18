@@ -59,11 +59,16 @@ def get_current_account(
     if credentials is None:
         raise HTTPException(status_code=401, detail="Token bearer requerido")
     try:
-        claims = jwt.decode(credentials.credentials, settings.jwt_secret, algorithms=["HS256"])
+        claims = jwt.decode(
+            credentials.credentials,
+            settings.jwt_secret,
+            algorithms=["HS256"],
+            options={"require": ["exp", "iat", "sub", "username", "rol"]},
+        )
     except InvalidTokenError as exc:
         raise HTTPException(status_code=401, detail="Token inválido o vencido") from exc
     username = claims.get("username")
-    if not isinstance(username, str) or not username:
+    if not isinstance(username, str) or not username or "cuit" not in claims:
         raise HTTPException(status_code=401, detail="Token inválido")
     cuenta = db.scalar(select(Cuenta).where(Cuenta.username == username))
     if (

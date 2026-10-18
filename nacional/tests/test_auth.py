@@ -37,6 +37,29 @@ def test_login_rechaza_credenciales_invalidas(client, username, password):
     assert response.status_code == 401
 
 
+@pytest.mark.parametrize("missing_claim", ["exp", "iat", "sub", "username", "rol", "cuit"])
+def test_ruta_protegida_rechaza_jwt_sin_claims_obligatorios(client, missing_claim):
+    from datetime import datetime, timedelta, timezone
+
+    claims = {
+        "sub": "auditor",
+        "username": "auditor",
+        "rol": "AUDITOR",
+        "cuit": None,
+        "iat": datetime.now(timezone.utc),
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
+    }
+    del claims[missing_claim]
+    token = jwt.encode(claims, get_settings().jwt_secret, algorithm="HS256")
+
+    response = client.get(
+        "/tipos-recurso",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 401
+
+
 def test_cuenta_de_servicio_bonita_se_crea_con_password_hasheada(client, session_factory):
     with session_factory() as db:
         cuenta = db.scalar(select(Cuenta).where(Cuenta.rol == RolCuenta.BONITA))

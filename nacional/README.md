@@ -17,7 +17,9 @@ uvicorn app.main:app --port 8002 --reload
 `DATABASE_URL` (en `nacional/.env` o el entorno) por defecto es `nacional/nacional.db` (SQLite). Ojo: `backend/`
 lee la misma variable; si exportás una en la terminal, la leen los dos.
 Configurar el mismo `JWT_SECRET` y `JWT_EXPIRATION_MINUTES` en `backend/.env` y
-`nacional/.env`. Después de migrar y ejecutar el seed, las cuentas de demo
+`nacional/.env`: Nacional firma el JWT de `/login` y el backend local lo valida
+con esos mismos valores. En desarrollo, ambos usan `dev-only-change-me` y 60
+minutos por defecto. Después de migrar y ejecutar el seed, las cuentas de demo
 (`demo1234`) y la cuenta indicada por `BONITA_SERVICE_USERNAME` /
 `BONITA_SERVICE_PASSWORD` están creadas.
 
@@ -47,8 +49,9 @@ Configurar el mismo `JWT_SECRET` y `JWT_EXPIRATION_MINUTES` en `backend/.env` y
 | GET | `/ongs/{cuit}/cierres` | Solo BONITA |
 
 Los endpoints protegidos exigen `Authorization: Bearer <access_token>`. La API valida firma, vencimiento,
-identidad y rol contra la tabla `cuenta`. Un token ONG solo puede modificar el inventario de la ONG que tiene
-asociada; los endpoints de evaluación, adjudicación y cierre exigen específicamente la cuenta BONITA.
+identidad y rol contra la tabla `cuenta`. El JWT debe incluir `sub`, `username`, `rol`, `cuit`, `iat` y `exp`.
+Un token ONG solo puede modificar el inventario de la ONG que tiene asociada; los endpoints de evaluación,
+adjudicación y cierre exigen específicamente la cuenta BONITA.
 `/health` también es público.
 
 La app local obtiene el token Nacional durante el login (`POST /login`) y reenvía ese mismo Bearer al hacer
