@@ -65,10 +65,107 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
 
+  # Lo que SQLite no prueba y Render sí usa: Postgres, las migraciones y el arranque con secretos propios.
+  nacional-despliegue:
+    name: API Nacional (Postgres, arranque y verificador)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: nacional
+          POSTGRES_PASSWORD: nacional
+          POSTGRES_DB: nacional
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U nacional" --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: nacional
+    env:
+      JWT_SECRET: ci-secreto-jwt-largo-solo-para-la-prueba
+      BONITA_SERVICE_PASSWORD: ci-clave-bonita
+      APP_SERVICE_PASSWORD: ci-clave-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12" # la del Dockerfile que se despliega en Render
+          cache: pip
+          cache-dependency-path: nacional/requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      - name: Concurrencia de adjudicaciones con Postgres real
+        env:
+          POSTGRES_TEST_DATABASE_URL: postgresql+psycopg://nacional:nacional@localhost:5432/nacional_tests
+        run: |
+          PGPASSWORD=nacional psql -h localhost -U nacional -d nacional -c "CREATE DATABASE nacional_tests"
+          python -m pytest -q tests/test_concurrencia_adjudicacion.py
+      - name: Con Postgres, la API no arranca con los secretos de ejemplo
+        env:
+          DATABASE_URL: postgresql://nacional:nacional@localhost:5432/nacional
+        run: |
+          if JWT_SECRET=dev-only-change-me python -c "from app.config import get_settings; get_settings()"; then
+            echo "Arrancó con el secreto de ejemplo: el chequeo de config.py no funciona"; exit 1
+          fi
+      - name: Migraciones, seed y arranque (igual que scripts/start.sh)
+        env:
+          DATABASE_URL: postgresql://nacional:nacional@localhost:5432/nacional
+        run: |
+          python -m alembic upgrade head
+          python -m alembic downgrade base
+          python -m alembic upgrade head
+          python -m app.seed
+          nohup python -m uvicorn app.main:app --port 8002 > ../uvicorn.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://localhost:8002/health && break; sleep 1; done
+      - name: Verificar la API en marcha (JWT, catálogo, validaciones, reservas)
+        run: python scripts/verificar_despliegue.py http://localhost:8002 --clave "$BONITA_SERVICE_PASSWORD"
+      - name: Log del servidor si algo falló
+        if: failure()
+        run: cat ../uvicorn.log
+
+  backend-postgres:
+    name: Backend (migraciones y arranque con Postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: rescuesync
+          POSTGRES_PASSWORD: rescuesync
+          POSTGRES_DB: rescuesync
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U rescuesync" --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql+psycopg://rescuesync:rescuesync@localhost:5432/rescuesync
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - run: pip install -r requirements.txt
+      - run: python -m alembic upgrade head
+      - run: python -m alembic downgrade base
+      - run: python -m alembic upgrade head
+      - run: python -m app.seed
+      - name: La app arranca y contesta
+        run: |
+          nohup python -m uvicorn app.main:app --port 8001 > ../uvicorn.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://localhost:8001/docs -o /dev/null && break; sleep 1; done
+          curl -sf http://localhost:8001/openapi.json -o /dev/null
+      - name: Log del servidor si algo falló
+        if: failure()
+        run: cat ../uvicorn.log
+
   # Un solo chequeo para exigir: si se suma o renombra un job de arriba, la regla de la rama no cambia.
   ci-verde:
     name: CI verde
-    needs: [backend, nacional, frontend]
+    needs: [backend, nacional, frontend, nacional-despliegue, backend-postgres]
     if: always()
     runs-on: ubuntu-latest
     steps:
