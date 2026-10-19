@@ -1,6 +1,6 @@
 """estados de la evaluación/adjudicación/ejecución, ronda, estado de la oferta y notificaciones
 
-Una sola migración para todo el cierre de la Entrega 3 (ver entrega-3/contratos.md): estados
+Una sola migración para todo el cierre de la Entrega 3 (contratos entre la app, Bonita y la API Nacional): estados
 nuevos de emergencia, `emergencia.ronda`, `emergencia.evaluacion`, `oferta.estado` y la tabla `notificacion`.
 
 Revision ID: 0005
