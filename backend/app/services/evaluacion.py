@@ -18,7 +18,7 @@ class ConsolidadoError(RuntimeError):
 
 
 def consolidar_ofertas(db: Session, emergencia_id: int) -> dict | None:
-    """El consolidado del contrato (entrega-3/contratos.md, punto 2), o None si la emergencia no existe."""
+    """El consolidado del contrato (contrato del consolidado), o None si la emergencia no existe."""
     cerrar_ventanas_vencidas(db)
     e = db.scalar(
         select(Emergencia).where(Emergencia.id == emergencia_id).options(selectinload(Emergencia.lotes))

@@ -19,3 +19,17 @@ Entrega 2 - DSSD.pdf
 
 # .bos con la clave de la API Nacional en la nube (se genera con bonita/scripts/preparar_entorno.py)
 entrega-3/*_nube.bos
+
+# Documentación de trabajo de la Entrega 3 (planes, estado, guías, capturas y .bos intermedios): queda solo en local.
+# Se versiona la ficha de entrega, el .bos vigente y el export base que usa un test.
+entrega-3/*.md
+entrega-3/*.html
+!entrega-3/ENTREGA.md
+entrega-3/img/
+entrega-3/*.bos
+!entrega-3/entrega42_local.bos
+!entrega-3/entrega41_20261017_1311.bos
+
+# Python
+__pycache__/
+*.pyc

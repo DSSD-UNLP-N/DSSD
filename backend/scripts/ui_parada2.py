@@ -2,7 +2,7 @@
 
 Recorre la SPA en un navegador con los cuatro perfiles y verifica, en cada paso, lo que se ve en pantalla,
 lo que pasó en la API Nacional y en qué tarea quedó el caso de Bonita. Saca una captura de cada paso en
-`entrega-3/img/parada-2/` (son las imágenes de la guía `entrega-3/guia-parada-2.md`).
+`entrega-3/img/parada-2/`.
 
   A) cobertura parcial: pide 10 paramédicos; Cruz Roja ofrece 4 y Bomberos 2 (60 %). El Coordinador sigue con
      la cobertura parcial y el Municipio adjudica solo a Cruz Roja.

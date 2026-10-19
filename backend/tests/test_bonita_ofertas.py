@@ -118,7 +118,7 @@ def test_en_evaluacion_la_ong_ya_no_puede_ofertar(client, seeded, vencida):
 # --- POST /api/bonita/emergencias/{id}/eventos (EVALUACION) ---
 
 def _evaluacion(emergencia_id, lote_id, ronda=1):
-    """Lo que la API Nacional devuelve en POST /evaluaciones (contratos.md, 3.1)."""
+    """Lo que la API Nacional devuelve en POST /evaluaciones (contrato de la evaluación)."""
     return {
         "emergencia_id": emergencia_id, "ronda": ronda, "cobertura_completa": False, "porcentaje_cobertura": 40.0,
         "lotes": [{"lote_id": lote_id, "tipo_recurso": "PARAMEDICO", "pedido": 10, "reservado": 4,
