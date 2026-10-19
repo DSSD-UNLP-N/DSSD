@@ -29,7 +29,7 @@ conectarlo con aplicaciones reales. Por eso hay tres sistemas que se hablan entr
 |---|---|---|---|---|
 | **App local** (`backend/` + `frontend/`) | Una web: API en FastAPI (Python) y una SPA en React | Es lo que usan las personas: pantallas, usuarios, emergencias, lotes y ofertas. Guarda las ofertas mientras son borradores | `localhost:8001` (API), `localhost:5173` (pantallas en desarrollo) | SQLite en desarrollo, Postgres en producción (`dev.db`) |
 | **Bonita** | Un motor de procesos (producto de terceros) | Es el **director de orquesta**: sabe en qué paso está cada emergencia, quién tiene que hacer qué, cuándo vence el plazo (un temporizador) y a quién llamar | `localhost:8080/bonita` (el que trae Bonita Studio) | La suya propia (la maneja Bonita) |
-| **API Nacional** (`nacional/`) | Una API REST en FastAPI, pensada para vivir en la nube | Es el "registro nacional" de recursos: catálogo, certificaciones de cada ONG, inventario, y sobre todo **reserva y libera stock** con control de concurrencia | `localhost:8002`; en la nube: `https://sistema-nacional-latest.onrender.com` (Render) | SQLite en desarrollo (`nacional.db`), Postgres en la nube |
+| **API Nacional** (`nacional/`) | Una API REST en FastAPI, pensada para vivir en la nube | Es el "registro nacional" de recursos: catálogo, certificaciones de cada ONG, inventario, y sobre todo **reserva y libera stock** con control de concurrencia | `localhost:8002`; en la nube: `https://rescuesync-nacional.onrender.com` (Render, Docker construido desde la rama `dev`) | SQLite en desarrollo (`nacional.db`), Postgres en la nube |
 
 **Analogía:** la app local es el mostrador donde atiende la gente. La API Nacional es el depósito central con el
 inventario real. Bonita es el supervisor con la planilla del proceso: no atiende a nadie ni guarda stock, pero decide
@@ -381,7 +381,7 @@ suspendida** con 800 raciones. En total 11 tipos de recurso y 4 certificaciones.
    id) antes de leer lo disponible, para que dos reservas simultáneas no se pasen del stock. Es una exigencia de la
    consigna (se prueba con Postgres; SQLite no soporta ese bloqueo).
 7. **Seguridad entre Bonita y la app.** Los endpoints `/api/bonita/*` no tienen sesión: piden la cabecera `X-Api-Key`
-   (clave de desarrollo `rescuesync-dev-key`). El **JWT** entre sistemas está **postergado** a propósito.
+   (clave de desarrollo `rescuesync-dev-key`). Entre la app o Bonita y la API Nacional se usa **JWT**: cada uno entra con su cuenta de servicio (`app-service`, `bonita-service`) en `POST /login`, y Bonita vuelve a entrar en cada tarea de servicio.
 
 ---
 
@@ -420,18 +420,18 @@ Las tareas del plan se llaman **WP** (*work package*).
 | WP0 | Contratos entre los tres sistemas por escrito (`entrega-3/contratos.md`) | HECHO |
 | WP1 | La app entrega el consolidado a Bonita y reserva localmente hasta la evaluación | HECHO y probado con Bonita real |
 | Primer conector de Bonita | "Obtener Ofertas de la Red": GET a la app | HECHO (URL fija en el conector) |
-| WP2 | API Nacional: evaluar con reserva (todo o nada), confirmar, liberar | HECHO (falta probar la concurrencia en Postgres) |
+| WP2 | API Nacional: evaluar con reserva (todo o nada), confirmar, liberar | HECHO (la concurrencia se prueba en CI contra Postgres real) |
 | Evento `EVALUACION` | La app guarda el resultado y el Coordinador ve la cobertura | HECHO |
-| WP4 (conectores de Bonita) | Evaluar y avisar a la app (HECHO); resolver las reservas y avisar la adjudicación (HECHO); falta el de cierre (`Liberar Recursos y Notificar Cierre`) | PARCIAL |
-| WP3 | `POST /cierres` atado a la referencia | HECHO (tests y servidor real; falta probarlo con Bonita en la Parada 3) |
+| WP4 (conectores de Bonita) | Evaluar y avisar a la app (HECHO); resolver las reservas y avisar la adjudicación (HECHO); el de cierre (`Liberar Recursos y Notificar Cierre`) también | HECHO |
+| WP3 | `POST /cierres` atado a la referencia | HECHO y probado con Bonita real (Parada 3) |
 | WP5 | El Coordinador decide (parcial o reformular) y el Municipio adjudica, con el evento `ADJUDICACION` | HECHO y probado con Bonita real (Parada 2) |
-| WP6 | Notificaciones, finalizar actividad, monitoreo, cierre bilateral, evento `CIERRE` | Backend HECHO y probado con Bonita real; falta la pantalla (campana y botones) |
-| WP7 | Deploy final de la API Nacional en Render con Postgres | FALTA (hoy la nube corre código viejo) |
-| WP8 | Docker Compose con Postgres, backend y frontend | FALTA |
-| WP9 | Pruebas de punta a punta | FALTA |
-| WP10 | README, guion de demo, video, prueba en una máquina limpia | FALTA |
-| WP11 | JWT | POSTERGADO |
-| WP12 | Bonita con parámetros por entorno, para apuntar a la nube sin editar conectores | FALTA (al final, con todo probado en local; hoy los conectores llevan `localhost` fijo) |
+| WP6 | Notificaciones, finalizar actividad, monitoreo, cierre bilateral, evento `CIERRE` | HECHO y probado con Bonita real, con la pantalla (campana y botones) |
+| WP7 | Deploy final de la API Nacional en Render con Postgres | HECHO (18/10, `https://rescuesync-nacional.onrender.com`, verificador 72/72) |
+| WP8 | Docker Compose con Postgres, backend y frontend | OPCIONAL, sin hacer (la consigna solo pide dockerizar la API Nacional, que está hecha) |
+| WP9 | Pruebas de punta a punta | HECHO (`ui_parada3.py` 47/47 en local y contra la nube; escenarios con Bonita real) |
+| WP10 | README, guion de demo, video, prueba en una máquina limpia | README, guía de la Parada 3, ficha de entrega y prueba en limpio HECHOS; video y guion, opcionales |
+| WP11 | JWT | HECHO (cuentas de servicio, `/login`, onboarding de ONGs, token renovado solo por la app y login por tarea en Bonita) |
+| WP12 | Bonita con parámetros por entorno, para apuntar a la nube sin editar conectores | HECHO con otro camino: `bonita/scripts/preparar_entorno.py` genera el `.bos` para otra URL y clave (no se usaron parámetros del proceso) |
 
 **Primera parada de pruebas (HECHA, 26/26):** tres usuarios ofertan, vence el plazo y, sin tocar nada, Bonita trae las
 ofertas, la API Nacional reserva el stock y el Coordinador ve la cobertura en pantalla. Para eso falta, en Bonita
@@ -499,7 +499,7 @@ entrega-3/                 planes, contratos (contratos.md) y esta guía
 - **Idempotente**: repetir la llamada da el mismo resultado sin duplicar efectos.
 - **Locking (`FOR UPDATE`)**: bloquear filas de la base mientras se decide, para que dos procesos no pisen el mismo stock.
 - **Swagger**: la página `/docs` de una API, con cada endpoint documentado y probable.
-- **JWT**: tipo de token de autenticación entre sistemas (postergado).
+- **JWT**: token firmado que prueba quién sos; se pide en `POST /login` y se manda en cada llamada como `Authorization: Bearer`.
 - **WP**: *work package*, una tarea del plan.
 
 ---
