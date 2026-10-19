@@ -1,0 +1,2 @@
+CREATE DATABASE nacional;
+GRANT ALL PRIVILEGES ON DATABASE nacional TO rescuesync;

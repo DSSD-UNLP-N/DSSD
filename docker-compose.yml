@@ -2,14 +2,16 @@ services:
   db:
     image: postgres:16-alpine
     container_name: rescuesync-db
+    restart: always
     environment:
       POSTGRES_USER: rescuesync
       POSTGRES_PASSWORD: rescuesync
       POSTGRES_DB: rescuesync
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - rescuesync-pgdata:/var/lib/postgresql/data
+      - ./docker/init-dbs.sql:/docker-entrypoint-initdb.d/init-dbs.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U rescuesync -d rescuesync"]
       interval: 5s
