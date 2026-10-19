@@ -19,8 +19,8 @@ uvicorn app.main:app --reload
 Cambios de modelo: editar `app/models/entities.py` y correr
 `alembic revision --autogenerate -m "descripcion"` + `alembic upgrade head`.
 
-- App: http://localhost:8000/
-- Swagger (automático): http://localhost:8000/docs
+- App: http://localhost:8001/
+- Swagger (automático): http://localhost:8001/docs
 
 ## Estructura
 
@@ -90,6 +90,25 @@ def lotes(user: Usuario = Depends(require_role(Rol.COORDINADOR))): ...
 Sin sesión: páginas → redirige a `/login`; `/api/*` → 401 JSON. Rol incorrecto: 403.
 Para sumar una pantalla al menú de un perfil, poner su ruta en `MENU_POR_ROL`
 (`app/routers/pages.py`). Las plantillas reciben `session_user` y `rol_label` solas.
+
+## Sistema Nacional (nacional/)
+
+Los lotes se cargan eligiendo un tipo de recurso del catálogo del Sistema Nacional (`nacional/`, otra
+API en `:8002`; ver su README). `app/integrations/nacional.py` es el cliente; si la API no responde,
+cargar un lote da 503 y no guarda nada. Config en `.env` (`NACIONAL_*`).
+
+La API Nacional exige JWT. La app entra con su cuenta de servicio (`NACIONAL_SERVICE_USERNAME` /
+`NACIONAL_SERVICE_PASSWORD`, `app-service` en desarrollo), no con la de la persona que usa la pantalla: las personas se
+autentican contra la base de la app (sesión por cookie) y la app ya validó su rol antes de llamar a Nacional. El token se
+pide una vez por proceso y se renueva solo si Nacional contesta 401. Iniciar sesión en la app no depende de Nacional. Contra
+Render (que duerme y tarda en despertar) conviene `NACIONAL_TIMEOUT_SECONDS=60`. Los tests la reemplazan por
+`FakeNacional` (`tests/conftest.py`).
+
+Tope de ofertas (`app/services/ofertas.py`): al enviar una oferta se suma lo que la ONG ofrece de cada recurso
+con lo que ya ofreció en sus otras convocatorias abiertas y se valida contra su inventario en el Sistema
+Nacional (`POST /validaciones`); si no alcanza, 400 y no se guarda nada. Reducir o retirar nunca consulta a la
+API. Retirar un lote = reenviar la oferta sin él; retirarla toda = reenviarla vacía (versión sin ítems,
+`retirada: true`); el historial de versiones no se toca.
 
 ## Bonita
 

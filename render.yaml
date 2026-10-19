@@ -1,0 +1,29 @@
+# Blueprint de Render para la API Nacional (Etapa 3, despliegue cloud).
+# En el dashboard: New > Blueprint > este repo. La URL pública queda en el servicio web.
+services:
+  - type: web
+    name: rescuesync-nacional
+    runtime: docker
+    dockerfilePath: ./nacional/Dockerfile
+    dockerContext: ./nacional
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: rescuesync-nacional-db
+          property: connectionString
+      # Con Postgres la API no arranca si estos valores quedan con el de ejemplo (ver nacional/app/config.py).
+      - key: JWT_SECRET
+        generateValue: true
+      # Las cargan personas en el dashboard (sync: false): las usan los conectores de Bonita y la app local.
+      - key: BONITA_SERVICE_PASSWORD
+        sync: false
+      - key: APP_SERVICE_PASSWORD
+        sync: false
+
+databases:
+  - name: rescuesync-nacional-db
+    plan: free
+    databaseName: nacional
+    user: nacional

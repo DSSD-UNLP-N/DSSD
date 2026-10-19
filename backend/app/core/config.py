@@ -21,7 +21,15 @@ class Settings(BaseSettings):
     bonita_test_password: str = "bpm"
     # La primera llamada tras un rato sin uso tarda varios segundos (arranque en frío del motor).
     bonita_timeout_seconds: float = 10.0
-    database_url: str = "postgresql+psycopg://rescuesync:rescuesync@localhost:5432/rescuesync"
+    # Sistema Nacional (nacional/): catálogo de recursos y validación de ofertas.
+    nacional_base_url: str = "http://localhost:8002"
+    nacional_timeout_seconds: float = 5.0
+    # Cuenta de servicio con la que la app entra a la API Nacional (JWT). Vacío = sin token.
+    nacional_service_username: str = "app-service"
+    nacional_service_password: str = "change-me-app"
+    # Clave compartida con los conectores de Bonita (cabecera X-Api-Key en /api/bonita/*).
+    bonita_api_key: str = "rescuesync-dev-key"
+    database_url: str ="postgresql+psycopg://rescuesync:rescuesync@localhost:5432/rescuesync"
     session_secret: str = "dev-only-change-me"
     ventana_provisoria_horas: int = 72
     # Muestra los usuarios de demo y su contraseña en el login. Solo para desarrollo/demo.

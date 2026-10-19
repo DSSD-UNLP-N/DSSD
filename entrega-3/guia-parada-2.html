@@ -1,0 +1,608 @@
+<title>Guía de la Parada 2</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Distribución: barra de navegación fija, secciones de un solo ancho con columnas pasos/capturas.
+   Mismo lenguaje visual que la guía de la Entrega 2: verde bosque, ámbar para lo importante, un color por rol. */
+:root{
+  --bg:#f2f5f1; --surface:#ffffff; --surface-2:#e8eee9; --ink:#12302a; --ink-2:#48605a; --line:#d3ddd6;
+  --accent:#b86a00; --accent-ink:#ffffff; --accent-soft:#fbead0;
+  --muni:#2f6f9f; --coord:#7a4fa3; --ong:#2f8a5b; --audit:#8a6d1f; --bonita:#c2410c; --nac:#0f766e;
+  --ok:#1f7a4d; --ok-soft:#dcefe4; --warn-soft:#fbead0; --code-bg:#12302a; --code-ink:#e6f3ec;
+  --display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+  --body:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0f1b18; --surface:#16272a; --surface-2:#1c3134; --ink:#e4efe9; --ink-2:#9db5ad; --line:#2a4245;
+    --accent:#f0a23a; --accent-ink:#1a1206; --accent-soft:#3a2a10;
+    --muni:#6fb0e0; --coord:#b995e0; --ong:#5fcf95; --audit:#e0c060; --bonita:#ff8a5c; --nac:#4fd1c5;
+    --ok:#5fcf95; --ok-soft:#173a2c; --warn-soft:#3a2a10; --code-bg:#0a1412; --code-ink:#cfe6db;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0f1b18; --surface:#16272a; --surface-2:#1c3134; --ink:#e4efe9; --ink-2:#9db5ad; --line:#2a4245;
+  --accent:#f0a23a; --accent-ink:#1a1206; --accent-soft:#3a2a10;
+  --muni:#6fb0e0; --coord:#b995e0; --ong:#5fcf95; --audit:#e0c060; --bonita:#ff8a5c; --nac:#4fd1c5;
+  --ok:#5fcf95; --ok-soft:#173a2c; --warn-soft:#3a2a10; --code-bg:#0a1412; --code-ink:#cfe6db;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:400 15px/1.55 var(--body);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 64px;margin:0}
+.wrap{max-width:1040px;margin-inline:auto}
+h1,h2,h3{font-family:var(--display);line-height:1.1;margin:0;text-wrap:balance;color:var(--ink)}
+h1{font-size:clamp(2rem,5vw,3.2rem);font-weight:700;letter-spacing:-.02em}
+h2{font-size:clamp(1.5rem,3vw,2rem);font-weight:700;letter-spacing:-.01em}
+h3{font-size:1.15rem;font-weight:600}
+p{margin:0}
+code,.mono{font-family:var(--mono);font-size:.86em}
+.eyebrow{font:500 .72rem/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2)}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+nav{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--bg);border-bottom:1px solid var(--line);margin-inline:calc(-1 * max(16px,env(safe-area-inset-left,0px)));padding:10px max(16px,env(safe-area-inset-left,0px))}
+nav .wrap{display:flex;gap:8px;overflow-x:auto;scrollbar-width:thin}
+nav a{flex:none;text-decoration:none;color:var(--ink-2);font:500 .8rem/1 var(--mono);padding:8px 10px;border-radius:6px;border:1px solid var(--line);background:var(--surface)}
+nav a:hover{color:var(--ink);border-color:var(--ink-2)}
+header.top{padding-block:44px 28px;display:grid;gap:14px}
+header.top p.lead{max-width:66ch;color:var(--ink-2);font-size:1.05rem}
+.meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;font:500 .78rem/1 var(--mono);padding:6px 9px;border-radius:5px;background:var(--surface-2);color:var(--ink)}
+.chip i{width:8px;height:8px;border-radius:50%;background:currentColor;display:inline-block}
+.r-muni{color:var(--muni)} .r-coord{color:var(--coord)} .r-ong{color:var(--ong)} .r-audit{color:var(--audit)} .r-bonita{color:var(--bonita)} .r-nac{color:var(--nac)}
+section{padding-block:36px;border-top:1px solid var(--line)}
+section>header{display:grid;gap:8px;margin-bottom:20px}
+section>header p{color:var(--ink-2);max-width:68ch}
+.flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.flow .step{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;display:grid;gap:8px;align-content:start;min-width:0}
+.flow .step .who{font:600 .74rem/1 var(--mono);letter-spacing:.08em;text-transform:uppercase}
+.flow .step .app{font-size:.92rem}
+.flow .step .bon{font-size:.84rem;color:var(--ink-2);border-top:1px dashed var(--line);padding-top:8px}
+.flow .step .bon b{color:var(--bonita);font-weight:600}
+.note{background:var(--accent-soft);border-radius:8px;padding:12px 14px;font-size:.92rem;margin-top:14px}
+.check{list-style:none;padding:0;margin:0;display:grid;gap:10px}
+.check li{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:start}
+.check input[type=checkbox]{width:20px;height:20px;margin:2px 0 0;accent-color:var(--accent)}
+.check li.done{opacity:.6}
+.check strong{display:block;margin-bottom:2px}
+.cmd{display:flex;gap:8px;align-items:stretch;margin-top:8px}
+.cmd code{flex:1;min-width:0;background:var(--code-bg);color:var(--code-ink);padding:9px 11px;border-radius:6px;overflow-x:auto;white-space:pre}
+pre.code{background:var(--code-bg);color:var(--code-ink);padding:12px 14px;border-radius:8px;overflow-x:auto;margin:8px 0 0;font:400 .8rem/1.5 var(--mono)}
+button{font:500 .8rem/1 var(--body);cursor:pointer}
+.copy{flex:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:6px;padding:0 12px}
+.copy:hover{border-color:var(--ink-2)}
+.copy.ok{background:var(--ok-soft);color:var(--ok);border-color:var(--ok)}
+.act{display:grid;gap:18px}
+.act-head{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:baseline}
+.act-head .t{font:500 .78rem/1 var(--mono);color:var(--ink-2)}
+.say{border-left:3px solid var(--accent);padding:2px 0 2px 14px;color:var(--ink);font-size:1.02rem;max-width:68ch}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:18px;align-items:start}
+@media (max-width:760px){.cols{grid-template-columns:minmax(0,1fr)}}
+.stack{display:grid;gap:14px;min-width:0}
+.form{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;display:grid;gap:12px;min-width:0}
+.form .ft{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.form .ft b{font-family:var(--display);font-size:1rem}
+.form .ft span{font:500 .7rem/1 var(--mono);color:var(--ink-2);text-transform:uppercase;letter-spacing:.1em}
+.field{display:grid;gap:5px}
+.field label{font-size:.78rem;font-weight:600;color:var(--ink-2)}
+.field .v{display:flex;gap:6px}
+.field .v output{flex:1;min-width:0;display:block;background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:8px 10px;min-height:38px;overflow-wrap:anywhere}
+.field .v .copy{padding:0 9px;font-size:.72rem}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:480px){.grid2{grid-template-columns:1fr}}
+.btn-mock{justify-self:start;background:var(--accent);color:var(--accent-ink);border-radius:6px;padding:9px 14px;font-weight:600;font-size:.86rem}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.86rem}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+td.nw,th.nw{white-space:nowrap}
+th{font:500 .7rem/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.nowbox{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--surface-2);border-radius:8px;padding:10px 12px}
+.nowbox select{font:inherit;padding:6px 8px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.nowbox output{font:600 1rem var(--mono)}
+.shots{display:grid;gap:14px;min-width:0}
+figure{margin:0;display:grid;gap:6px}
+figure button{all:unset;cursor:zoom-in;display:block;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface)}
+figure img{display:block;width:100%;height:auto;max-height:400px;object-fit:cover;object-position:top}
+figcaption{font-size:.8rem;color:var(--ink-2)}
+figcaption b{color:var(--ink)}
+dialog#zoom{border:0;padding:0;background:transparent;max-width:min(96vw,1100px);width:100%}
+dialog#zoom::backdrop{background:rgba(5,12,10,.8)}
+dialog#zoom img{width:100%;height:auto;border-radius:8px;display:block;background:#fff}
+dialog#zoom .x{position:sticky;top:8px;float:right;margin:8px;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px 12px}
+.bonita,.nacional{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--bonita);border-radius:8px;padding:12px 14px;display:grid;gap:6px;font-size:.9rem}
+.bonita,.nacional,.expect,.note{min-width:0;overflow-wrap:anywhere}
+.bonita,.nacional{grid-template-columns:minmax(0,1fr)}
+.nacional{border-left-color:var(--nac)}
+.bonita .lab,.nacional .lab{font:600 .7rem/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--bonita)}
+.nacional .lab{color:var(--nac)}
+.expect{background:var(--ok-soft);border-radius:8px;padding:11px 14px;font-size:.9rem;color:var(--ink)}
+.expect b{color:var(--ok)}
+.pill{display:inline-block;font:500 .74rem/1 var(--mono);padding:4px 7px;border-radius:4px;background:var(--surface-2)}
+.fake-alert{border-radius:8px;padding:11px 14px;background:#f8e1e1;color:#8a1f1f;font-size:.9rem}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .fake-alert{background:#3a1717;color:#f0a0a0}}
+:root[data-theme="dark"] .fake-alert{background:#3a1717;color:#f0a0a0}
+.users td:first-child,.users td:nth-child(2){font-family:var(--mono)}
+ol.seq{margin:0;padding-left:1.3rem;display:grid;gap:8px}
+ol.seq li{padding-left:4px}
+.est{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.est .badge{font:500 .74rem/1 var(--mono);padding:5px 8px;border-radius:4px;background:var(--surface-2)}
+.est .arrow{color:var(--ink-2)}
+footer{padding-block:28px;color:var(--ink-2);font-size:.85rem;border-top:1px solid var(--line)}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+html{scroll-behavior:smooth;scroll-padding-top:64px}
+</style>
+
+<nav><div class="wrap">
+  <a href="#flujo">Flujo</a><a href="#prep">Preparación</a><a href="#mirar">Dónde mirar</a>
+  <a href="#a1">1 Alta</a><a href="#a2">2 Publicar</a><a href="#a3">3 Ofertas</a><a href="#a4">4 Evaluación</a>
+  <a href="#a5">5 Decisión</a><a href="#a6">6 Adjudicar</a><a href="#a7">7 Ronda 2</a><a href="#a8">8 ONGs</a><a href="#bonita">Bonita</a>
+  <a href="#dentro">Por dentro</a><a href="#auto">Automático</a><a href="#resultado">Resultado</a><a href="#fallas">Si falla</a>
+</div></nav>
+
+<div class="wrap">
+<header class="top">
+  <span class="eyebrow">DSSD · Entrega 3 · Parada 2</span>
+  <h1>Guía de la Parada 2</h1>
+  <p class="lead">Después de que vence la ventana de ofertas, Bonita le pide las ofertas a la app, las evalúa en la API Nacional (que <b>reserva</b> el stock) y le avisa a la app. El Coordinador decide cómo seguir, el Municipio adjudica, y Bonita confirma lo elegido y libera el resto. Se recorren dos casos a la vez: cobertura parcial y reformulación.</p>
+  <div class="meta">
+    <span class="chip r-muni"><i></i>Municipio</span><span class="chip r-coord"><i></i>Coordinador</span>
+    <span class="chip r-ong"><i></i>ONG Cruz Roja / Bomberos</span><span class="chip r-bonita"><i></i>Bonita (proceso)</span>
+    <span class="chip r-nac"><i></i>API Nacional (reservas)</span>
+  </div>
+</header>
+
+<section id="flujo">
+  <header><span class="eyebrow">El flujo en una mirada</span><h2>Quién hace qué, y qué hace Bonita</h2>
+  <p>La app guarda los datos y avanza las tareas de las personas. Bonita lleva el proceso y habla con los dos sistemas: le pide las ofertas a la app, las evalúa en la API Nacional y devuelve el resultado a la app. En todo el recorrido, la API Nacional guarda el stock reservado: <b>reservar</b> es apartar un recurso para una ONG sin comprometerlo todavía; <b>confirmar</b> lo compromete; <b>liberar</b> lo devuelve al inventario.</p></header>
+  <div class="flow">
+    <div class="step"><span class="who r-muni">1 · Municipio</span><p class="app"><b>Registra la emergencia.</b></p><p class="bon"><b>Bonita:</b> nace el caso y avanza solo hasta <i>Revisar Informacion…</i></p></div>
+    <div class="step"><span class="who r-coord">2 · Coordinador</span><p class="app"><b>Carga lotes y publica</b> con la fecha de cierre.</p><p class="bon"><b>Bonita:</b> queda <i>Cargar Ofertas de Ayuda</i> con el timer corriendo.</p></div>
+    <div class="step"><span class="who r-ong">3 · ONGs</span><p class="app"><b>Ofrecen</b>, cada una lo que tiene.</p><p class="bon"><b>Bonita:</b> sin cambios; las ofertas viven en la base de la app.</p></div>
+    <div class="step"><span class="who r-bonita">4 · El reloj</span><p class="app">La app deja de aceptar ofertas.</p><p class="bon"><b>Bonita:</b> el timer dispara, pide las ofertas a la app (<code>GET</code>), las manda a la API Nacional (<code>POST /evaluaciones</code>, que reserva) y avisa a la app (evento <code>EVALUACION</code>).</p></div>
+    <div class="step"><span class="who r-coord">5 · Coordinador</span><p class="app">Si la cobertura no alcanza, <b>decide</b>: seguir con lo reservado (parcial) o reformular.</p><p class="bon"><b>Bonita:</b> <i>Evaluar Cobertura…</i> y el camino <code>PARCIAL</code> o <code>REFORMULAR</code>.</p></div>
+    <div class="step"><span class="who r-muni">6 · Municipio</span><p class="app"><b>Adjudica</b> a las ONGs que elige.</p><p class="bon"><b>Bonita:</b> <code>POST /adjudicaciones/resolucion</code> confirma las elegidas y libera el resto; evento <code>ADJUDICACION</code> a la app.</p></div>
+  </div>
+  <p class="note">Si la cobertura es completa, el paso 5 no existe: la evaluación va directo a la adjudicación. Lo que sigue (el cierre y la liberación definitiva) es la Parada 3.</p>
+  <div class="form" style="margin-top:14px"><div class="ft"><b>Estados de la emergencia en esta parada</b><span>app local</span></div>
+    <div class="est"><span class="badge">Registrada</span><span class="arrow">→</span><span class="badge">Convocatoria abierta</span><span class="arrow">→</span><span class="badge">Cerrada</span><span class="arrow">→</span><span class="badge">En evaluación</span><span class="arrow">→</span><span class="badge">Adjudicación</span><span class="arrow">→</span><span class="badge">En ejecución</span></div>
+    <p style="font-size:.88rem;color:var(--ink-2)">Si el Coordinador reformula, vuelve de <i>En evaluación</i> a <i>Registrada</i> con la <b>ronda</b> 2 (sin perder las ofertas anteriores, que quedan retiradas en el historial). Si la cobertura es completa, pasa de <i>Cerrada</i> a <i>Adjudicación</i> sin decisión.</p></div>
+</section>
+
+<section id="prep">
+  <header><span class="eyebrow">Antes de empezar · unos 10 minutos</span><h2>Preparación</h2>
+  <p>Marcá cada paso a medida que lo hacés. Todos los comandos son para <b>cmd</b> de Windows, desde la carpeta del repo (la que tiene <code>backend</code>, <code>frontend</code> y <code>nacional</code>). Cada vez que Bonita se despliega con <i>Ejecutar</i>, se borran sus casos.</p></header>
+  <ul class="check" id="checklist">
+    <li><input type="checkbox" id="c1"><div><strong>Cerrá lo que no uses</strong>
+      Bonita arranca lento si la PC está al límite: con otros programas pesados abiertos, Tomcat llegó a tardar 4 minutos y el vigilante de Studio lo apagó. Con Studio abierto, esperá a que termine de cargar antes de tocar nada.</div></li>
+    <li><input type="checkbox" id="c2"><div><strong>Bonita Studio arriba, con el proceso desplegado</strong>
+      Importá <code>entrega-3/entrega41_20261017_1311.bos</code> (trae los cinco conectores). En la organización <b>ACME</b> tocá <b>Desplegar</b>; en el diagrama <i>Gestion Integral de la Emergencia</i>, clic derecho → <b>Ejecutar</b> y esperá hasta 5 minutos. Tiene que responder en <code>localhost:8080/bonita</code>.</div></li>
+    <li><input type="checkbox" id="c3"><div><strong>API Nacional en el puerto 8002</strong> (migrada y con el seed; la ventana queda ocupada mientras corre)
+      <div class="cmd"><code>cd nacional</code><button class="copy" data-copy="cd nacional">Copiar</button></div>
+      <div class="cmd"><code>..\backend\.venv\Scripts\python -m alembic upgrade head</code><button class="copy" data-copy="..\backend\.venv\Scripts\python -m alembic upgrade head">Copiar</button></div>
+      <div class="cmd"><code>..\backend\.venv\Scripts\python -m app.seed</code><button class="copy" data-copy="..\backend\.venv\Scripts\python -m app.seed">Copiar</button></div>
+      <div class="cmd"><code>..\backend\.venv\Scripts\python -m uvicorn app.main:app --port 8002</code><button class="copy" data-copy="..\backend\.venv\Scripts\python -m uvicorn app.main:app --port 8002">Copiar</button></div></div></li>
+    <li><input type="checkbox" id="c4"><div><strong>Backend de la app en el puerto 8001</strong> (una <b>segunda</b> cmd, en la carpeta del repo). Antes revisá que <code>backend\.env</code> tenga <code>NACIONAL_BASE_URL=http://localhost:8002</code> y que la base esté migrada: la Parada 2 usa la migración <code>0005</code>.
+      <div class="cmd"><code>cd backend</code><button class="copy" data-copy="cd backend">Copiar</button></div>
+      <div class="cmd"><code>.venv\Scripts\python -m alembic upgrade head</code><button class="copy" data-copy=".venv\Scripts\python -m alembic upgrade head">Copiar</button></div>
+      <div class="cmd"><code>.venv\Scripts\python -m app.seed</code><button class="copy" data-copy=".venv\Scripts\python -m app.seed">Copiar</button></div>
+      <div class="cmd"><code>.venv\Scripts\python -m uvicorn app.main:app --port 8001</code><button class="copy" data-copy=".venv\Scripts\python -m uvicorn app.main:app --port 8001">Copiar</button></div></div></li>
+    <li><input type="checkbox" id="c5"><div><strong>Frontend</strong> (una <b>tercera</b> cmd, en la carpeta del repo)
+      <div class="cmd"><code>cd frontend</code><button class="copy" data-copy="cd frontend">Copiar</button></div>
+      <div class="cmd"><code>npm run dev</code><button class="copy" data-copy="npm run dev">Copiar</button></div></div></li>
+    <li><input type="checkbox" id="c6"><div><strong>La API Nacional empieza sin nada comprometido</strong>
+      La prueba cuenta con estos números: si quedó algo reservado de una corrida anterior, los valores de abajo no van a coincidir. En todos los recursos, <code>cantidad_comprometida</code> tiene que ser <code>0</code>.
+      <div class="cmd"><code>curl http://localhost:8002/ongs/30-54666544-5</code><button class="copy" data-copy="curl http://localhost:8002/ongs/30-54666544-5">Copiar</button></div>
+      <div class="cmd"><code>curl http://localhost:8002/ongs/30-68522415-9</code><button class="copy" data-copy="curl http://localhost:8002/ongs/30-68522415-9">Copiar</button></div></div></li>
+    <li><input type="checkbox" id="c7"><div><strong>Chequeo rápido del código</strong> (26 segundos): tests del backend, de la API Nacional y tipos del front. Tiene que terminar con tres líneas <code>OK</code>.
+      <div class="cmd"><code>python scripts\verificar_todo.py</code><button class="copy" data-copy="python scripts\verificar_todo.py">Copiar</button></div></div></li>
+  </ul>
+  <h3 style="margin-top:26px">Usuarios de la app</h3>
+  <p style="color:var(--ink-2);margin:6px 0 10px">Clave de todos: <code>demo1234</code>. La clave <code>bpm</code> es solo la de Bonita.</p>
+  <div class="tablewrap"><table class="users">
+    <tr><th>Usuario</th><th>Perfil</th><th>En esta parada</th><th></th></tr>
+    <tr><td>operador.municipal</td><td class="r-muni">Municipio</td><td>Registra las emergencias y <b>adjudica</b></td><td><button class="copy" data-copy="operador.municipal">Copiar</button></td></tr>
+    <tr><td>coordinador.regional</td><td class="r-coord">Coordinador</td><td>Carga lotes, publica y <b>decide</b> (parcial o reformular)</td><td><button class="copy" data-copy="coordinador.regional">Copiar</button></td></tr>
+    <tr><td>ong.cruzroja</td><td class="r-ong">ONG</td><td>Ofrece y ve si su oferta fue adjudicada</td><td><button class="copy" data-copy="ong.cruzroja">Copiar</button></td></tr>
+    <tr><td>ong.bomberos</td><td class="r-ong">ONG</td><td>Ofrece y ve si su oferta fue adjudicada</td><td><button class="copy" data-copy="ong.bomberos">Copiar</button></td></tr>
+  </table></div>
+</section>
+
+<section id="mirar">
+  <header><span class="eyebrow r-bonita">Tres lugares para mirar</span><h2>Dónde ver lo que pasa por detrás</h2>
+  <p>La app muestra el resultado, pero el motor y la API Nacional son quienes lo producen. Con estas pestañas abiertas se ve cada cambio apenas ocurre.</p></header>
+  <div class="cols">
+    <div class="stack">
+      <div class="nacional"><span class="lab">API Nacional · reservas</span>
+        <span>El inventario de cada ONG, con cuánto está <b>comprometido</b> (reservado o adjudicado). Es lo más claro para ver que reservar, confirmar y liberar mueven el stock.</span>
+        <div class="cmd"><code>curl http://localhost:8002/ongs/30-54666544-5</code><button class="copy" data-copy="curl http://localhost:8002/ongs/30-54666544-5">Copiar</button></div>
+        <span>Cruz Roja es <code>30-54666544-5</code> y Bomberos <code>30-68522415-9</code>. Los recursos de esta guía son <code>PARAMEDICO</code> y <code>RACION_ALIMENTO</code>. También se ve todo en Swagger: <span class="pill">localhost:8002/docs</span>.</span></div>
+    </div>
+    <div class="stack">
+      <div class="bonita"><span class="lab">Bonita · el motor</span>
+        <span>Entrá como <code>walter.bates</code> / <code>bpm</code>. Reemplazá <b>12001</b> por el número de <b>Caso Bonita</b> que muestra la app en el detalle.</span>
+        <div class="cmd"><code>…/apps/adminAppBonita/admin-case-details/?id=12001</code><button class="copy" data-copy="http://localhost:8080/bonita/apps/adminAppBonita/admin-case-details/?id=12001&amp;_l=es">Copiar</button></div>
+        <div class="cmd"><code>…/apps/adminAppBonita/admin-task-list/?caseId=12001&amp;tab=doneFlowNodes</code><button class="copy" data-copy="http://localhost:8080/bonita/apps/adminAppBonita/admin-task-list/?caseId=12001&amp;isRootCaseId=false&amp;tab=doneFlowNodes&amp;_l=es">Copiar</button></div>
+        <span>Si pide iniciar sesión: <span class="pill">localhost:8080/bonita/login.jsp</span>. En el caso, la sección <i>Monitorización</i> cuenta tareas completadas, pendientes y fallidas; <i>Variables de proceso</i> muestra <code>evaluacionJson</code> y <code>ongsAdjudicadas</code>.</span></div>
+    </div>
+  </div>
+  <div class="fake-alert" style="margin-top:14px"><b>No aprietes “Ejecutar” en el formulario temporal de una tarea del portal.</b> Bonita genera un formulario de prueba con ese botón. Si lo aprietan en <i>Cargar Ofertas de Ayuda</i>, cierran la ventana antes de tiempo. La app nunca completa esa tarea.</div>
+</section>
+
+<section id="a1"><div class="act">
+  <div class="act-head"><span class="eyebrow r-muni">Paso 1 · Municipio</span><h2>Registrar las dos emergencias</h2><span class="t">3 min</span></div>
+  <p class="say">“Al guardar, la app abre un caso en Bonita y completa por nosotros la primera tarea del operador municipal.”</p>
+  <div class="cols">
+    <div class="stack">
+      <div class="form"><div class="ft"><b>Registrar emergencia · caso A</b><span>operador.municipal</span></div>
+        <div class="grid2">
+          <div class="field"><label>Tipo de evento</label><div class="v"><output>Inundación</output></div></div>
+          <div class="field"><label>Nivel de gravedad</label><div class="v"><output>ALTO</output></div></div>
+        </div>
+        <div class="field"><label>Zona afectada</label><div class="v"><output>Parada 2 · caso A (parcial)</output><button class="copy" data-copy="Parada 2 · caso A (parcial)">Copiar</button></div></div>
+        <div class="field"><label>Descripción</label><div class="v"><output>Inundación: faltan paramédicos para los centros de evacuación.</output><button class="copy" data-copy="Inundación: faltan paramédicos para los centros de evacuación.">Copiar</button></div></div>
+        <span class="btn-mock">Registrar emergencia</span></div>
+      <div class="form"><div class="ft"><b>Registrar emergencia · caso B</b><span>la misma pantalla</span></div>
+        <div class="grid2">
+          <div class="field"><label>Tipo de evento</label><div class="v"><output>Inundación</output></div></div>
+          <div class="field"><label>Nivel de gravedad</label><div class="v"><output>MEDIO</output></div></div>
+        </div>
+        <div class="field"><label>Zona afectada</label><div class="v"><output>Parada 2 · caso B (reformular)</output><button class="copy" data-copy="Parada 2 · caso B (reformular)">Copiar</button></div></div>
+        <div class="field"><label>Descripción</label><div class="v"><output>Inundación: faltan raciones de alimento para las familias evacuadas.</output><button class="copy" data-copy="Inundación: faltan raciones de alimento para las familias evacuadas.">Copiar</button></div></div>
+        <span class="btn-mock">Registrar emergencia</span></div>
+      <div class="bonita"><span class="lab">Mirá en Bonita</span>
+        <span>Dos casos nuevos, cada uno con la tarea activa <b>Revisar Informacion y Generar Lotes de Necesidades</b>. En <i>Tareas completadas</i>: <b>Registrar Emergencia</b>, ejecutada por <b>Operador Municipal</b>.</span></div>
+      <div class="expect"><b>Resultado:</b> quedás en el detalle con el <b>Caso Bonita</b> numerado, estado <i>Registrada</i> y la lista de lotes vacía. Anotá los dos números de caso.</div>
+    </div>
+    <div class="shots">
+      <figure><button data-zoom="img/parada-2/01-municipio-formulario-a.png"><img src="img/parada-2/01-municipio-formulario-a.png" alt="Formulario de alta del caso A" loading="lazy"></button><figcaption><b>Formulario</b> del caso A, con los datos de arriba.</figcaption></figure>
+      <figure><button data-zoom="img/parada-2/02-municipio-detalle-a.png"><img src="img/parada-2/02-municipio-detalle-a.png" alt="Detalle de la emergencia A con el caso de Bonita" loading="lazy"></button><figcaption><b>Detalle</b> con el caso de Bonita y el estado Registrada.</figcaption></figure>
+      <figure><button data-zoom="img/parada-2/03-municipio-formulario-b.png"><img src="img/parada-2/03-municipio-formulario-b.png" alt="Formulario de alta del caso B" loading="lazy"></button><figcaption><b>Formulario</b> del caso B.</figcaption></figure>
+    </div>
+  </div>
+</div></section>
+
+<section id="a2"><div class="act">
+  <div class="act-head"><span class="eyebrow r-coord">Paso 2 · Coordinador</span><h2>Lotes y publicación de las convocatorias</h2><span class="t">3 min</span></div>
+  <p class="say">“El Coordinador pide lo que hace falta. Al publicar, elige hasta cuándo se reciben ofertas, y esa fecha llega a Bonita.”</p>
+  <div class="cols">
+    <div class="stack">
+      <div class="form"><div class="ft"><b>Agregar lote</b><span>coordinador.regional · uno por emergencia</span></div>
+        <div class="tablewrap"><table>
+          <tr><th>Emergencia</th><th>Recurso</th><th class="num">Cantidad</th><th>Tipo</th></tr>
+          <tr><td>Caso A</td><td>Paramédico</td><td class="num">10</td><td>Principal</td></tr>
+          <tr><td>Caso B</td><td>Ración de alimento</td><td class="num">3000</td><td>Principal</td></tr>
+        </table></div>
+        <span class="btn-mock">Agregar lote</span></div>
+      <div class="form"><div class="ft"><b>Publicar convocatoria</b><span>las dos con el mismo cierre</span></div>
+        <div class="nowbox"><span>Cierre = ahora +</span>
+          <select id="mins" aria-label="Minutos hasta el cierre"><option>4</option><option selected>5</option><option>6</option><option>8</option></select>
+          <span>min →</span><output id="cierre">--/-- --:--</output>
+          <button class="copy" id="copyCierre" type="button">Copiar</button></div>
+        <p style="font-size:.86rem;color:var(--ink-2)">El campo es de <i>fecha y hora local</i>. Elegí un cierre que deje tiempo para cargar las tres ofertas del paso 3: con 5 minutos alcanza. Publicá las dos emergencias con la <b>misma</b> hora.</p>
+        <span class="btn-mock">Publicar a la red</span></div>
+      <div class="bonita"><span class="lab">Mirá en Bonita</span>
+        <span>En <i>Tareas completadas</i> suman <b>Revisar Informacion…</b> y <b>Publicar Convocatoria…</b>, ejecutadas por <b>Centro Coordinador Regional</b>. En pendientes queda <b>Cargar Ofertas de Ayuda</b> con el timer <i>Cierre de la ventana de recepcion de ofertas</i>. La variable <code>ventanaOfertasISO</code> tiene la hora elegida, en UTC.</span></div>
+      <div class="expect"><b>Resultado:</b> estado <i>Convocatoria abierta</i> en las dos; ya no se pueden agregar lotes.</div>
+    </div>
+    <div class="shots">
+      <figure><button data-zoom="img/parada-2/04-coordinador-lote-a.png"><img src="img/parada-2/04-coordinador-lote-a.png" alt="Lote de 10 paramédicos cargado" loading="lazy"></button><figcaption><b>Lote cargado</b> en el caso A: 10 paramédicos.</figcaption></figure>
+      <figure><button data-zoom="img/parada-2/05-coordinador-publicada-a.png"><img src="img/parada-2/05-coordinador-publicada-a.png" alt="Convocatoria publicada" loading="lazy"></button><figcaption><b>Convocatoria publicada.</b> Estado, cierre de ofertas y sin formularios.</figcaption></figure>
+    </div>
+  </div>
+</div></section>
+
+<section id="a3"><div class="act">
+  <div class="act-head"><span class="eyebrow r-ong">Paso 3 · ONGs</span><h2>Ofertas parciales: nadie cubre todo</h2><span class="t">2 min</span></div>
+  <p class="say">“Cada ONG ofrece lo que tiene. Ninguna alcanza sola, y juntas no llegan, para que haya algo que decidir.”</p>
+  <div class="cols">
+    <div class="stack">
+      <div class="form"><div class="ft"><b>Cargar oferta</b><span>cada ONG, en cada emergencia</span></div>
+        <div class="tablewrap"><table>
+          <tr><th>Usuario</th><th>Emergencia</th><th class="num">Ofrece</th><th>Cobertura del pedido</th></tr>
+          <tr><td>ong.cruzroja</td><td>Caso A</td><td class="num">4 paramédicos</td><td rowspan="2">6 de 10 → <b>60 %</b></td></tr>
+          <tr><td>ong.bomberos</td><td>Caso A</td><td class="num">2 paramédicos</td></tr>
+          <tr><td>ong.cruzroja</td><td>Caso B</td><td class="num">2000 raciones</td><td>2000 de 3000 → <b>66,7 %</b></td></tr>
+        </table></div>
+        <span class="btn-mock">Enviar oferta</span></div>
+      <div class="nacional"><span class="lab">Qué valida la API Nacional</span>
+        <span>Al enviar, la app le pregunta a la API Nacional si la ONG tiene lo que ofrece (inventario y competencia). Ofrecer de más se rechaza: por eso las cantidades están por debajo de lo que cada ONG tiene. <b>Todavía no se reserva nada</b>: la reserva ocurre al vencer la ventana.</span></div>
+      <div class="expect"><b>Resultado:</b> cada oferta queda en <i>versión 1</i>. Reenviar una oferta crea la versión siguiente; las cantidades de la versión vigente son las que se evalúan.</div>
+    </div>
+    <div class="shots">
+      <figure><button data-zoom="img/parada-2/06-ong-cruzroja-oferta-a.png"><img src="img/parada-2/06-ong-cruzroja-oferta-a.png" alt="Oferta de Cruz Roja" loading="lazy"></button><figcaption><b>Cruz Roja</b> ofrece 4 paramédicos al caso A.</figcaption></figure>
+      <figure><button data-zoom="img/parada-2/07-ong-bomberos-oferta-a.png"><img src="img/parada-2/07-ong-bomberos-oferta-a.png" alt="Oferta de Bomberos" loading="lazy"></button><figcaption><b>Bomberos</b> ofrece 2 paramédicos al mismo caso.</figcaption></figure>
+    </div>
+  </div>
+</div></section>
+
+<section id="a4"><div class="act">
+  <div class="act-head"><span class="eyebrow r-bonita">Paso 4 · El reloj</span><h2>Vence la ventana: Bonita evalúa y reserva</h2><span class="t">1 a 2 min de espera</span></div>
+  <p class="say">“Nadie aprieta nada. Al cumplirse la hora, el timer de Bonita dispara y todo lo que sigue es automático.”</p>
+  <div class="cols">
+    <div class="stack">
+      <div class="form"><div class="ft"><b>Qué hace Bonita, en orden</b><span>cuatro conectores</span></div>
+        <ol class="seq">
+          <li>El timer dispara y se completa <i>Cargar Ofertas de Ayuda</i>.</li>
+          <li><b>Obtener Ofertas de la Red</b>: <code>GET</code> a la app. La emergencia pasa a <i>En evaluación</i> y devuelve el consolidado de las ofertas vigentes.</li>
+          <li><b>Validar en Sistema Nacional y Calcular Cobertura</b>: <code>POST /evaluaciones</code> a la API Nacional, que <b>reserva</b> el stock de cada ONG y calcula la cobertura por lote.</li>
+          <li>Bonita le <code>POST</code>ea el resultado a la app (evento <code>EVALUACION</code>) y guarda <code>evaluacionJson</code> y <code>coberturaCompleta</code> como variables del caso.</li>
+          <li>Como la cobertura <b>no</b> es completa, el caso queda en <i>Evaluar Cobertura y Definir Curso de Accion</i>, a cargo del Coordinador.</li>
+        </ol></div>
+      <div class="nacional"><span class="lab">Mirá en la API Nacional</span>
+        <span>Cruz Roja: <code>PARAMEDICO</code> comprometido <b>4</b>. Bomberos: <code>PARAMEDICO</code> comprometido <b>2</b>. Cruz Roja: <code>RACION_ALIMENTO</code> comprometido <b>2000</b>. Cada reserva queda con su referencia <code>emg-{emergencia}-r{ronda}-{cuit}</code>.</span></div>
+      <div class="bonita"><span class="lab">Mirá en Bonita</span>
+        <span>El caso A y el B esperan en <b>Evaluar Cobertura y Definir Curso de Accion</b>. En <i>Variables de proceso</i>, <code>evaluacionJson</code> trae la evaluación y <code>coberturaCompleta</code> es <code>false</code>.</span></div>
+      <div class="note" style="margin-top:0"><b>Por qué las dos van como “apoyo”.</b> Cruz Roja tiene nivel <i>PARCIAL</i>: su certificación SALUD_PREHOSP cubre hasta riesgo MEDIO y la emergencia es ALTO. Bomberos tiene nivel <i>SUPERVISADA</i>: su certificación venció el 2026-07-16. La reserva igual se hace; el nivel solo orienta cómo usar esos recursos (asignación sugerida).</div>
+      <div class="expect"><b>Resultado, como Coordinador:</b> recargá el detalle de cada emergencia. Aparece el panel <i>Evaluación de las ofertas</i>: cobertura total del lote, la reserva de cada ONG (con su nivel y su asignación sugerida) y, debajo, los botones de decisión. Si el panel dice “Evaluando las ofertas…”, esperá unos segundos y recargá.</div>
+    </div>
+    <div class="shots">
+      <figure><button data-zoom="img/parada-2/08-coordinador-evaluacion-a.png"><img src="img/parada-2/08-coordinador-evaluacion-a.png" alt="Evaluación del caso A: cobertura 60 por ciento" loading="lazy"></button><figcaption><b>Caso A:</b> cobertura <b>60 %</b>, “no alcanza”. Las dos ONGs figuran como <i>Reservada</i>.</figcaption></figure>
+      <figure><button data-zoom="img/parada-2/10-coordinador-evaluacion-b.png"><img src="img/parada-2/10-coordinador-evaluacion-b.png" alt="Evaluación del caso B: cobertura 66,7 por ciento" loading="lazy"></button><figcaption><b>Caso B:</b> cobertura <b>66,7 %</b>: 2000 de 3000 raciones.</figcaption></figure>
+    </div>
+  </div>
+</div></section>
+
+<section id="a5"><div class="act">
+  <div class="act-head"><span class="eyebrow r-coord">Paso 5 · Coordinador</span><h2>Decidir cómo seguir</h2><span class="t">2 min</span></div>
+  <p class="say">“La cobertura no alcanza. El Coordinador elige: aceptar lo que hay o volver a empezar con los lotes.”</p>
+  <div class="cols">
+    <div class="stack">
+      <div class="form"><div class="ft"><b>Caso A · seguir con la cobertura parcial</b><span>coordinador.regional</span></div>
+        <p style="font-size:.9rem">Botón <b>Seguir con cobertura parcial</b>. Se queda con las reservas hechas y le pasa la decisión al Municipio.</p>
+        <span class="btn-mock">Seguir con cobertura parcial</span></div>
+      <div class="bonita"><span class="lab">Mirá en Bonita (A)</span>
+        <span>La app completa <i>Evaluar Cobertura…</i> con <code>decisionCoordinador = PARCIAL</code>. El caso pasa a <b>Adjudicar Ofertas</b> (lane del Municipio). La emergencia queda en <i>Adjudicación</i>.</span></div>
+      <div class="form"><div class="ft"><b>Caso B · reformular</b><span>coordinador.regional</span></div>
+        <p style="font-size:.9rem">Botón <b>Reformular la convocatoria</b>. Lo reservado <b>se libera</b>, las ofertas se retiran y se vuelve a empezar. Después se publica de nuevo en el paso 7.</p>
+        <span class="btn-mock">Reformular la convocatoria</span></div>
+      <div class="nacional"><span class="lab">Mirá en la API Nacional (B)</span>
+        <span>Las 2000 raciones reservadas de Cruz Roja se <b>liberan</b>: <code>RACION_ALIMENTO</code> vuelve a <b>0</b> comprometido. La app llama a la API Nacional <i>antes</i> de cambiar nada; si la API no responde, no cambia nada y se puede reintentar.</span></div>
+      <div class="bonita"><span class="lab">Mirá en Bonita (B)</span>
+        <span>Con <code>decisionCoordinador = REFORMULAR</code> el caso vuelve a <b>Revisar Informacion y Generar Lotes de Necesidades</b>.</span></div>
+      <div class="expect"><b>Resultado:</b> A en <i>Adjudicación</i>. B en <i>Registrada</i>, ronda 2: las ofertas viejas se ven como <i>retiradas</i> (siguen en el historial) y los lotes se conservan, listos para publicar de nuevo.</div>
+    </div>
+    <div class="shots">
+      <figure><button data-zoom="img/parada-2/09-coordinador-adjudicacion-a.png"><img src="img/parada-2/09-coordinador-adjudicacion-a.png" alt="Caso A en Adjudicación" loading="lazy"></button><figcaption><b>Caso A</b> después de elegir la cobertura parcial: estado <i>Adjudicación</i>.</figcaption></figure>
+      <figure><button data-zoom="img/parada-2/11-coordinador-reformulada-b.png"><img src="img/parada-2/11-coordinador-reformulada-b.png" alt="Caso B reformulado, de nuevo en Registrada" loading="lazy"></button><figcaption><b>Caso B</b> reformulado: vuelve a <i>Registrada</i> en la ronda 2.</figcaption></figure>
+    </div>
+  </div>
+</div></section>
+
+<section id="a6"><div class="act">
+  <div class="act-head"><span class="eyebrow r-muni">Paso 6 · Municipio</span><h2>Adjudicar el caso A</h2><span class="t">2 min</span></div>
+  <p class="say">“Entre las ofertas reservadas, el Municipio elige a quién acepta. Lo elegido se compromete; el resto se libera.”</p>
+  <div class="cols">
+    <div class="stack">
+      <div class="form"><div class="ft"><b>Adjudicar ofertas</b><span>operador.municipal · caso A</span></div>
+        <p style="font-size:.9rem">Abrí la emergencia A. En <i>Adjudicar ofertas</i> tildá <b>solo Cruz Roja</b> y apretá <b>Adjudicar a 1 ONG</b>. Aparece “Adjudicación enviada”; en unos segundos el estado pasa a <i>En ejecución</i> (recargá si hace falta).</p>
+        <span class="btn-mock">Adjudicar a 1 ONG</span></div>
+      <div class="bonita"><span class="lab">Qué hace Bonita</span>
+        <span>La app completa <i>Adjudicar Ofertas</i> y guarda <code>ongsAdjudicadas</code>. Bonita ejecuta el conector <b>Notificar Adjudicacion y Registrar Compromiso Nacional</b>: <code>POST /adjudicaciones/resolucion</code> con las referencias a confirmar y a liberar, <b>en una sola llamada</b>. Después avisa a la app con el evento <code>ADJUDICACION</code>. El caso queda esperando en <b>Monitorear Ejecucion del Despliegue</b>.</span></div>
+      <div class="nacional"><span class="lab">Mirá en la API Nacional</span>
+        <span>Cruz Roja conserva <b>4</b> paramédicos comprometidos, ahora <i>adjudicados</i>. A Bomberos se le liberaron los 2: queda en <b>0</b>.</span></div>
+      <div class="expect"><b>Resultado:</b> la emergencia pasa a <i>En ejecución</i>. En las ofertas del detalle, la de Cruz Roja figura como <i>adjudicada</i> y la de Bomberos como <i>no adjudicada</i>. Las dos ONGs reciben un aviso.</div>
+    </div>
+    <div class="shots">
+      <figure><button data-zoom="img/parada-2/14-municipio-adjudicar-a.png"><img src="img/parada-2/14-municipio-adjudicar-a.png" alt="Panel de adjudicación con Cruz Roja tildada" loading="lazy"></button><figcaption><b>Panel de adjudicación.</b> Solo se puede elegir entre las ONGs con reserva.</figcaption></figure>
+      <figure><button data-zoom="img/parada-2/15-municipio-en-ejecucion-a.png"><img src="img/parada-2/15-municipio-en-ejecucion-a.png" alt="Caso A en ejecución" loading="lazy"></button><figcaption><b>En ejecución:</b> lo resolvió Bonita y la app recibió el evento.</figcaption></figure>
+    </div>
+  </div>
+</div></section>
+
+<section id="a7"><div class="act">
+  <div class="act-head"><span class="eyebrow r-coord">Paso 7 · Caso B, ronda 2</span><h2>Publicar de nuevo y adjudicar</h2><span class="t">5 min</span></div>
+  <p class="say">“Con los mismos lotes, una convocatoria nueva. Esta vez una ONG ofrece todo y la cobertura es completa: ya no hay nada que decidir.”</p>
+  <div class="cols">
+    <div class="stack">
+      <div class="form"><div class="ft"><b>Ronda 2 del caso B</b><span>coordinador, ONG y Municipio</span></div>
+        <ol class="seq">
+          <li><b>coordinador.regional</b> abre la emergencia B (<i>Registrada</i>, ronda 2) y publica con un cierre a unos <b>3 minutos</b>. No hace falta volver a cargar el lote.</li>
+          <li><b>ong.cruzroja</b> ofrece las <b>3000</b> raciones completas.</li>
+          <li>Se cumple la hora. Bonita repite la evaluación. La referencia lleva la ronda: <code>emg-{id}-r2-30-54666544-5</code>; sin esa <code>r2</code> chocaría con la reserva liberada de la ronda 1.</li>
+          <li>Cobertura <b>100 %</b>, “lotes cubiertos”: sin botones de decisión, la emergencia pasa directo a <i>Adjudicación</i>.</li>
+          <li><b>operador.municipal</b> tilda Cruz Roja y adjudica. Pasa a <i>En ejecución</i>.</li>
+        </ol></div>
+      <div class="nacional"><span class="lab">Mirá en la API Nacional</span>
+        <span>Después de adjudicar, Cruz Roja tiene <b>3000</b> raciones comprometidas.</span></div>
+      <div class="expect"><b>Resultado:</b> caso B en <i>En ejecución</i>. Bonita espera, como el A, en <b>Monitorear Ejecucion del Despliegue</b>.</div>
+    </div>
+    <div class="shots">
+      <figure><button data-zoom="img/parada-2/12-coordinador-ronda-2-b.png"><img src="img/parada-2/12-coordinador-ronda-2-b.png" alt="Caso B publicado en la ronda 2" loading="lazy"></button><figcaption><b>Ronda 2 publicada.</b></figcaption></figure>
+      <figure><button data-zoom="img/parada-2/13-ong-cruzroja-ronda-2-b.png"><img src="img/parada-2/13-ong-cruzroja-ronda-2-b.png" alt="Oferta de 3000 raciones" loading="lazy"></button><figcaption><b>Cruz Roja</b> ofrece las 3000 raciones.</figcaption></figure>
+      <figure><button data-zoom="img/parada-2/18-coordinador-evaluacion-ronda-2-b.png"><img src="img/parada-2/18-coordinador-evaluacion-ronda-2-b.png" alt="Evaluación de la ronda 2: 100 por ciento" loading="lazy"></button><figcaption><b>Evaluación de la ronda 2:</b> cobertura completa, sin botones de decisión.</figcaption></figure>
+      <figure><button data-zoom="img/parada-2/19-municipio-adjudicar-b.png"><img src="img/parada-2/19-municipio-adjudicar-b.png" alt="Municipio adjudica el caso B" loading="lazy"></button><figcaption><b>El Municipio adjudica</b> a Cruz Roja.</figcaption></figure>
+      <figure><button data-zoom="img/parada-2/20-municipio-en-ejecucion-b.png"><img src="img/parada-2/20-municipio-en-ejecucion-b.png" alt="Caso B en ejecución" loading="lazy"></button><figcaption><b>En ejecución.</b></figcaption></figure>
+    </div>
+  </div>
+</div></section>
+
+<section id="a8"><div class="act">
+  <div class="act-head"><span class="eyebrow r-ong">Paso 8 · ONGs</span><h2>Lo que ve cada ONG</h2><span class="t">1 min</span></div>
+  <p class="say">“Cada ONG ve cómo quedó su oferta: adjudicada o no adjudicada.”</p>
+  <div class="cols">
+    <div class="stack">
+      <div class="form"><div class="ft"><b>Qué mirar</b><span>caso A</span></div>
+        <div class="tablewrap"><table>
+          <tr><th>Usuario</th><th>Qué ve en la oferta del caso A</th></tr>
+          <tr><td>ong.cruzroja</td><td>Insignia <b>adjudicada</b></td></tr>
+          <tr><td>ong.bomberos</td><td>Insignia <b>no adjudicada</b></td></tr>
+        </table></div></div>
+      <div class="note">Los avisos para las ONGs ya se crean en la base al adjudicar (tabla <code>notificacion</code>), pero todavía <b>no hay pantalla</b> que los muestre: llega con la Parada 3.</div>
+    </div>
+    <div class="shots">
+      <figure><button data-zoom="img/parada-2/16-ong-cruzroja-adjudicada-a.png"><img src="img/parada-2/16-ong-cruzroja-adjudicada-a.png" alt="Cruz Roja ve su oferta adjudicada" loading="lazy"></button><figcaption><b>Cruz Roja:</b> adjudicada.</figcaption></figure>
+      <figure><button data-zoom="img/parada-2/17-ong-bomberos-no-adjudicada-a.png"><img src="img/parada-2/17-ong-bomberos-no-adjudicada-a.png" alt="Bomberos ve su oferta no adjudicada" loading="lazy"></button><figcaption><b>Bomberos:</b> no adjudicada.</figcaption></figure>
+    </div>
+  </div>
+</div></section>
+
+<section id="bonita">
+  <header><span class="eyebrow r-bonita">Lo que quedó en el motor</span><h2>El caso A en el portal de Bonita</h2>
+  <p>Después de adjudicar, el caso espera en <b>Monitorear Ejecucion del Despliegue</b>. En la lista de tareas completadas están las tres que corrió Bonita solo (obtener, validar y notificar) y las dos que completó la app en nombre de las personas (evaluar cobertura y adjudicar).</p></header>
+  <div class="cols">
+    <div class="stack">
+      <div class="bonita"><span class="lab">Caso 12001 (caso A)</span>
+        <span><b>Iniciado por</b> Operador Municipal. En <i>Monitorización</i>: <b>9</b> flow nodes completados, <b>1</b> pendiente y <b>0</b> fallidos.</span>
+        <span>La tarea pendiente es <b>Monitorear Ejecucion del Despliegue</b>: está a cargo del Coordinador y de ahí sale la Parada 3 (cierre).</span></div>
+      <div class="bonita"><span class="lab">Tareas completadas del caso A</span>
+        <span><b>Notificar Adjudicacion y Registrar Compromiso Nacional</b> (automática), <b>Adjudicar Ofertas</b> (usuario), <b>Evaluar Cobertura y Definir Curso de Accion</b> (usuario), <b>Validar en Sistema Nacional y Calcular Cobertura</b> (automática) y <b>Obtener Ofertas de la Red (GET App Local)</b> (automática).</span></div>
+      <div class="bonita"><span class="lab">Caso B (12002), después de reformular</span>
+        <span>Pasó dos veces por <i>Cargar Ofertas de Ayuda</i> (una por ronda), por eso su lista de completadas es más larga.</span></div>
+    </div>
+    <div class="shots">
+      <figure><button data-zoom="img/parada-2/bonita-caso-a.png"><img src="img/parada-2/bonita-caso-a.png" alt="Caso 12001 en el portal de Bonita" loading="lazy"></button><figcaption><b>El caso A:</b> 9 completados, 1 pendiente, 0 fallidos.</figcaption></figure>
+      <figure><button data-zoom="img/parada-2/bonita-tareas-hechas-a.png"><img src="img/parada-2/bonita-tareas-hechas-a.png" alt="Tareas completadas del caso A" loading="lazy"></button><figcaption><b>Tareas completadas</b>, automáticas y de usuario.</figcaption></figure>
+      <figure><button data-zoom="img/parada-2/bonita-tareas-pendientes-a.png"><img src="img/parada-2/bonita-tareas-pendientes-a.png" alt="Tarea pendiente del caso A" loading="lazy"></button><figcaption><b>Pendiente:</b> Monitorear Ejecucion del Despliegue.</figcaption></figure>
+      <figure><button data-zoom="img/parada-2/bonita-tareas-hechas-b.png"><img src="img/parada-2/bonita-tareas-hechas-b.png" alt="Tareas completadas del caso B" loading="lazy"></button><figcaption><b>Caso B</b> (12002): las dos rondas.</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section id="dentro">
+  <header><span class="eyebrow r-bonita">Por dentro</span><h2>Los conectores de Bonita y las llamadas entre sistemas</h2>
+  <p>Bonita es quien empieza cada conversación: la app y la API Nacional nunca la llaman a ella para avanzar el proceso (salvo que una persona complete una tarea). El único código del proceso vive dentro de estos conectores.</p></header>
+  <div class="tablewrap"><table>
+    <tr><th>Tarea de Bonita</th><th>Conector</th><th>Llamada</th><th>Qué hace</th></tr>
+    <tr><td>Obtener Ofertas de la Red (GET App Local)</td><td class="nw"><code>get obteber ofertas</code></td><td><code>GET localhost:8001/api/bonita/emergencias/{id}/ofertas</code></td><td>La app pasa a <i>En evaluación</i> y devuelve las ofertas vigentes consolidadas. Se guardan en <code>ofertasJson</code>.</td></tr>
+    <tr><td rowspan="2">Validar en Sistema Nacional y Calcular Cobertura</td><td class="nw"><code>evaluarOfertas</code></td><td><code>POST localhost:8002/evaluaciones</code></td><td>Reserva el stock de cada ONG (todo o nada por oferta) y calcula la cobertura por lote. Se guarda en <code>evaluacionJson</code>.</td></tr>
+    <tr><td class="nw"><code>avisarEvaluacion</code></td><td><code>POST localhost:8001/api/bonita/emergencias/{id}/eventos</code></td><td>Evento <code>EVALUACION</code>: la app guarda el resultado y el Coordinador lo ve.</td></tr>
+    <tr><td rowspan="2">Notificar Adjudicacion y Registrar Compromiso Nacional</td><td class="nw"><code>resolverReservas</code></td><td><code>POST localhost:8002/adjudicaciones/resolucion</code></td><td>Confirma las referencias de las ONGs adjudicadas y libera las demás, en una sola llamada.</td></tr>
+    <tr><td class="nw"><code>avisarAdjudicacion</code></td><td><code>POST localhost:8001/api/bonita/emergencias/{id}/eventos</code></td><td>Evento <code>ADJUDICACION</code>: la app marca las ofertas, crea los avisos y pasa a <i>En ejecución</i>.</td></tr>
+  </table></div>
+  <p style="color:var(--ink-2);font-size:.9rem;margin-top:10px">Las llamadas a la app llevan el encabezado <code>X-Api-Key</code> con la clave compartida (<code>bonitaApiKey</code>). Los eventos se pueden repetir sin efecto: si Bonita reintenta, no se duplica nada.</p>
+  <div class="cols" style="margin-top:18px">
+    <div class="stack">
+      <div class="form"><div class="ft"><b>Qué recibe y devuelve <code>POST /evaluaciones</code></b><span>API Nacional</span></div>
+        <p style="font-size:.88rem;color:var(--ink-2)">Reglas: la reserva de una ONG es <b>todo o nada</b> (no se recorta una oferta); una ONG sin el inventario o la competencia necesaria queda <code>NO_RESERVADA</code> y no aparta nada; repetir la llamada no vuelve a reservar.</p>
+        <div class="field"><label>Pedido (caso A, armado por Bonita con lo que le dio la app)</label></div><pre class="code">{
+  &quot;emergencia_id&quot;: 22, &quot;ronda&quot;: 1, &quot;gravedad&quot;: &quot;ALTO&quot;,
+  &quot;lotes&quot;: [ {&quot;lote_id&quot;: 31, &quot;tipo_recurso&quot;: &quot;PARAMEDICO&quot;, &quot;cantidad&quot;: 10, &quot;tipo&quot;: &quot;PRINCIPAL&quot;} ],
+  &quot;ofertas&quot;: [
+    {&quot;cuit&quot;: &quot;30-54666544-5&quot;, &quot;ong&quot;: &quot;Cruz Roja Argentina&quot;, &quot;version&quot;: 1,
+     &quot;items&quot;: [ {&quot;lote_id&quot;: 31, &quot;tipo_recurso&quot;: &quot;PARAMEDICO&quot;, &quot;cantidad&quot;: 4} ]},
+    {&quot;cuit&quot;: &quot;30-68522415-9&quot;, &quot;ong&quot;: &quot;Bomberos Voluntarios&quot;, &quot;version&quot;: 1,
+     &quot;items&quot;: [ {&quot;lote_id&quot;: 31, &quot;tipo_recurso&quot;: &quot;PARAMEDICO&quot;, &quot;cantidad&quot;: 2} ]}
+  ]
+}</pre><div class="field"><label>Respuesta real de la corrida (es lo que la app guarda y muestra)</label></div><pre class="code">{
+  &quot;emergencia_id&quot;: 22, &quot;ronda&quot;: 1,
+  &quot;cobertura_completa&quot;: false, &quot;porcentaje_cobertura&quot;: 60.0,
+  &quot;lotes&quot;: [ {&quot;lote_id&quot;: 31, &quot;tipo_recurso&quot;: &quot;PARAMEDICO&quot;, &quot;pedido&quot;: 10,
+              &quot;reservado&quot;: 6, &quot;porcentaje&quot;: 60.0, &quot;cubierto&quot;: false} ],
+  &quot;ongs&quot;: [
+    {&quot;cuit&quot;: &quot;30-54666544-5&quot;, &quot;ong&quot;: &quot;Cruz Roja Argentina&quot;,
+     &quot;referencia&quot;: &quot;emg-22-r1-30-54666544-5&quot;, &quot;estado&quot;: &quot;RESERVADA&quot;,
+     &quot;items&quot;: [ {&quot;lote_id&quot;: 31, &quot;tipo_recurso&quot;: &quot;PARAMEDICO&quot;, &quot;ofrecido&quot;: 4, &quot;reservado&quot;: 4,
+                 &quot;nivel&quot;: &quot;PARCIAL&quot;, &quot;riesgo_permitido&quot;: &quot;MEDIO&quot;, &quot;asignacion_sugerida&quot;: &quot;APOYO&quot;,
+                 &quot;observaciones&quot;: [&quot;SALUD_PREHOSP vigente hasta riesgo MEDIO; la emergencia es ALTO&quot;]} ]},
+    {&quot;cuit&quot;: &quot;30-68522415-9&quot;, &quot;ong&quot;: &quot;Bomberos Voluntarios&quot;,
+     &quot;referencia&quot;: &quot;emg-22-r1-30-68522415-9&quot;, &quot;estado&quot;: &quot;RESERVADA&quot;,
+     &quot;items&quot;: [ {&quot;lote_id&quot;: 31, &quot;tipo_recurso&quot;: &quot;PARAMEDICO&quot;, &quot;ofrecido&quot;: 2, &quot;reservado&quot;: 2,
+                 &quot;nivel&quot;: &quot;SUPERVISADA&quot;, &quot;riesgo_permitido&quot;: null, &quot;asignacion_sugerida&quot;: &quot;APOYO&quot;,
+                 &quot;observaciones&quot;: [&quot;Certificación SALUD_PREHOSP vencida el 2026-07-16&quot;]} ]}
+  ]
+}</pre></div>
+    </div>
+    <div class="stack">
+      <div class="form"><div class="ft"><b>Qué recibe <code>POST /adjudicaciones/resolucion</code></b><span>API Nacional</span></div>
+        <p style="font-size:.88rem;color:var(--ink-2)">Antes de tocar nada valida todas las referencias: si una no existe o no admite la operación, no se cambia ninguna. Cada operación es idempotente.</p>
+        <div class="field"><label>Pedido (caso A: confirmar a Cruz Roja, liberar a Bomberos)</label></div><pre class="code">{
+  &quot;confirmar&quot;: [&quot;emg-22-r1-30-54666544-5&quot;],
+  &quot;liberar&quot;:   [&quot;emg-22-r1-30-68522415-9&quot;]
+}</pre><div class="field"><label>Respuesta (forma del contrato, con las referencias del caso A)</label></div><pre class="code">{
+  &quot;confirmadas&quot;: [ {&quot;referencia&quot;: &quot;emg-22-r1-30-54666544-5&quot;, &quot;estado&quot;: &quot;ADJUDICADA&quot;} ],
+  &quot;liberadas&quot;:   [ {&quot;referencia&quot;: &quot;emg-22-r1-30-68522415-9&quot;, &quot;estado&quot;: &quot;LIBERADA&quot;,
+                    &quot;liberado&quot;: [ {&quot;tipo_recurso&quot;: &quot;PARAMEDICO&quot;, &quot;cantidad&quot;: 2} ]} ]
+}</pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="auto">
+  <header><span class="eyebrow">Para repetirlo sin clics</span><h2>Todo esto, automático</h2>
+  <p>La misma Parada 2 se puede recorrer sola. Las dos primeras herramientas necesitan Bonita, la app y la API Nacional corriendo; la tercera no necesita nada.</p></header>
+  <div class="tablewrap"><table>
+    <tr><th>Herramienta</th><th>Qué prueba</th><th class="num">Verificaciones</th><th>Comando (desde <code>backend</code>)</th></tr>
+    <tr><td><code>scripts/ui_parada2.py</code></td><td>Esta guía: los dos casos en la interfaz real, con los cuatro perfiles, contra Bonita y la API Nacional, con captura de cada paso. Unos 15 minutos.</td><td class="num">46</td><td><code>.venv\Scripts\python scripts\ui_parada2.py</code></td></tr>
+    <tr><td><code>scripts/escenario_adjudicacion.py</code></td><td>Lo mismo por la API HTTP, con los permisos (403 y 400). Unos 8 minutos.</td><td class="num">34</td><td><code>.venv\Scripts\python scripts\escenario_adjudicacion.py</code></td></tr>
+    <tr><td><code>scripts/verificar_todo.py</code> (desde la raíz)</td><td>Tests del backend (188), de la API Nacional (93) y tipos del front. 26 segundos.</td><td class="num">281 + tipos</td><td><code>python scripts\verificar_todo.py</code></td></tr>
+  </table></div>
+  <div class="cmd"><code>.venv\Scripts\python scripts\ui_parada2.py --visible</code><button class="copy" data-copy=".venv\Scripts\python scripts\ui_parada2.py --visible">Copiar</button></div>
+  <p style="color:var(--ink-2);font-size:.9rem;margin-top:8px">Con <code>--visible</code> el navegador se ve. Al terminar, el script libera las reservas de la prueba y deja la API Nacional como estaba, así que se puede volver a correr.</p>
+</section>
+
+<section id="resultado">
+  <header><span class="eyebrow">Corrida del 17/10/2026</span><h2>Resultado de la prueba</h2></header>
+  <div class="tablewrap"><table>
+    <tr><th>Prueba</th><th class="num">Resultado</th><th>Qué verificó</th></tr>
+    <tr><td><code>ui_parada2.py</code></td><td class="num"><b>46 / 46</b></td><td>El recorrido completo de esta guía en la interfaz real, con Bonita y la API Nacional, y la limpieza final: la API Nacional quedó como al empezar.</td></tr>
+    <tr><td>Tests del backend</td><td class="num"><b>188 · 2 se saltean</b></td><td>La API de la app, los modelos, las migraciones, el ciclo de vida (<code>test_ciclo.py</code>) y el contrato con el <code>.bos</code>.</td></tr>
+    <tr><td>Tests de la API Nacional</td><td class="num"><b>93 · 3 se saltean</b></td><td>Reservas todo o nada, resolución, idempotencia y migraciones.</td></tr>
+  </table></div>
+  <div class="form" style="margin-top:14px"><div class="ft"><b>Datos de la corrida</b><span>emergencias #22 y #23</span></div>
+    <div class="tablewrap"><table>
+      <tr><th>Qué</th><th>Caso A (parcial)</th><th>Caso B (reformular)</th></tr>
+      <tr><td>Emergencia · caso Bonita</td><td>#22 · 12001</td><td>#23 · 12002</td></tr>
+      <tr><td>Pedido</td><td>10 paramédicos (ALTO)</td><td>3000 raciones (MEDIO)</td></tr>
+      <tr><td>Ofertas</td><td>Cruz Roja 4 + Bomberos 2</td><td>Cruz Roja 2000; en la ronda 2, 3000</td></tr>
+      <tr><td>Cobertura de la evaluación</td><td>60 %, no alcanza</td><td>ronda 1: 66,7 %; ronda 2: 100 %</td></tr>
+      <tr><td>Reservado en la API Nacional</td><td>4 y 2</td><td>2000, que se liberan al reformular</td></tr>
+      <tr><td>Decisión</td><td>Cobertura parcial</td><td>Reformular, y la ronda 2 va directo a adjudicación</td></tr>
+      <tr><td>Adjudicación</td><td>Cruz Roja; Bomberos se libera (0)</td><td>Cruz Roja, 3000 raciones</td></tr>
+      <tr><td>Estado final</td><td>En ejecución, Bonita en <i>Monitorear Ejecucion</i></td><td>En ejecución (<code>emg-23-r2-30-54666544-5</code>)</td></tr>
+    </table></div></div>
+  <div class="note"><b>Lo que esta parada no cubre.</b> No hay pantalla de avisos para las ONGs (se guardan, no se muestran), y el cierre de la emergencia, la liberación definitiva de los recursos y la confirmación de finalización por las ONGs son la Parada 3. Tampoco se probó contra la API Nacional en la nube: todo corrió contra <code>localhost:8002</code>.</div>
+</section>
+
+<section id="fallas">
+  <header><span class="eyebrow">Plan B</span><h2>Si algo falla</h2></header>
+  <div class="tablewrap"><table>
+    <tr><th>Síntoma</th><th>Causa probable</th><th>Qué hacer</th></tr>
+    <tr><td>El panel dice “Evaluando las ofertas…” y no cambia</td><td>Un conector de Bonita falló (la app o la API Nacional no respondieron, o se cambió la URL)</td><td>En el portal, mirá <i>Flow Nodes fallidos</i> del caso. Reintentá la tarea desde ahí; la evaluación es idempotente.</td></tr>
+    <tr><td>No pasa a <i>En evaluación</i> al vencer</td><td>El caso es de un despliegue anterior, o Bonita se reinició</td><td>Cada <i>Ejecutar</i> borra los casos: creá emergencias nuevas.</td></tr>
+    <tr><td>La oferta se rechaza (“no alcanza tu inventario” o tope)</td><td>Quedan ofertas viejas que descuentan inventario, o ofrecés más de lo que hay</td><td>Usá los recursos de esta guía (paramédicos y raciones) y las cantidades indicadas.</td></tr>
+    <tr><td><code>409</code> al evaluar: “ya está LIBERADA”</td><td>Una emergencia con el mismo número ya usó esas referencias en esa API Nacional</td><td>No reiniciar la base de la app contra una API Nacional que ya tiene datos; si hay que hacerlo, usar emergencias con número mayor.</td></tr>
+    <tr><td>Los números de la API Nacional no coinciden</td><td>Quedó algo comprometido de una corrida anterior</td><td>Revisá <code>cantidad_comprometida</code> antes de empezar (paso 6 de la preparación) y liberá las referencias viejas con <code>POST /adjudicaciones/{referencia}/liberar</code>.</td></tr>
+    <tr><td>Bonita “Run” falla con “login fallido de walter.bates”</td><td>En realidad Tomcat no llegó a levantar (conexión rechazada en 8080): la PC está muy cargada</td><td>Cerrá programas pesados, reabrí Studio y esperá hasta 5 minutos antes de tocar. El detalle está en <code>workspace\tomcat\server\logs\bonita.log</code>.</td></tr>
+    <tr><td>El login de la app rechaza <code>bpm</code></td><td>Es la clave de Bonita, no la de la app</td><td>Usá <code>demo1234</code>.</td></tr>
+    <tr><td><code>alembic upgrade head</code> → “No module named app”</td><td>El <code>alembic.exe</code> suelto del venv no encuentra el paquete</td><td>Usá <code>python -m alembic upgrade head</code>, con <code>python -m</code>.</td></tr>
+  </table></div>
+</section>
+
+<footer>Las capturas salen de <code>entrega-3/img/parada-2/</code>, generadas por <code>backend/scripts/ui_parada2.py</code>.</footer>
+</div>
+
+<dialog id="zoom"><button class="x" type="button" id="zx">Cerrar</button><img id="zimg" alt=""></dialog>
+
+<script>
+(function(){
+  // Copiar al portapapeles, con salida limpia si el visor lo rechaza.
+  function copiar(btn, texto){
+    var fin=function(ok){ var t=btn.textContent; btn.textContent= ok?'Copiado':'Seleccioná y copiá'; btn.classList.toggle('ok',ok); setTimeout(function(){btn.textContent=t; btn.classList.remove('ok');},1400); };
+    try{ navigator.clipboard.writeText(texto).then(function(){fin(true)},function(){fin(false)}); }catch(e){ fin(false); }
+  }
+  document.querySelectorAll('button[data-copy]').forEach(function(b){ b.addEventListener('click',function(){ copiar(b,b.getAttribute('data-copy')); }); });
+
+  // Cierre = ahora + N minutos, en formato datetime-local.
+  var sel=document.getElementById('mins'), out=document.getElementById('cierre'), cb=document.getElementById('copyCierre');
+  function pad(n){return String(n).padStart(2,'0')}
+  function cierre(){ var d=new Date(Date.now()+Number(sel.value)*60000); return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes()); }
+  function pintar(){ var v=cierre(); out.textContent=v.slice(8,10)+'/'+v.slice(5,7)+' '+v.slice(11); }
+  sel.addEventListener('change',pintar); pintar(); setInterval(pintar,15000);
+  cb.addEventListener('click',function(){ copiar(cb,cierre()); });
+
+  // Checklist con memoria por navegador (opcional).
+  var lista=document.querySelectorAll('#checklist input[type=checkbox]');
+  function guardar(){ try{ localStorage.setItem('rs-p2-check', JSON.stringify(Array.prototype.map.call(lista,function(c){return c.checked}))); }catch(e){} }
+  try{ var g=JSON.parse(localStorage.getItem('rs-p2-check')||'[]'); lista.forEach(function(c,i){ c.checked=!!g[i]; c.closest('li').classList.toggle('done',c.checked); }); }catch(e){}
+  lista.forEach(function(c){ c.addEventListener('change',function(){ c.closest('li').classList.toggle('done',c.checked); guardar(); }); });
+
+  // Ampliar capturas.
+  var dlg=document.getElementById('zoom'), img=document.getElementById('zimg');
+  document.querySelectorAll('button[data-zoom]').forEach(function(b){ b.addEventListener('click',function(){ img.src=b.getAttribute('data-zoom'); if(dlg.showModal){dlg.showModal();} else {dlg.setAttribute('open','');} }); });
+  document.getElementById('zx').addEventListener('click',function(){ dlg.close(); });
+  dlg.addEventListener('click',function(e){ if(e.target===dlg) dlg.close(); });
+})();
+</script>

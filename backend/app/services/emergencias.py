@@ -8,6 +8,7 @@ alguien la complete desde la UI nativa de Bonita, que la app no usa.
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 
 import requests
@@ -19,6 +20,10 @@ from app.integrations.bonita import BonitaClient, BonitaError
 from app.models import Emergencia, EstadoEmergencia, Gravedad, Rol, Usuario
 
 TAREA_CARGAR_OFERTAS = "Cargar Ofertas de Ayuda"
+# Con Bonita ocupado (p. ej. justo después de publicar otra convocatoria) la tarea tardó más de 5 s en aparecer.
+ESPERA_REGISTRAR_S = 20
+
+log = logging.getLogger(__name__)
 
 
 def _filtro_visibilidad(user: Usuario):
@@ -26,8 +31,9 @@ def _filtro_visibilidad(user: Usuario):
     if user.rol is Rol.MUNICIPIO:
         return Emergencia.municipio_id == user.municipio_id
     if user.rol is Rol.ONG:
-        # Una vez vencida la ventana la ONG sigue viendo la convocatoria (y su oferta), solo que cerrada.
-        return Emergencia.estado.in_([EstadoEmergencia.CONVOCATORIA, EstadoEmergencia.CERRADA])
+        # Una vez vencida la ventana la ONG sigue viendo la convocatoria (y su oferta), y después
+        # la evaluación, la adjudicación y la ejecución. Solo no ve la que todavía no se publicó.
+        return Emergencia.estado != EstadoEmergencia.REGISTRADA
     return True
 
 
@@ -76,10 +82,21 @@ def _ventana_provisoria(settings: Settings) -> str:
 
 
 def _completar_registrar_emergencia(operador: BonitaClient, case_id) -> None:
-    tarea = operador.wait_for_task(case_id, "Registrar Emergencia")
+    tarea = operador.wait_for_task(case_id, "Registrar Emergencia", retries=ESPERA_REGISTRAR_S * 2)
     if tarea is None:
         raise BonitaError("El caso se instanció pero no apareció la tarea 'Registrar Emergencia'")
     operador.complete_task_as_self(tarea["id"])
+
+
+def _borrar_caso_huerfano(settings: Settings, case_id) -> None:
+    """Si el alta falla después de crear el caso, se borra en Bonita: si no, queda un caso trabado en
+    'Registrar Emergencia' con un emergenciaId que la base local va a reusar para la próxima emergencia."""
+    try:
+        admin = BonitaClient(settings.bonita_base_url, settings.bonita_timeout_seconds)
+        admin.login(settings.bonita_username, settings.bonita_password)
+        admin.delete_case(case_id)
+    except (BonitaError, requests.RequestException):
+        log.warning("No se pudo borrar el caso huérfano %s de Bonita", case_id, exc_info=True)
 
 
 def registrar_emergencia(
@@ -105,6 +122,7 @@ def registrar_emergencia(
     db.add(emergencia)
     db.flush()  # asigna emergencia.id (para el contrato) sin comitear todavía
 
+    case_id = None
     try:
         # Bonita registra al iniciador y al ejecutor: hay que entrar como quien hizo el alta
         # (mismo username que en la app), no con el usuario técnico.
@@ -120,6 +138,8 @@ def registrar_emergencia(
         _completar_registrar_emergencia(bonita, case_id)
     except (BonitaError, requests.RequestException) as exc:
         db.rollback()
+        if case_id is not None:
+            _borrar_caso_huerfano(settings, case_id)
         raise AltaEmergenciaError(
             "No se pudo iniciar el caso en Bonita. La emergencia no se registró; probá de nuevo."
         ) from exc

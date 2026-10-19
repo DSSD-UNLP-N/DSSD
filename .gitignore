@@ -13,3 +13,9 @@ entrega-1/*.md
 # Logs de uvicorn al correr la app a mano
 backend/uvicorn.log
 backend/uvicorn.err
+
+# Informe de la entrega: se trabaja en local y no se versiona
+Entrega 2 - DSSD.pdf
+
+# .bos con la clave de la API Nacional en la nube (se genera con bonita/scripts/preparar_entorno.py)
+entrega-3/*_nube.bos

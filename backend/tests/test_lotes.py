@@ -14,7 +14,7 @@ from app.models import Emergencia, EstadoEmergencia, Gravedad, Lote, Municipio, 
 BASE = get_settings().bonita_base_url
 BASE_PATH = urlparse(BASE).path
 CASE = 4242
-LOTE = {"recurso": "Paramédicos", "cantidad": 5, "unidad": "personas", "tipo": "PRINCIPAL"}
+LOTE = {"tipo_recurso": "PARAMEDICO", "cantidad": 5, "tipo": "PRINCIPAL"}
 
 
 def _futuro(horas=48):
@@ -78,12 +78,48 @@ def test_solo_el_coordinador_gestiona_lotes(login, emergencia):
 def test_agregar_lote_y_verlo_en_el_detalle(login, emergencia, seeded):
     c = login("coordinador.regional")
     r = c.post(_lotes(emergencia), json=LOTE)
-    assert r.status_code == 201 and r.json()["recurso"] == "Paramédicos"
+    assert r.status_code == 201 and r.json()["recurso"] == "Paramédico"
     with seeded() as s:
         lote = s.query(Lote).one()
-        assert (lote.recurso, lote.cantidad, lote.unidad, lote.tipo) == ("Paramédicos", 5, "personas", TipoLote.PRINCIPAL)
+        # nombre y unidad salen del catálogo; el código queda para validar contra el inventario
+        assert (lote.recurso, lote.cantidad, lote.unidad, lote.tipo_recurso, lote.tipo) == (
+            "Paramédico", 5, "personas", "PARAMEDICO", TipoLote.PRINCIPAL)
     detalle = c.get(f"/api/emergencias/{emergencia}").json()
-    assert [(l["recurso"], l["cantidad"], l["unidad"]) for l in detalle["lotes"]] == [("Paramédicos", 5, "personas")]
+    assert [(l["recurso"], l["cantidad"], l["unidad"], l["tipo_recurso"]) for l in detalle["lotes"]] == [
+        ("Paramédico", 5, "personas", "PARAMEDICO")]
+
+
+def test_el_detalle_libre_se_suma_al_nombre_del_recurso(login, emergencia, seeded):
+    r = login("coordinador.regional").post(_lotes(emergencia), json={**LOTE, "detalle": "  con equipo de trauma "})
+    assert r.status_code == 201
+    assert r.json()["recurso"] == "Paramédico (con equipo de trauma)"
+    r = login("coordinador.regional").post(_lotes(emergencia), json={**LOTE, "detalle": "   "})
+    assert r.json()["recurso"] == "Paramédico"  # un detalle en blanco no deja paréntesis vacíos
+
+
+def test_tipo_de_recurso_fuera_del_catalogo_no_crea_lote(login, emergencia, seeded):
+    r = login("coordinador.regional").post(_lotes(emergencia), json={**LOTE, "tipo_recurso": "NADA"})
+    assert r.status_code == 400 and "Tipo de recurso inexistente" in r.json()["detail"]
+    with seeded() as s:
+        assert s.query(Lote).count() == 0
+
+
+def test_con_el_sistema_nacional_caido_no_se_crea_el_lote(login, emergencia, seeded, nacional):
+    nacional.caido = True
+    r = login("coordinador.regional").post(_lotes(emergencia), json=LOTE)
+    assert r.status_code == 503 and "Sistema Nacional no responde" in r.json()["detail"]
+    with seeded() as s:
+        assert s.query(Lote).count() == 0
+
+
+def test_el_catalogo_llega_a_la_spa_por_la_api_local(login, client, nacional):
+    assert client.get("/api/tipos-recurso").status_code == 401  # sin sesión
+    c = login("coordinador.regional")
+    r = c.get("/api/tipos-recurso")
+    assert r.status_code == 200
+    assert {t["codigo"] for t in r.json()} == {"PARAMEDICO", "RACION_ALIMENTO", "AGUA_POTABLE"}
+    nacional.caido = True
+    assert c.get("/api/tipos-recurso").status_code == 503
 
 
 def test_lote_de_apoyo(login, emergencia, seeded):
@@ -93,12 +129,11 @@ def test_lote_de_apoyo(login, emergencia, seeded):
 
 
 @pytest.mark.parametrize("campo,valor", [
-    ("recurso", "   "),
-    ("recurso", ""),
+    ("tipo_recurso", "   "),
+    ("tipo_recurso", ""),
     ("cantidad", 0),
     ("cantidad", "dos"),
-    ("unidad", ""),
-    ("unidad", "   "),
+    ("detalle", "x" * 81),
     ("tipo", "SECUNDARIO"),
 ])
 def test_datos_invalidos_no_crean_lote(login, emergencia, seeded, campo, valor):

@@ -11,7 +11,7 @@ from sqlalchemy import create_engine, inspect
 from app.db import Base
 
 BACKEND = Path(__file__).resolve().parents[1]
-TABLAS = {"municipio", "ong", "usuario", "emergencia", "lote", "oferta", "oferta_item"}
+TABLAS = {"municipio", "ong", "usuario", "emergencia", "lote", "oferta", "oferta_item", "notificacion"}
 
 
 @pytest.fixture
@@ -61,6 +61,49 @@ def test_0002_marca_como_principal_los_lotes_existentes(cfg):
     command.upgrade(cfg, "head")
     with engine.connect() as conn:
         assert conn.execute(text("SELECT tipo FROM lote")).scalar_one() == "PRINCIPAL"
+
+
+def test_0004_deja_sin_tipo_de_recurso_los_lotes_existentes(cfg):
+    from sqlalchemy import text
+
+    command.upgrade(cfg, "0003")
+    engine = create_engine(cfg.get_main_option("sqlalchemy.url"))
+    with engine.begin() as conn:
+        conn.execute(text("INSERT INTO municipio (id, nombre, provincia) VALUES (1, 'M', 'P')"))
+        conn.execute(text(
+            "INSERT INTO emergencia (id, municipio_id, tipo, nivel_gravedad, zona_afectada, descripcion,"
+            " estado, creada_en) VALUES (1, 1, 'x', 'ALTO', 'z', 'd', 'REGISTRADA', '2026-09-22')"))
+        conn.execute(text(
+            "INSERT INTO lote (emergencia_id, recurso, cantidad, unidad, tipo)"
+            " VALUES (1, 'Agua', 10, 'litros', 'PRINCIPAL')"))
+
+    command.upgrade(cfg, "head")
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT tipo_recurso FROM lote")).scalar_one() is None
+
+
+def test_0005_deja_ronda_1_ofertas_presentadas_y_acepta_los_estados_nuevos(cfg):
+    from sqlalchemy import text
+    from sqlalchemy.exc import IntegrityError
+
+    command.upgrade(cfg, "0004")
+    engine = create_engine(cfg.get_main_option("sqlalchemy.url"))
+    with engine.begin() as conn:
+        conn.execute(text("INSERT INTO municipio (id, nombre, provincia) VALUES (1, 'M', 'P')"))
+        conn.execute(text("INSERT INTO ong (id, nombre) VALUES (1, 'O')"))
+        conn.execute(text(
+            "INSERT INTO emergencia (id, municipio_id, tipo, nivel_gravedad, zona_afectada, descripcion,"
+            " estado, creada_en) VALUES (1, 1, 'x', 'ALTO', 'z', 'd', 'CERRADA', '2026-09-22')"))
+        conn.execute(text(
+            "INSERT INTO oferta (emergencia_id, ong_id, version_actual, creada_en) VALUES (1, 1, 1, '2026-09-22')"))
+
+    command.upgrade(cfg, "head")
+    with engine.begin() as conn:
+        assert conn.execute(text("SELECT ronda FROM emergencia")).scalar_one() == 1
+        assert conn.execute(text("SELECT estado FROM oferta")).scalar_one() == "PRESENTADA"
+        conn.execute(text("UPDATE emergencia SET estado = 'EN_EVALUACION'"))
+    with pytest.raises(IntegrityError), engine.begin() as conn:
+        conn.execute(text("UPDATE emergencia SET estado = 'CUALQUIERA'"))
 
 
 def test_hay_una_sola_cabeza_de_migraciones():
