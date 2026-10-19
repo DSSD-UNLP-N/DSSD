@@ -19,8 +19,8 @@ uvicorn app.main:app --reload
 Cambios de modelo: editar `app/models/entities.py` y correr
 `alembic revision --autogenerate -m "descripcion"` + `alembic upgrade head`.
 
-- App: http://localhost:8000/
-- Swagger (automático): http://localhost:8000/docs
+- App: http://localhost:8001/
+- Swagger (automático): http://localhost:8001/docs
 
 ## Estructura
 
