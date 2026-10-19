@@ -34,4 +34,4 @@ Verificación automática de un despliegue (72 chequeos, no deja datos modificad
 
 ## Qué más hay detrás
 La API la consumen la app web (JWT con la cuenta `app-service`) y el proceso de Bonita (conector `loginNacional` + `Authorization: Bearer`). El recorrido completo
-(emergencia → ofertas → evaluación → adjudicación → ejecución → cierre) está probado con Bonita real y con esta API en la nube: ver [`guia-parada-3.md`](guia-parada-3.md) y la raíz [`README.md`](../README.md).
+(emergencia → ofertas → evaluación → adjudicación → ejecución → cierre) está probado con Bonita real y con esta API en la nube (`backend/scripts/ui_parada3.py`, 47 verificaciones); cómo levantarlo y probarlo: raíz [`README.md`](../README.md).

@@ -11,7 +11,7 @@ Los conectores de Bonita tienen escrita la dirección de la API Nacional (`http:
 
 No modifica el archivo de entrada. El `.bos` con la clave de la nube NO se sube al repositorio (`*_nube.bos` está en .gitignore).
 
-    python bonita/scripts/preparar_entorno.py entrega-3/entrega41_20261017_1311_cierre_jwt.bos entrega-3/entrega42_local.bos --estandar
+    python bonita/scripts/preparar_entorno.py <bos con los conectores de cierre y el login> entrega-3/entrega42_local.bos --estandar
     NACIONAL_BONITA_PASSWORD=... python bonita/scripts/preparar_entorno.py entrega-3/entrega42_local.bos entrega-3/entrega42_nube.bos \\
         --nacional https://rescuesync-nacional.onrender.com
 """

@@ -18,8 +18,7 @@ una ventana (timer de Bonita) → al vencer, Bonita evalúa las ofertas en la AP
 cobertura o reformula → el Municipio adjudica → ejecución: el Coordinador monitorea y cada ONG marca su actividad terminada → el
 Coordinador valida el cierre → Bonita le avisa a la API Nacional (libera y descuenta) y a la app (emergencia **Resuelta**, aviso a las ONGs).
 
-Guías con capturas: [`entrega-3/guia-parada-3.md`](entrega-3/guia-parada-3.md) (recorrido completo) y
-[`entrega-3/guia-del-sistema.md`](entrega-3/guia-del-sistema.md) (cómo está armado todo). Estado y decisiones: [`entrega-3/ESTADO.md`](entrega-3/ESTADO.md).
+Ficha de la Entrega 3 (URLs, Swagger, repositorio y Dockerfile): [`entrega-3/ENTREGA.md`](entrega-3/ENTREGA.md).
 
 ## Autenticación
 
@@ -81,7 +80,7 @@ La API Nacional está desplegada en Render (Docker construido desde `nacional/Do
 3. Despertar el servicio antes de empezar: `curl https://rescuesync-nacional.onrender.com/health`.
 
 Verificar un despliegue de la API (72 chequeos, no deja datos): `python nacional/scripts/verificar_despliegue.py <URL> --clave <BONITA_SERVICE_PASSWORD>`.
-Las dos contraseñas y `JWT_SECRET` se cargan como variables de entorno del servicio en Render (guía: [`entrega-3/guia-wp7-render.md`](entrega-3/guia-wp7-render.md)).
+Las dos contraseñas y `JWT_SECRET` se cargan como variables de entorno del servicio en Render , que construye `nacional/Dockerfile` desde la rama `dev` (`render.yaml` es el blueprint de referencia).
 
 ## Pruebas
 
@@ -109,7 +108,7 @@ nacional/       API Nacional (FastAPI): JWT, reservas, cierres, Dockerfile, scri
 bonita/         Herramientas: cliente REST y scripts que editan el .bos (conectores de cierre, login JWT, preparar_entorno.py).
 entrega-1/      Entrega 1 (entregada): modelo BPM inicial e informe.
 entrega-2/      Entrega 2 (entregada): RescueSync.bos, ACME.xml (organización) y bitácora de cambios en Bonita.
-entrega-3/      Entrega 3: entrega42_local.bos (el proceso vigente), guías, estado, contratos y capturas.
+entrega-3/      Entrega 3: entrega42_local.bos (proceso vigente), entrega41_20261017_1311.bos (export base), ficha de entrega y Swagger.
 render.yaml     Blueprint de Render para la API Nacional (referencia; el servicio vivo se creó desde el repo).
 docker-compose.yml   Postgres 16 para el backend (opcional).
 ```

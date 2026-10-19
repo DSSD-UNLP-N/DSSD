@@ -1,5 +1,5 @@
 """Resultado de la evaluación, con el mismo formato que devuelve `POST /evaluaciones` de la API Nacional
-(entrega-3/contratos.md, punto 3.1). Bonita lo reenvía tal cual a la app en un evento."""
+(contrato de la evaluación). Bonita lo reenvía tal cual a la app en un evento."""
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
