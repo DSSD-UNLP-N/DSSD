@@ -1,0 +1,2277 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Sistema Nacional de Gestión de Recursos y Riesgos",
+    "description": "API del Sistema Nacional: catálogo de recursos y certificaciones, inventario de las ONGs, validación de ofertas por niveles de competencia y cierre operativo (libera recursos bloqueados).",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/login": {
+      "post": {
+        "tags": [
+          "autenticación"
+        ],
+        "summary": "Iniciar sesión y emitir JWT",
+        "operationId": "login_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ongs": {
+      "post": {
+        "tags": [
+          "autenticación"
+        ],
+        "summary": "Registrar una ONG y su cuenta",
+        "operationId": "registrar_ong_ongs_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterOngIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "catálogo"
+        ],
+        "summary": "ONGs del registro nacional",
+        "operationId": "listar_ongs_ongs_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/EstadoOng"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filtra por estado; HABILITADA = ONGs habilitadas",
+              "title": "Estado"
+            },
+            "description": "Filtra por estado; HABILITADA = ONGs habilitadas"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OngOut"
+                  },
+                  "title": "Response Listar Ongs Ongs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tipos-recurso": {
+      "get": {
+        "tags": [
+          "catálogo"
+        ],
+        "summary": "Catálogo de tipos de recurso",
+        "operationId": "listar_tipos_recurso_tipos_recurso_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TipoRecursoOut"
+                  },
+                  "type": "array",
+                  "title": "Response Listar Tipos Recurso Tipos Recurso Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/certificaciones": {
+      "get": {
+        "tags": [
+          "catálogo"
+        ],
+        "summary": "Catálogo de certificaciones",
+        "operationId": "listar_certificaciones_certificaciones_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CertificacionOut"
+                  },
+                  "type": "array",
+                  "title": "Response Listar Certificaciones Certificaciones Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/ongs/{cuit}": {
+      "get": {
+        "tags": [
+          "catálogo"
+        ],
+        "summary": "Ficha de una ONG",
+        "operationId": "ficha_ong_ongs__cuit__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cuit",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Cuit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FichaOngOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/recursos/disponibilidad": {
+      "get": {
+        "tags": [
+          "catálogo"
+        ],
+        "summary": "Disponibilidad global de recursos (solo ONGs habilitadas)",
+        "operationId": "disponibilidad_recursos_disponibilidad_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tipo_recurso",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Código del tipo de recurso; sin él, todos",
+              "title": "Tipo Recurso"
+            },
+            "description": "Código del tipo de recurso; sin él, todos"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DisponibilidadOut"
+                  },
+                  "title": "Response Disponibilidad Recursos Disponibilidad Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ongs/{cuit}/inventario": {
+      "put": {
+        "tags": [
+          "inventario"
+        ],
+        "summary": "Declarar el inventario de una ONG (upsert por tipo de recurso)",
+        "description": "Fija `cantidad_total` por tipo de recurso. No toca `cantidad_comprometida`: no se puede declarar\nmenos de lo ya comprometido (409). Devuelve el inventario completo de la ONG.",
+        "operationId": "declarar_inventario_ongs__cuit__inventario_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cuit",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Cuit"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InventarioIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InventarioOut"
+                  },
+                  "title": "Response Declarar Inventario Ongs  Cuit  Inventario Put"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/validaciones": {
+      "post": {
+        "tags": [
+          "validación"
+        ],
+        "summary": "Validar ofertas por cantidad y competencia",
+        "description": "Evalúa lo ofrecido por cada ONG contra su inventario disponible y su competencia para la\ngravedad de la emergencia. **No guarda nada**: las ofertas viven en la app local.\n\nLos ítems con la misma ONG y tipo de recurso se suman. Siempre responde 200 con un resultado\nestructurado: `alcanza` dice si la cantidad entra; `nivel` (PLENA, PARCIAL, SUPERVISADA) y\n`asignacion_sugerida` (PRINCIPAL, APOYO) expresan la competencia sin rechazos binarios.",
+        "operationId": "validar_ofertas_validaciones_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidacionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidacionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/cierres": {
+      "post": {
+        "tags": [
+          "cierre"
+        ],
+        "summary": "Cerrar una adjudicación y liberar lo que tenía comprometido",
+        "description": "Fin de la actividad (servicio 5). Exige que la `referencia` esté `ADJUDICADA`: resta del inventario\nexactamente lo que esa referencia tenía comprometido y la pasa a `CERRADA`. No se indican ítems.\n\n`201` con el cierre. Repetirlo responde `200` con el mismo cierre, sin restar de nuevo. `404` si la ONG o la\nreferencia no existen (o la referencia es de otra ONG); `409` si la referencia no está `ADJUDICADA`.",
+        "operationId": "informar_cierre_cierres_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CierreIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CierreOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/cierres/lote": {
+      "post": {
+        "tags": [
+          "cierre"
+        ],
+        "summary": "Cerrar varias adjudicaciones de una emergencia en una sola llamada",
+        "description": "Lo que Bonita manda al validarse el cierre bilateral: un `{cuit, referencia}` por cada ONG adjudicada, y un\nsolo pedido en vez de uno por ONG. Valida todo antes de cambiar nada (`404` si una ONG o referencia no existe,\n`409` si alguna no está `ADJUDICADA`, `400` si repite una referencia) y es idempotente: repetir la llamada\ncompleta devuelve los mismos cierres sin restar de nuevo. Cada cierre se comporta como en `POST /cierres`.",
+        "operationId": "informar_cierres_cierres_lote_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CierreLoteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CierreOut"
+                  },
+                  "type": "array",
+                  "title": "Response Informar Cierres Cierres Lote Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/cierres/{cierre_id}": {
+      "get": {
+        "tags": [
+          "cierre"
+        ],
+        "summary": "Ver un cierre ya informado",
+        "operationId": "obtener_cierre_cierres__cierre_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cierre_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Cierre Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CierreOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ongs/{cuit}/cierres": {
+      "get": {
+        "tags": [
+          "cierre"
+        ],
+        "summary": "Cierres informados por una ONG",
+        "operationId": "cierres_de_la_ong_ongs__cuit__cierres_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cuit",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Cuit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CierreOut"
+                  },
+                  "title": "Response Cierres De La Ong Ongs  Cuit  Cierres Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/evaluaciones": {
+      "post": {
+        "tags": [
+          "Reservas"
+        ],
+        "summary": "Evaluar las ofertas y reservar el stock",
+        "description": "Al vencer la ventana de ofertas: valida a cada ONG (competencia contra la gravedad) y **reserva** lo que\nofreció, sumando por recurso, hasta que se decida. Devuelve la cobertura por lote (promedio simple) y, por ONG,\nsu referencia `emg-{emergencia}-r{ronda}-{cuit}`.\n\nIdempotente: repetir el pedido devuelve lo mismo sin reservar dos veces. La oferta de una ONG se reserva entera o\nno se reserva: si lo ofrecido supera lo disponible queda `NO_RESERVADA` y la ONG la rehace (nunca se recorta).\n`409` si la referencia ya fue liberada o cerrada.",
+        "operationId": "evaluar_ofertas_evaluaciones_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvaluacionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluacionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/adjudicaciones/{referencia}/confirmar": {
+      "post": {
+        "tags": [
+          "Reservas"
+        ],
+        "summary": "Confirmar una reserva (compromiso nacional)",
+        "description": "`RESERVADA` → `ADJUDICADA`. No toca el stock. Repetirlo responde 200; `409` si ya estaba liberada o cerrada.",
+        "operationId": "confirmar_reserva_adjudicaciones__referencia__confirmar_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "referencia",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Referencia"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReservaOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/adjudicaciones/{referencia}/liberar": {
+      "post": {
+        "tags": [
+          "Reservas"
+        ],
+        "summary": "Liberar una reserva y devolver el stock",
+        "description": "`RESERVADA` o `ADJUDICADA` → `LIBERADA` y resta lo bloqueado del inventario. Repetirlo responde 200 sin\nrestar de nuevo; `409` si ya estaba cerrada.",
+        "operationId": "liberar_reserva_adjudicaciones__referencia__liberar_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "referencia",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Referencia"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiberacionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/adjudicaciones/resolucion": {
+      "post": {
+        "tags": [
+          "Reservas"
+        ],
+        "summary": "Confirmar las reservas elegidas y liberar las demás, en una sola llamada",
+        "description": "Lo que Bonita manda cuando el Municipio adjudica: `confirmar` pasa cada referencia a `ADJUDICADA` y `liberar`\ndevuelve el stock de las demás. Valida todo antes de cambiar nada (`404` si una referencia no existe, `409` si\nalguna ya no admite la operación) y es idempotente: repetir la llamada completa no resta dos veces.",
+        "operationId": "resolver_reservas_adjudicaciones_resolucion_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolucionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolucionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/adjudicaciones": {
+      "post": {
+        "tags": [
+          "Adjudicaciones"
+        ],
+        "summary": "Adjudicar",
+        "description": "Compromete inventario bajo locks pesimistas e idempotencia por referencia.",
+        "operationId": "adjudicar_adjudicaciones_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdjudicacionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdjudicacionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "estado"
+        ],
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AdjudicacionIn": {
+        "properties": {
+          "referencia_id": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Referencia Id"
+          },
+          "ong_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Ong Id"
+          },
+          "emergencia_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Emergencia Id"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdjudicacionItemIn"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "referencia_id",
+          "ong_id",
+          "emergencia_id",
+          "items"
+        ],
+        "title": "AdjudicacionIn"
+      },
+      "AdjudicacionItemIn": {
+        "properties": {
+          "inventario_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Inventario Id"
+          },
+          "cantidad": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Cantidad"
+          }
+        },
+        "type": "object",
+        "required": [
+          "inventario_id",
+          "cantidad"
+        ],
+        "title": "AdjudicacionItemIn"
+      },
+      "AdjudicacionItemOut": {
+        "properties": {
+          "inventario_id": {
+            "type": "integer",
+            "title": "Inventario Id"
+          },
+          "cantidad": {
+            "type": "integer",
+            "title": "Cantidad"
+          }
+        },
+        "type": "object",
+        "required": [
+          "inventario_id",
+          "cantidad"
+        ],
+        "title": "AdjudicacionItemOut"
+      },
+      "AdjudicacionOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "referencia_id": {
+            "type": "string",
+            "title": "Referencia Id"
+          },
+          "ong_id": {
+            "type": "integer",
+            "title": "Ong Id"
+          },
+          "emergencia_id": {
+            "type": "integer",
+            "title": "Emergencia Id"
+          },
+          "fecha_creacion": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Fecha Creacion"
+          },
+          "estado": {
+            "$ref": "#/components/schemas/EstadoAdjudicacion"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdjudicacionItemOut"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "referencia_id",
+          "ong_id",
+          "emergencia_id",
+          "fecha_creacion",
+          "estado",
+          "items"
+        ],
+        "title": "AdjudicacionOut"
+      },
+      "Asignacion": {
+        "type": "string",
+        "enum": [
+          "PRINCIPAL",
+          "APOYO"
+        ],
+        "title": "Asignacion"
+      },
+      "CategoriaRecurso": {
+        "type": "string",
+        "enum": [
+          "PERSONAL",
+          "VEHICULO",
+          "EQUIPAMIENTO",
+          "INSUMO"
+        ],
+        "title": "CategoriaRecurso"
+      },
+      "CertificacionOut": {
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "title": "Codigo"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "descripcion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Descripcion"
+          },
+          "tipos_recurso": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tipos Recurso"
+          }
+        },
+        "type": "object",
+        "required": [
+          "codigo",
+          "nombre",
+          "descripcion",
+          "tipos_recurso"
+        ],
+        "title": "CertificacionOut"
+      },
+      "CierreIn": {
+        "properties": {
+          "cuit": {
+            "type": "string",
+            "maxLength": 13,
+            "minLength": 1,
+            "title": "Cuit"
+          },
+          "referencia": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Referencia"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cuit",
+          "referencia"
+        ],
+        "title": "CierreIn"
+      },
+      "CierreItemOut": {
+        "properties": {
+          "tipo_recurso": {
+            "type": "string",
+            "title": "Tipo Recurso"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "unidad": {
+            "type": "string",
+            "title": "Unidad"
+          },
+          "cantidad_liberada": {
+            "type": "integer",
+            "title": "Cantidad Liberada"
+          },
+          "cantidad_total": {
+            "type": "integer",
+            "title": "Cantidad Total"
+          },
+          "cantidad_comprometida": {
+            "type": "integer",
+            "title": "Cantidad Comprometida"
+          },
+          "disponible": {
+            "type": "integer",
+            "title": "Disponible"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tipo_recurso",
+          "nombre",
+          "unidad",
+          "cantidad_liberada",
+          "cantidad_total",
+          "cantidad_comprometida",
+          "disponible"
+        ],
+        "title": "CierreItemOut"
+      },
+      "CierreLoteIn": {
+        "properties": {
+          "cierres": {
+            "items": {
+              "$ref": "#/components/schemas/CierreIn"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Cierres"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cierres"
+        ],
+        "title": "CierreLoteIn",
+        "description": "Los cierres de varias ONGs de una emergencia, para que un solo pedido de Bonita los resuelva."
+      },
+      "CierreOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "cuit": {
+            "type": "string",
+            "title": "Cuit"
+          },
+          "ong": {
+            "type": "string",
+            "title": "Ong"
+          },
+          "referencia": {
+            "type": "string",
+            "title": "Referencia"
+          },
+          "informado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Informado En"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CierreItemOut"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "cuit",
+          "ong",
+          "referencia",
+          "informado_en",
+          "items"
+        ],
+        "title": "CierreOut"
+      },
+      "CuentaOut": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "rol": {
+            "type": "string",
+            "title": "Rol"
+          },
+          "cuit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cuit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "rol"
+        ],
+        "title": "CuentaOut"
+      },
+      "DisponibilidadOngOut": {
+        "properties": {
+          "cuit": {
+            "type": "string",
+            "title": "Cuit"
+          },
+          "ong": {
+            "type": "string",
+            "title": "Ong"
+          },
+          "disponible": {
+            "type": "integer",
+            "title": "Disponible"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cuit",
+          "ong",
+          "disponible"
+        ],
+        "title": "DisponibilidadOngOut"
+      },
+      "DisponibilidadOut": {
+        "properties": {
+          "tipo_recurso": {
+            "type": "string",
+            "title": "Tipo Recurso"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "unidad": {
+            "type": "string",
+            "title": "Unidad"
+          },
+          "cantidad_total": {
+            "type": "integer",
+            "title": "Cantidad Total"
+          },
+          "cantidad_comprometida": {
+            "type": "integer",
+            "title": "Cantidad Comprometida"
+          },
+          "disponible": {
+            "type": "integer",
+            "title": "Disponible"
+          },
+          "por_ong": {
+            "items": {
+              "$ref": "#/components/schemas/DisponibilidadOngOut"
+            },
+            "type": "array",
+            "title": "Por Ong"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tipo_recurso",
+          "nombre",
+          "unidad",
+          "cantidad_total",
+          "cantidad_comprometida",
+          "disponible",
+          "por_ong"
+        ],
+        "title": "DisponibilidadOut"
+      },
+      "EstadoAdjudicacion": {
+        "type": "string",
+        "enum": [
+          "RESERVADA",
+          "ADJUDICADA",
+          "LIBERADA",
+          "CERRADA"
+        ],
+        "title": "EstadoAdjudicacion"
+      },
+      "EstadoOng": {
+        "type": "string",
+        "enum": [
+          "HABILITADA",
+          "SUSPENDIDA"
+        ],
+        "title": "EstadoOng"
+      },
+      "EvaluacionIn": {
+        "properties": {
+          "emergencia_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Emergencia Id"
+          },
+          "ronda": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Ronda",
+            "default": 1
+          },
+          "gravedad": {
+            "$ref": "#/components/schemas/Riesgo"
+          },
+          "lotes": {
+            "items": {
+              "$ref": "#/components/schemas/LoteEvaluacionIn"
+            },
+            "type": "array",
+            "title": "Lotes"
+          },
+          "ofertas": {
+            "items": {
+              "$ref": "#/components/schemas/OfertaEvaluacionIn"
+            },
+            "type": "array",
+            "title": "Ofertas"
+          }
+        },
+        "type": "object",
+        "required": [
+          "emergencia_id",
+          "gravedad",
+          "lotes",
+          "ofertas"
+        ],
+        "title": "EvaluacionIn"
+      },
+      "EvaluacionOut": {
+        "properties": {
+          "emergencia_id": {
+            "type": "integer",
+            "title": "Emergencia Id"
+          },
+          "ronda": {
+            "type": "integer",
+            "title": "Ronda"
+          },
+          "cobertura_completa": {
+            "type": "boolean",
+            "title": "Cobertura Completa"
+          },
+          "porcentaje_cobertura": {
+            "type": "number",
+            "title": "Porcentaje Cobertura"
+          },
+          "lotes": {
+            "items": {
+              "$ref": "#/components/schemas/LoteCoberturaOut"
+            },
+            "type": "array",
+            "title": "Lotes"
+          },
+          "ongs": {
+            "items": {
+              "$ref": "#/components/schemas/OngEvaluadaOut"
+            },
+            "type": "array",
+            "title": "Ongs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "emergencia_id",
+          "ronda",
+          "cobertura_completa",
+          "porcentaje_cobertura",
+          "lotes",
+          "ongs"
+        ],
+        "title": "EvaluacionOut"
+      },
+      "FichaOngOut": {
+        "properties": {
+          "cuit": {
+            "type": "string",
+            "title": "Cuit"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "estado": {
+            "$ref": "#/components/schemas/EstadoOng"
+          },
+          "certificaciones": {
+            "items": {
+              "$ref": "#/components/schemas/OngCertificacionOut"
+            },
+            "type": "array",
+            "title": "Certificaciones"
+          },
+          "inventario": {
+            "items": {
+              "$ref": "#/components/schemas/InventarioOut"
+            },
+            "type": "array",
+            "title": "Inventario"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cuit",
+          "nombre",
+          "estado",
+          "certificaciones",
+          "inventario"
+        ],
+        "title": "FichaOngOut"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "InventarioIn": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InventarioItemIn"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "InventarioIn"
+      },
+      "InventarioItemIn": {
+        "properties": {
+          "tipo_recurso": {
+            "type": "string",
+            "title": "Tipo Recurso"
+          },
+          "cantidad_total": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Cantidad Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tipo_recurso",
+          "cantidad_total"
+        ],
+        "title": "InventarioItemIn"
+      },
+      "InventarioOut": {
+        "properties": {
+          "tipo_recurso": {
+            "type": "string",
+            "title": "Tipo Recurso"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "unidad": {
+            "type": "string",
+            "title": "Unidad"
+          },
+          "cantidad_total": {
+            "type": "integer",
+            "title": "Cantidad Total"
+          },
+          "cantidad_comprometida": {
+            "type": "integer",
+            "title": "Cantidad Comprometida"
+          },
+          "disponible": {
+            "type": "integer",
+            "title": "Disponible"
+          },
+          "riesgo_permitido": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Riesgo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "tipo_recurso",
+          "nombre",
+          "unidad",
+          "cantidad_total",
+          "cantidad_comprometida",
+          "disponible",
+          "riesgo_permitido"
+        ],
+        "title": "InventarioOut"
+      },
+      "ItemEvaluadoOut": {
+        "properties": {
+          "lote_id": {
+            "type": "integer",
+            "title": "Lote Id"
+          },
+          "tipo_recurso": {
+            "type": "string",
+            "title": "Tipo Recurso"
+          },
+          "ofrecido": {
+            "type": "integer",
+            "title": "Ofrecido"
+          },
+          "reservado": {
+            "type": "integer",
+            "title": "Reservado"
+          },
+          "nivel": {
+            "$ref": "#/components/schemas/NivelCompetencia"
+          },
+          "riesgo_permitido": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Riesgo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "asignacion_sugerida": {
+            "$ref": "#/components/schemas/Asignacion"
+          },
+          "observaciones": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Observaciones"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lote_id",
+          "tipo_recurso",
+          "ofrecido",
+          "reservado",
+          "nivel",
+          "riesgo_permitido",
+          "asignacion_sugerida",
+          "observaciones"
+        ],
+        "title": "ItemEvaluadoOut"
+      },
+      "ItemOfertaIn": {
+        "properties": {
+          "lote_id": {
+            "type": "integer",
+            "title": "Lote Id"
+          },
+          "tipo_recurso": {
+            "type": "string",
+            "title": "Tipo Recurso"
+          },
+          "cantidad": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Cantidad"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lote_id",
+          "tipo_recurso",
+          "cantidad"
+        ],
+        "title": "ItemOfertaIn"
+      },
+      "ItemValidacionIn": {
+        "properties": {
+          "cuit": {
+            "type": "string",
+            "title": "Cuit"
+          },
+          "tipo_recurso": {
+            "type": "string",
+            "title": "Tipo Recurso"
+          },
+          "cantidad": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Cantidad"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cuit",
+          "tipo_recurso",
+          "cantidad"
+        ],
+        "title": "ItemValidacionIn"
+      },
+      "LiberacionOut": {
+        "properties": {
+          "referencia": {
+            "type": "string",
+            "title": "Referencia"
+          },
+          "estado": {
+            "$ref": "#/components/schemas/EstadoAdjudicacion"
+          },
+          "liberado": {
+            "items": {
+              "$ref": "#/components/schemas/RecursoLiberadoOut"
+            },
+            "type": "array",
+            "title": "Liberado"
+          }
+        },
+        "type": "object",
+        "required": [
+          "referencia",
+          "estado",
+          "liberado"
+        ],
+        "title": "LiberacionOut"
+      },
+      "LoginIn": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "LoginIn"
+      },
+      "LoteCoberturaOut": {
+        "properties": {
+          "lote_id": {
+            "type": "integer",
+            "title": "Lote Id"
+          },
+          "tipo_recurso": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tipo Recurso"
+          },
+          "pedido": {
+            "type": "integer",
+            "title": "Pedido"
+          },
+          "reservado": {
+            "type": "integer",
+            "title": "Reservado"
+          },
+          "porcentaje": {
+            "type": "number",
+            "title": "Porcentaje"
+          },
+          "cubierto": {
+            "type": "boolean",
+            "title": "Cubierto"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lote_id",
+          "tipo_recurso",
+          "pedido",
+          "reservado",
+          "porcentaje",
+          "cubierto"
+        ],
+        "title": "LoteCoberturaOut"
+      },
+      "LoteEvaluacionIn": {
+        "properties": {
+          "lote_id": {
+            "type": "integer",
+            "title": "Lote Id"
+          },
+          "tipo_recurso": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tipo Recurso"
+          },
+          "cantidad": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Cantidad"
+          },
+          "tipo": {
+            "type": "string",
+            "title": "Tipo",
+            "default": "PRINCIPAL"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lote_id",
+          "cantidad"
+        ],
+        "title": "LoteEvaluacionIn"
+      },
+      "NivelCompetencia": {
+        "type": "string",
+        "enum": [
+          "PLENA",
+          "PARCIAL",
+          "SUPERVISADA"
+        ],
+        "title": "NivelCompetencia"
+      },
+      "OfertaEvaluacionIn": {
+        "properties": {
+          "cuit": {
+            "type": "string",
+            "maxLength": 13,
+            "minLength": 1,
+            "title": "Cuit"
+          },
+          "ong": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ong"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ItemOfertaIn"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cuit",
+          "items"
+        ],
+        "title": "OfertaEvaluacionIn"
+      },
+      "OngCertificacionOut": {
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "title": "Codigo"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "riesgo_max": {
+            "$ref": "#/components/schemas/Riesgo"
+          },
+          "vence_el": {
+            "type": "string",
+            "format": "date",
+            "title": "Vence El"
+          },
+          "vigente": {
+            "type": "boolean",
+            "title": "Vigente"
+          }
+        },
+        "type": "object",
+        "required": [
+          "codigo",
+          "nombre",
+          "riesgo_max",
+          "vence_el",
+          "vigente"
+        ],
+        "title": "OngCertificacionOut"
+      },
+      "OngEvaluadaOut": {
+        "properties": {
+          "cuit": {
+            "type": "string",
+            "title": "Cuit"
+          },
+          "ong": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ong"
+          },
+          "referencia": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referencia"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ItemEvaluadoOut"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cuit",
+          "ong",
+          "referencia",
+          "estado",
+          "items"
+        ],
+        "title": "OngEvaluadaOut"
+      },
+      "OngOut": {
+        "properties": {
+          "cuit": {
+            "type": "string",
+            "title": "Cuit"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "estado": {
+            "$ref": "#/components/schemas/EstadoOng"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cuit",
+          "nombre",
+          "estado"
+        ],
+        "title": "OngOut"
+      },
+      "RecursoLiberadoOut": {
+        "properties": {
+          "tipo_recurso": {
+            "type": "string",
+            "title": "Tipo Recurso"
+          },
+          "cantidad": {
+            "type": "integer",
+            "title": "Cantidad"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tipo_recurso",
+          "cantidad"
+        ],
+        "title": "RecursoLiberadoOut"
+      },
+      "RegisterOngIn": {
+        "properties": {
+          "ong_nombre": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 2,
+            "title": "Ong Nombre"
+          },
+          "cuit": {
+            "type": "string",
+            "pattern": "^\\d{2}-?\\d{8}-?\\d$",
+            "title": "Cuit"
+          },
+          "nombre": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 2,
+            "title": "Nombre"
+          },
+          "username": {
+            "type": "string",
+            "maxLength": 60,
+            "minLength": 3,
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 8,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ong_nombre",
+          "cuit",
+          "nombre",
+          "username",
+          "password"
+        ],
+        "title": "RegisterOngIn"
+      },
+      "ReservaOut": {
+        "properties": {
+          "referencia": {
+            "type": "string",
+            "title": "Referencia"
+          },
+          "estado": {
+            "$ref": "#/components/schemas/EstadoAdjudicacion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "referencia",
+          "estado"
+        ],
+        "title": "ReservaOut"
+      },
+      "ResolucionIn": {
+        "properties": {
+          "confirmar": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Confirmar"
+          },
+          "liberar": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Liberar"
+          }
+        },
+        "type": "object",
+        "title": "ResolucionIn",
+        "description": "La decisión del Municipio sobre las reservas de una emergencia: cuáles se confirman y cuáles se liberan."
+      },
+      "ResolucionOut": {
+        "properties": {
+          "confirmadas": {
+            "items": {
+              "$ref": "#/components/schemas/ReservaOut"
+            },
+            "type": "array",
+            "title": "Confirmadas"
+          },
+          "liberadas": {
+            "items": {
+              "$ref": "#/components/schemas/LiberacionOut"
+            },
+            "type": "array",
+            "title": "Liberadas"
+          }
+        },
+        "type": "object",
+        "required": [
+          "confirmadas",
+          "liberadas"
+        ],
+        "title": "ResolucionOut"
+      },
+      "ResultadoValidacionOut": {
+        "properties": {
+          "cuit": {
+            "type": "string",
+            "title": "Cuit"
+          },
+          "ong": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ong"
+          },
+          "tipo_recurso": {
+            "type": "string",
+            "title": "Tipo Recurso"
+          },
+          "nombre_recurso": {
+            "type": "string",
+            "title": "Nombre Recurso"
+          },
+          "unidad": {
+            "type": "string",
+            "title": "Unidad"
+          },
+          "solicitado": {
+            "type": "integer",
+            "title": "Solicitado"
+          },
+          "disponible": {
+            "type": "integer",
+            "title": "Disponible"
+          },
+          "alcanza": {
+            "type": "boolean",
+            "title": "Alcanza"
+          },
+          "nivel": {
+            "$ref": "#/components/schemas/NivelCompetencia"
+          },
+          "riesgo_permitido": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Riesgo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "asignacion_sugerida": {
+            "$ref": "#/components/schemas/Asignacion"
+          },
+          "observaciones": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Observaciones"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cuit",
+          "ong",
+          "tipo_recurso",
+          "nombre_recurso",
+          "unidad",
+          "solicitado",
+          "disponible",
+          "alcanza",
+          "nivel",
+          "riesgo_permitido",
+          "asignacion_sugerida",
+          "observaciones"
+        ],
+        "title": "ResultadoValidacionOut"
+      },
+      "Riesgo": {
+        "type": "string",
+        "enum": [
+          "BAJO",
+          "MEDIO",
+          "ALTO",
+          "CRITICO"
+        ],
+        "title": "Riesgo",
+        "description": "Misma escala que la gravedad de las emergencias de la app local."
+      },
+      "TipoRecursoOut": {
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "title": "Codigo"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "categoria": {
+            "$ref": "#/components/schemas/CategoriaRecurso"
+          },
+          "unidad": {
+            "type": "string",
+            "title": "Unidad"
+          },
+          "certificacion_requerida": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Certificacion Requerida"
+          }
+        },
+        "type": "object",
+        "required": [
+          "codigo",
+          "nombre",
+          "categoria",
+          "unidad",
+          "certificacion_requerida"
+        ],
+        "title": "TipoRecursoOut"
+      },
+      "TokenOut": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type",
+            "default": "bearer"
+          },
+          "user": {
+            "$ref": "#/components/schemas/CuentaOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "access_token",
+          "user"
+        ],
+        "title": "TokenOut"
+      },
+      "ValidacionIn": {
+        "properties": {
+          "gravedad": {
+            "$ref": "#/components/schemas/Riesgo"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ItemValidacionIn"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "gravedad",
+          "items"
+        ],
+        "title": "ValidacionIn"
+      },
+      "ValidacionOut": {
+        "properties": {
+          "alcanza_todo": {
+            "type": "boolean",
+            "title": "Alcanza Todo"
+          },
+          "resultados": {
+            "items": {
+              "$ref": "#/components/schemas/ResultadoValidacionOut"
+            },
+            "type": "array",
+            "title": "Resultados"
+          }
+        },
+        "type": "object",
+        "required": [
+          "alcanza_todo",
+          "resultados"
+        ],
+        "title": "ValidacionOut"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}
