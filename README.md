@@ -1,170 +1,120 @@
 # RescueSync — DSSD
 
-TP de la materia DSSD (Diseño de Sistemas de Software Distribuidos): un
-sistema de coordinación de emergencias que conecta municipios afectados con
-un Centro Coordinador Regional y una red de ONGs, modelado con Bonita BPM y
-con una app web propia (FastAPI) para los formularios y la persistencia.
+TP de la materia DSSD (Diseño de Sistemas de Software Distribuidos): coordinación de emergencias entre municipios, un Centro
+Coordinador Regional y una red de ONGs. Son **tres sistemas** que se hablan por HTTP:
 
-Equipo: Tomas Echeverria, Franco Cirielli, Franco Viscardi, Leandro Masuda,
-Fabrizio Perri.
+| Sistema | Carpeta | Qué hace | Dónde corre |
+|---|---|---|---|
+| **App web** | `backend/` (FastAPI) + `frontend/` (React) | Pantallas por rol (Municipio, Coordinador, ONG), persistencia de emergencias, lotes y ofertas. Avanza las tareas de Bonita en nombre de cada usuario. | Local: API `:8001`, front `:5173` |
+| **Bonita BPM** | `entrega-3/entrega42_local.bos`, `entrega-2/ACME.xml` | El proceso `Gestion Integral de la Emergencia`: ventana de ofertas con timer, evaluación, decisión, adjudicación, ejecución y cierre. Llama a la app y a la API Nacional con conectores. | Local: Bonita Studio `:8080` |
+| **API Nacional** | `nacional/` (FastAPI + Postgres) | Registro nacional: ONGs, certificaciones, stock. Valida ofertas, reserva stock (todo o nada), lo libera y lo descuenta al cerrar. **JWT**, Swagger y Dockerfile. | **Nube (Render)**: https://rescuesync-nacional.onrender.com/docs · Local: `:8002` |
+
+Equipo: Tomas Echeverria, Franco Cirielli, Franco Viscardi, Leandro Masuda, Fabrizio Perri.
+
+## El proceso, en una frase
+
+El Municipio registra la emergencia → el Coordinador arma los lotes de necesidades y publica la convocatoria → las ONGs ofrecen dentro de
+una ventana (timer de Bonita) → al vencer, Bonita evalúa las ofertas en la API Nacional (reserva el stock) → el Coordinador sigue con la
+cobertura o reformula → el Municipio adjudica → ejecución: el Coordinador monitorea y cada ONG marca su actividad terminada → el
+Coordinador valida el cierre → Bonita le avisa a la API Nacional (libera y descuenta) y a la app (emergencia **Resuelta**, aviso a las ONGs).
+
+Guías con capturas: [`entrega-3/guia-parada-3.md`](entrega-3/guia-parada-3.md) (recorrido completo) y
+[`entrega-3/guia-del-sistema.md`](entrega-3/guia-del-sistema.md) (cómo está armado todo). Estado y decisiones: [`entrega-3/ESTADO.md`](entrega-3/ESTADO.md).
+
+## Autenticación
+
+- **Personas → app:** usuario y contraseña propios de la app, sesión por cookie. Perfiles: `operador.municipal`, `coordinador.regional`,
+  `ong.cruzroja`, `ong.bomberos`, `auditor` (contraseña de demo `demo1234`).
+- **App y Bonita → API Nacional: JWT.** La API tiene dos cuentas de servicio, `app-service` y `bonita-service`. Cada una entra con
+  `POST /login`, recibe un token y lo manda como `Authorization: Bearer`. La app guarda el token y lo renueva sola ante un 401; Bonita
+  entra de nuevo en cada tarea de servicio (conector `loginNacional`). Las ONGs y sus altas (`POST /ongs`) también pasan por JWT.
+- Con Postgres, la API Nacional **no arranca** si `JWT_SECRET`, `BONITA_SERVICE_PASSWORD` o `APP_SERVICE_PASSWORD` tienen el valor de ejemplo.
+
+## Puesta en marcha local (de cero)
+
+Requisitos: Bonita Studio Community 10.4.0, Python 3.12+, Node 20+, Chrome (solo para las pruebas por interfaz).
+
+### 1. Bonita Studio
+1. Abrir Studio → **Archivo → Importar** → `entrega-3/entrega42_local.bos`.
+2. Editor de la **Organización** → importar `entrega-2/ACME.xml` → **Desplegar** (botón del editor; sin esto falla con "Actor … does not contain any members").
+3. Sobre el proceso `Gestion Integral de la Emergencia`: **Ejecutar**. Cada Ejecutar reinicia el motor y borra los casos.
+4. Comprobar `http://localhost:8080/bonita` (técnico `walter.bates` / `bpm`; de prueba `operador.municipal`, `coordinador.regional`, `ong.cruzroja`, `ong.bomberos`, todos `bpm`).
+
+Si algo falla al desplegar, el motivo real está en `<Studio>\workspace\tomcat\server\logs\bonita.log`.
+
+### 2. API Nacional (`:8002`)
+```bash
+cd nacional
+python -m venv .venv && .venv\Scripts\activate        # Linux/Mac: source .venv/bin/activate
+pip install -r requirements.txt
+python -m alembic upgrade head && python -m app.seed   # SQLite por defecto (nacional.db); crea ONGs, stock y las cuentas de servicio
+uvicorn app.main:app --port 8002
+```
+Los valores por defecto (`change-me`, `change-me-app`) son solo para local y coinciden con los del `.bos`. Swagger: http://localhost:8002/docs.
+
+### 3. App web (`:8001`) y front (`:5173`)
+```bash
+cd backend
+python -m venv .venv && .venv\Scripts\activate
+pip install -r requirements.txt
+copy .env.example .env                                 # Linux/Mac: cp
+# en .env: DATABASE_URL=sqlite:///./dev.db  (o Postgres, ver más abajo)
+python -m alembic upgrade head && python -m app.seed
+uvicorn app.main:app --port 8001
+```
+```bash
+cd frontend && npm install && npm run dev              # http://localhost:5173 (Vite reenvía /api al backend)
+```
+Con todo arriba: entrar como `operador.municipal` en http://localhost:5173 y registrar una emergencia.
+
+## Usar la API Nacional de la nube
+
+La API Nacional está desplegada en Render (Docker construido desde `nacional/Dockerfile`, rama `dev`, Postgres). Para que la app y Bonita la usen:
+
+1. **App:** en `backend/.env`: `NACIONAL_BASE_URL=https://rescuesync-nacional.onrender.com`, `NACIONAL_SERVICE_PASSWORD=<APP_SERVICE_PASSWORD>` y
+   `NACIONAL_TIMEOUT_SECONDS=90` (el plan gratis duerme tras 15 min y la primera llamada tarda ~30-60 s).
+2. **Bonita:** los conectores llevan escrita la URL y la clave de `bonita-service`. Generar el `.bos` para la nube (no se sube al repo, lleva la clave):
+   ```bash
+   NACIONAL_BONITA_PASSWORD=<BONITA_SERVICE_PASSWORD> python bonita/scripts/preparar_entorno.py entrega-3/entrega42_local.bos entrega-3/entrega42_nube.bos --nacional https://rescuesync-nacional.onrender.com
+   ```
+   e importarlo en Studio como arriba. Para volver a local, reimportar `entrega42_local.bos`.
+3. Despertar el servicio antes de empezar: `curl https://rescuesync-nacional.onrender.com/health`.
+
+Verificar un despliegue de la API (72 chequeos, no deja datos): `python nacional/scripts/verificar_despliegue.py <URL> --clave <BONITA_SERVICE_PASSWORD>`.
+Las dos contraseñas y `JWT_SECRET` se cargan como variables de entorno del servicio en Render (guía: [`entrega-3/guia-wp7-render.md`](entrega-3/guia-wp7-render.md)).
+
+## Pruebas
+
+| Qué | Cómo | Necesita |
+|---|---|---|
+| Unitarias: app, API Nacional, tipos del front | `python scripts/verificar_todo.py` (≈ 30 s) | nada |
+| Escenarios con Bonita real (evaluación, tope, adjudicación, cierre, variantes, JWT) | `cd backend && python scripts/correr_escenarios.py` (≈ 25 min) | Bonita + app + API Nacional **locales** |
+| Recorrido completo por la interfaz, con capturas | `cd backend && python scripts/ui_parada3.py` (≈ 7 min; sirve contra local y contra la nube) | + front `:5173`, Chrome |
+| Otras pruebas de interfaz | `scripts/e2e_ui.py`, `scripts/ui_parada2.py`, `scripts/ui_ejecucion.py` | ídem |
+
+`ESCENARIO_VENTANA_S` (por defecto 60) acorta o alarga la ventana de ofertas de los escenarios. En la nube cada cierre descuenta stock real y no hay reset.
+
+## Integración continua
+
+`.github/workflows/ci.yml` corre en cada PR y push a `dev` y `main`: tests de la app y de la API Nacional, tipos y build del front, y dos jobs
+con **Postgres 16** (migraciones de ida y vuelta, arranque, verificador con JWT y concurrencia de adjudicaciones). El job **CI verde** los resume y
+es el chequeo que exige la regla de ramas (`.github/rulesets/`): nadie pushea directo a `dev` ni a `main`. Los escenarios con Bonita no corren en CI.
 
 ## Qué hay en el repo
 
 ```
-entrega-1/          Entrega 1 ya entregada (10/9): modelo BPM inicial, informe,
-                     grooming. No se edita.
-entrega-2/           Archivo vivo del proceso Bonita de la Entrega 2 (1/10):
-  RescueSync.bos      el proyecto de Bonita Studio (modelo + formularios).
-  ACME.xml            la organización activa (usuarios y grupos de prueba).
-bonita/               Cliente REST de Bonita standalone (CLI) y notas sobre
-                     qué se puede automatizar en Bonita Studio Community.
-backend/              La API: FastAPI + SQLAlchemy + Alembic (solo JSON, bajo
-                     /api). Ver backend/README.md.
-frontend/             La interfaz: SPA de React (Vite + TypeScript). Habla con
-                     la API por /api; no hay páginas HTML en el backend.
-docker-compose.yml    Postgres 16 para el backend (opcional, ver más abajo).
-teorias/              Material de la materia.
+backend/        App web (FastAPI + SQLAlchemy + Alembic). Ver backend/README.md.
+frontend/       SPA de React (Vite + TypeScript).
+nacional/       API Nacional (FastAPI): JWT, reservas, cierres, Dockerfile, scripts/verificar_despliegue.py.
+bonita/         Herramientas: cliente REST y scripts que editan el .bos (conectores de cierre, login JWT, preparar_entorno.py).
+entrega-1/      Entrega 1 (entregada): modelo BPM inicial e informe.
+entrega-2/      Entrega 2 (entregada): RescueSync.bos, ACME.xml (organización) y bitácora de cambios en Bonita.
+entrega-3/      Entrega 3: entrega42_local.bos (el proceso vigente), guías, estado, contratos y capturas.
+render.yaml     Blueprint de Render para la API Nacional (referencia; el servicio vivo se creó desde el repo).
+docker-compose.yml   Postgres 16 para el backend (opcional).
 ```
 
-## El proceso, en una frase
+## Flujo de Git
 
-Un municipio registra una emergencia → el Centro Coordinador la desglosa en
-lotes de necesidades y publica la convocatoria → las ONGs cargan ofertas
-dentro de una ventana de tiempo (timer) → al vencer, el sistema calcula
-cobertura y el municipio adjudica → se notifica el compromiso y, al
-finalizar, se libera todo. El detalle completo está en
-`entrega-1/Entrega1_RescueSync.docx` y modelado en `entrega-2/RescueSync.bos`.
-
-**La app web reemplaza los formularios nativos de Bonita**: cuando alguien
-completa una pantalla propia (por ejemplo, dar de alta una emergencia),
-la app también avanza la tarea equivalente en Bonita en nombre del usuario
-correspondiente, para que el caso no quede esperando una acción que nunca va
-a llegar desde la UI nativa de Bonita.
-
-## Puesta en marcha (de cero)
-
-Para levantar todo el proceso hacen falta dos partes corriendo en paralelo:
-**Bonita Studio** (el motor del proceso) y **el backend** (la app web).
-
-### 1. Bonita Studio
-
-1. Instalar **Bonita Studio Community 10.4.0** o superior.
-2. Abrir Studio → **Importar** → seleccionar `entrega-2/RescueSync.bos`.
-3. Abrir el editor de la **Organización** → Importar `entrega-2/ACME.xml` →
-   **Desplegar** (botón dentro del editor; si no se hace, el motor no ve los
-   usuarios nuevos y falla con "Actor ... does not contain any members").
-4. Sobre el proceso `Gestion Integral de la Emergencia`: **Ejecutar** (o
-   Desplegar). Cada Ejecutar/Desplegar reinicia el motor embebido y borra los
-   casos existentes — normal, hay que redesplegar después de cualquier
-   cambio en el diagrama.
-5. Confirmar que responde: `http://localhost:8080/bonita` (usuario técnico
-   `walter.bates` / `bpm`).
-
-**Bonita Studio no queda corriendo entre reinicios de la PC ni de Studio.**
-Hay que repetir el paso 4 (o abrir Studio y volver a desplegar) cada vez que
-se lo necesite.
-
-Usuarios de prueba de la organización (todos con password `bpm`):
-`operador.municipal` (Municipio), `coordinador.regional` (Centro
-Coordinador), `ong.cruzroja` (ONG). `walter.bates` es el usuario técnico/admin.
-
-Si algo falla al desplegar, el diálogo de Studio no da el motivo real; hay
-que mirar los logs: `<instalación de Studio>\workspace\tomcat\server\logs\bonita.log`
-y `workspace\.metadata\.log`.
-
-### 2. Backend (la app web)
-
-Requisitos: Python 3.11+. Docker es **opcional** (ver más abajo).
-
-```bash
-cd backend
-python -m venv .venv
-.venv\Scripts\activate              # Windows; en Linux/Mac: source .venv/bin/activate
-pip install -r requirements.txt
-copy .env.example .env              # Windows; en Linux/Mac: cp .env.example .env
-```
-
-Por defecto `backend/.env.example` apunta a Postgres (ver "Base de datos" más
-abajo). Para arrancar rápido sin Docker, en `backend/.env` usar SQLite:
-
-```
-DATABASE_URL=sqlite:///./dev.db
-```
-
-Después:
-
-```bash
-alembic upgrade head      # crea las tablas
-python -m app.seed        # datos de demo: 5 usuarios (2 ONGs), pass demo1234
-uvicorn app.main:app --reload
-```
-
-- App: http://localhost:8000/
-- Login de prueba: `operador.municipal`, `coordinador.regional`,
-  `ong.cruzroja`, `ong.bomberos` o `auditor`, todos con contraseña `demo1234`
-  (son usuarios propios de la app, **distintos** de los usuarios de Bonita de
-  arriba, aunque tengan el mismo nombre). Con `SHOW_DEMO_USERS=true` en
-  `backend/.env` la pantalla de login los lista.
-- Swagger automático: http://localhost:8000/docs
-
-Con ambas partes arriba (Bonita en :8080 y el backend en :8000), entrar como
-`operador.municipal` → "Registrar emergencia" ya deja la emergencia
-persistida y el caso instanciado y avanzado en Bonita.
-
-Detalle de la estructura del backend, cómo correr los tests y cómo proteger
-una ruta por rol: **`backend/README.md`**.
-
-### 3. Frontend de React (SPA)
-
-La interfaz es una SPA de React (Vite + TypeScript, `react-router`) y es la
-única: el backend no sirve páginas, solo la API bajo `/api`. En desarrollo
-corren dos procesos: el backend en `:8001` y Vite en `:5173`, que reenvía
-`/api` al backend (mismo origen para el navegador, así que la cookie de
-sesión funciona sin tokens ni CORS).
-
-Requisitos: Node 20+.
-
-```bash
-cd backend && .venv\Scripts\python -m uvicorn app.main:app --port 8001   # Windows
-cd frontend && npm install && npm run dev                                  # http://localhost:5173
-```
-
-`npm run build` compila a `frontend/dist`; `npm run typecheck` chequea los tipos.
-Swagger de la API: `http://localhost:8001/docs`.
-
-### Base de datos: SQLite (rápido) o Postgres (recomendado por la consigna)
-
-Para desarrollar alcanza con SQLite (paso de arriba). Para usar Postgres,
-como recomienda la consigna:
-
-```bash
-docker compose up -d db      # desde la raíz del repo, levanta Postgres en :5432
-```
-
-Y en `backend/.env` dejar la `DATABASE_URL` de Postgres que ya trae
-`.env.example`. El resto de los comandos (`alembic upgrade head`,
-`python -m app.seed`, `uvicorn ...`) son los mismos: SQLAlchemy abstrae la
-diferencia.
-
-### Tests
-
-```bash
-cd backend
-pip install -r requirements-dev.txt
-pytest                                            # unitarios, no necesitan Bonita ni Postgres
-RUN_BONITA_INTEGRATION=1 pytest -m integration    # opcional: con Bonita Studio corriendo
-```
-
-## Estado actual
-
-Ver `backend/README.md` para el detalle de qué endpoints/pantallas existen, y
-la skill `.claude/skills/rescuesync-estado` (uso interno con Claude Code)
-para el estado completo del proceso Bonita y del backend tarea por tarea.
-
-## Flujo de Git para el `.bos`
-
-`*.bos` y `*.bar` son binarios (ver `.gitattributes`): nunca hacer
-diff/merge textual, se corrompen. Con más de una persona editando el
-proceso en Bonita Studio, coordinar quién lo edita en cada momento — dos
-ediciones simultáneas del mismo `.bos` son un conflicto sin resolución
-automática.
+`*.bos` y `*.bar` son binarios (ver `.gitattributes`): no se hace diff ni merge textual. Dos ediciones simultáneas del mismo `.bos` son un
+conflicto sin resolución automática: coordinar quién lo edita. Los cambios entran a `dev` por pull request con "CI verde".
