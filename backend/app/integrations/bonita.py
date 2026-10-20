@@ -110,6 +110,59 @@ class BonitaClient:
         resp.raise_for_status()
         return resp.json()["userName"]
 
+    def find_user_id(self, username: str) -> str | None:
+        resp = self._request("GET", "/API/identity/user", params={"f": f"userName={username}"})
+        resp.raise_for_status()
+        results = resp.json()
+        return results[0]["id"] if results else None
+
+    def create_user(self, username: str, password: str, firstname: str) -> str:
+        resp = self._request(
+            "POST", "/API/identity/user",
+            json={
+                "userName": username,
+                "password": password,
+                "password_confirm": password,
+                "firstname": firstname,
+                "lastname": "",
+                "enabled": "true",
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()["id"]
+
+    def group_id(self, path: str) -> str:
+        """Id del grupo a partir de su path completo (ej. '/rescuesync/ong')."""
+        parent, _, name = path.rstrip("/").rpartition("/")
+        resp = self._request(
+            "GET", "/API/identity/group",
+            params={"f": [f"name={name}", f"parent_path={parent}"]},
+        )
+        resp.raise_for_status()
+        results = resp.json()
+        if not results:
+            raise BonitaError(f"Grupo '{path}' no encontrado en Bonita")
+        return results[0]["id"]
+
+    def role_id(self, name: str) -> str:
+        resp = self._request("GET", "/API/identity/role", params={"f": f"name={name}"})
+        resp.raise_for_status()
+        results = resp.json()
+        if not results:
+            raise BonitaError(f"Rol '{name}' no encontrado en Bonita")
+        return results[0]["id"]
+
+    def add_membership(self, user_id: str, group_id: str, role_id: str) -> None:
+        resp = self._request(
+            "POST", "/API/identity/membership",
+            json={"user_id": user_id, "group_id": group_id, "role_id": role_id},
+        )
+        resp.raise_for_status()
+
+    def delete_user(self, user_id: str) -> None:
+        resp = self._request("DELETE", f"/API/identity/user/{user_id}")
+        resp.raise_for_status()
+
     def current_user_id(self) -> str:
         resp = self._request("GET", "/API/system/session/unusedid")
         resp.raise_for_status()
