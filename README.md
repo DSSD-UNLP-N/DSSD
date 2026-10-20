@@ -31,67 +31,18 @@ Ficha de la Entrega 3 (URLs, Swagger, repositorio y Dockerfile): [`entrega-3/ENT
 
 ## Puesta en marcha
 
-Requisitos: Bonita Studio Community 10.4.0, Python 3.12+, Node 20+, Chrome (solo para las pruebas por interfaz). Bonita y la app siempre corren en la
-PC; lo que cambia es **dónde está la API Nacional**. Elegí una de las dos y seguí los 4 pasos con la columna que corresponda:
+Bonita y la app siempre corren en la PC; lo que cambia es **dónde está la API Nacional**. Hay dos guías, completas y por separado:
 
-| | **Nube** (la de la entrega) | **Local** |
+| | [**Nube** (por defecto, la de la entrega)](docs/instalacion-nube.md) | [**Local** (plan B si falla la nube)](docs/instalacion-local.md) |
 |---|---|---|
-| API Nacional | https://rescuesync-nacional.onrender.com (ya desplegada, no se instala nada) | `nacional/` en `:8002` |
+| API Nacional | https://rescuesync-nacional.onrender.com (ya desplegada, no se instala) | `nacional/` en `:8002` |
 | `.bos` de Bonita | `entrega-3/entrega42_nube.bos` | `entrega-3/entrega42_local.bos` |
-| Configuración de la app | `backend/.env.nube` | `backend/.env.example` |
+| Conectores de Bonita → API Nacional | `https://rescuesync-nacional.onrender.com/...` | `http://localhost:8002/...` |
+| Conectores de Bonita → app | `http://localhost:8001/api/bonita/...` | `http://localhost:8001/api/bonita/...` |
+| Configuración de la app | `backend/.env.nube` | `backend/.env.local` |
 
-No se pueden tener los dos `.bos` activos a la vez en Studio (mismo nombre y versión de proceso): se importa uno, y para cambiar se reimporta el otro.
-
-### 1. Bonita Studio
-1. **Archivo → Importar** → el `.bos` de la tabla.
-2. Editor de la **Organización** → importar `entrega-2/ACME.xml` → **Desplegar** (botón del editor; sin esto falla con "Actor … does not contain any members").
-3. Sobre el proceso `Gestion Integral de la Emergencia`: **Ejecutar**. Cada Ejecutar reinicia el motor y borra los casos.
-4. Comprobar `http://localhost:8080/bonita` (técnico `walter.bates` / `bpm`; de prueba `operador.municipal`, `coordinador.regional`, `ong.cruzroja`, `ong.bomberos`, todos `bpm`).
-
-Si algo falla al desplegar, el motivo real está en `<Studio>\workspace\tomcat\server\logs\bonita.log`.
-
-### 2. API Nacional
-**Nube:** no hay nada que levantar. El plan gratis de Render duerme el servicio tras 15 min sin uso y la primera llamada tarda 30-60 s: antes de empezar,
-abrir `https://rescuesync-nacional.onrender.com/health` (o `curl` a esa URL) hasta que responda `ok`.
-
-**Local:**
-```bash
-cd nacional
-python -m venv .venv && .venv\Scripts\activate        # Linux/Mac: source .venv/bin/activate
-pip install -r requirements.txt
-python -m alembic upgrade head && python -m app.seed   # SQLite por defecto (nacional.db); crea ONGs, stock y las cuentas de servicio
-uvicorn app.main:app --port 8002
-```
-Los valores por defecto (`change-me`, `change-me-app`) son solo para local y coinciden con los del `.bos` local. Swagger: http://localhost:8002/docs.
-
-### 3. App web (`:8001`)
-```bash
-cd backend
-python -m venv .venv && .venv\Scripts\activate
-pip install -r requirements.txt
-copy .env.nube .env                                    # nube. Local: copy .env.example .env   (Linux/Mac: cp)
-python -m alembic upgrade head && python -m app.seed   # SQLite (dev.db); para Postgres ver backend/README.md
-uvicorn app.main:app --port 8001
-```
-`.env.nube` ya trae la URL de Render, la clave de la cuenta `app-service` y `NACIONAL_TIMEOUT_SECONDS=90` (por el despertar del plan gratis); no hay que generar
-ni editar nada. Si se cambia el `.env` con la app corriendo, reiniciarla.
-
-### 4. Front (`:5173`)
-```bash
-cd frontend && npm install && npm run dev              # Vite reenvía /api al backend
-```
-Con todo arriba: entrar a http://localhost:5173 como `operador.municipal` (clave `demo1234`) y registrar una emergencia.
-
-### Notas de la nube
-- Cada cierre de emergencia **descuenta stock real** en la base de Render y no hay reset automático (el seed es idempotente: no repone lo gastado). Si se agota,
-  se repone con `PUT /ongs/{cuit}/inventario` desde Swagger (`/docs`, autenticado con `POST /login`).
-- Verificar un despliegue de la API (72 chequeos, no deja datos): `python nacional/scripts/verificar_despliegue.py <URL> --clave <BONITA_SERVICE_PASSWORD>`.
-- Si cambian la URL o la clave de la API, el `.bos` de la nube se rehace con:
-  ```bash
-  NACIONAL_BONITA_PASSWORD=<BONITA_SERVICE_PASSWORD> python bonita/scripts/preparar_entorno.py entrega-3/entrega42_local.bos entrega-3/entrega42_nube.bos --nacional https://rescuesync-nacional.onrender.com
-  ```
-- Render construye `nacional/Dockerfile` desde la rama `dev` y redespliega en cada commit; las dos contraseñas de servicio y `JWT_SECRET` son variables de entorno del
-  servicio (`render.yaml` es el blueprint de referencia).
+No se pueden tener los dos `.bos` activos a la vez en Studio (mismo nombre y versión de proceso): se importa uno, y para cambiar se reimporta el otro. Las guías
+explican cada paso, qué URL tiene cada conector y cómo comprobarlo (`python bonita/scripts/ver_conectores.py <bos>`).
 
 ## Pruebas
 
@@ -116,7 +67,8 @@ es el chequeo que exige la regla de ramas (`.github/rulesets/`): nadie pushea di
 backend/        App web (FastAPI + SQLAlchemy + Alembic). Ver backend/README.md.
 frontend/       SPA de React (Vite + TypeScript).
 nacional/       API Nacional (FastAPI): JWT, reservas, cierres, Dockerfile, scripts/verificar_despliegue.py.
-bonita/         Herramientas: cliente REST y scripts que editan el .bos (conectores de cierre, login JWT, preparar_entorno.py).
+docs/           Guías de instalación: nube (por defecto) y local (plan B).
+bonita/         Herramientas: cliente REST y scripts que editan el .bos (conectores de cierre, login JWT, preparar_entorno.py, ver_conectores.py).
 entrega-1/      Entrega 1 (entregada): modelo BPM inicial e informe.
 entrega-2/      Entrega 2 (entregada): RescueSync.bos, ACME.xml (organización) y bitácora de cambios en Bonita.
 entrega-3/      Entrega 3: entrega42_local.bos y entrega42_nube.bos (el proceso vigente, local y contra la API de Render), ficha de entrega y Swagger.
