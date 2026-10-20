@@ -30,7 +30,7 @@ Verificación automática de un despliegue (72 chequeos, no deja datos modificad
 | 2. Catálogo y consulta | `GET /certificaciones` · `GET /ongs`, `GET /ongs/{cuit}` · `GET /recursos/disponibilidad` · `GET /tipos-recurso` · `PUT /ongs/{cuit}/inventario` |
 | 3. Validación por niveles de competencia | `POST /validaciones` (objetos con capacidades habilitadas y niveles de riesgo, sin rechazo binario) · `POST /evaluaciones` (evalúa y reserva) |
 | 4. Concurrencia y bloqueo | `POST /adjudicaciones` · `POST /adjudicaciones/resolucion` · `POST /adjudicaciones/{referencia}/confirmar` · `.../liberar` — locking pesimista en PostgreSQL; la prueba de concurrencia corre en CI contra Postgres real |
-| 5. Liberación y cierre | `POST /cierres` · `POST /cierres/lote` · `GET /cierres/{id}` · `GET /ongs/{cuit}/cierres` (liberan y descuentan lo comprometido) |
+| 5. Liberación y cierre | `POST /cierres` · `POST /cierres/lote` · `GET /cierres/{id}` · `GET /ongs/{cuit}/cierres` (liberan lo comprometido) |
 
 ## Qué más hay detrás
 La API la consumen la app web (JWT con la cuenta `app-service`) y el proceso de Bonita (conector `loginNacional` + `Authorization: Bearer`). El recorrido completo
