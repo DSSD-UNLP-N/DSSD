@@ -80,7 +80,7 @@ La API Nacional está desplegada en Render (Docker construido desde `nacional/Do
 3. Despertar el servicio antes de empezar: `curl https://rescuesync-nacional.onrender.com/health`.
 
 Verificar un despliegue de la API (72 chequeos, no deja datos): `python nacional/scripts/verificar_despliegue.py <URL> --clave <BONITA_SERVICE_PASSWORD>`.
-Las dos contraseñas y `JWT_SECRET` se cargan como variables de entorno del servicio en Render , que construye `nacional/Dockerfile` desde la rama `dev` (`render.yaml` es el blueprint de referencia).
+Las dos contraseñas y `JWT_SECRET` se cargan como variables de entorno del servicio en Render, que construye `nacional/Dockerfile` desde la rama `dev` (`render.yaml` es el blueprint de referencia).
 
 ## Pruebas
 
