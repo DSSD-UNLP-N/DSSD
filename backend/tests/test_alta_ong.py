@@ -114,6 +114,19 @@ def test_nacional_409_borra_usuario_bonita(seeded, nacional):
 
 
 @responses.activate
+def test_nacional_4xx_pasa_status_y_detalle(seeded, nacional):
+    _mock_bonita_ok()
+    nacional.falla_registro = NacionalError("La contraseña es muy corta", 422)
+    with seeded() as s:
+        with pytest.raises(AltaOngError) as e:
+            alta_ong(s, get_settings(), nacional, _datos())
+    assert e.value.status == 422
+    assert "La contraseña es muy corta" in str(e.value)
+    assert len(_llamadas("DELETE", "/API/identity/user/77")) == 1
+    assert "30-71234567-8" not in _ongs(seeded)
+
+
+@responses.activate
 def test_nacional_caido_borra_usuario_bonita(seeded, nacional):
     _mock_bonita_ok()
     nacional.falla_registro = NacionalError("timeout", None)

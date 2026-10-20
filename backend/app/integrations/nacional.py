@@ -80,6 +80,8 @@ class NacionalClient:
                 detalle = resp.json().get("detail")
             except (ValueError, AttributeError):
                 detalle = None
+            if isinstance(detalle, list):  # forma de FastAPI para 422: lista de {loc, msg, type}
+                detalle = "; ".join(str(d.get("msg", d)) if isinstance(d, dict) else str(d) for d in detalle)
             raise NacionalError(str(detalle) if detalle else f"Sistema Nacional: {method} {path} falló ({resp.status_code})",
                                 resp.status_code)
         try:

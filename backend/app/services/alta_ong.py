@@ -90,8 +90,8 @@ def alta_ong(db: Session, settings: Settings, nacional: NacionalClient, datos: D
                                        username=datos.username, password=datos.password)
     except NacionalError as exc:
         _borrar_usuario_bonita(bonita, user_id)
-        if exc.status == 409:
-            raise AltaOngError(str(exc), 409) from exc
+        if exc.status is not None and 400 <= exc.status < 500:
+            raise AltaOngError(str(exc), exc.status) from exc  # 409 y reglas de validación: se informa el detalle
         raise AltaOngError(NACIONAL_CAIDO, 503) from exc
 
     try:

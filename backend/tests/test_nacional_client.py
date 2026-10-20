@@ -181,6 +181,17 @@ def test_registrar_ong_409_conserva_status():
 
 
 @responses.activate
+def test_registrar_ong_422_con_lista_de_errores_es_legible():
+    responses.add(responses.POST, f"{BASE}/ongs", status=422, json={"detail": [
+        {"loc": ["body", "password"], "msg": "String should have at least 8 characters", "type": "string_too_short"},
+        {"loc": ["body", "cuit"], "msg": "CUIT invalido", "type": "value_error"}]})
+    with pytest.raises(NacionalError) as exc:
+        _registrar()
+    assert exc.value.status == 422
+    assert str(exc.value) == "String should have at least 8 characters; CUIT invalido"
+
+
+@responses.activate
 def test_registrar_ong_timeout_status_none():
     responses.add(responses.POST, f"{BASE}/ongs", body=requests.ConnectTimeout())
     with pytest.raises(NacionalError) as exc:
