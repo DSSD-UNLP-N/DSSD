@@ -29,42 +29,313 @@ Ficha de la Entrega 3 (URLs, Swagger, repositorio y Dockerfile): [`entrega-3/ENT
   entra de nuevo en cada tarea de servicio (conector `loginNacional`). Las ONGs y sus altas (`POST /ongs`) también pasan por JWT.
 - Con Postgres, la API Nacional **no arranca** si `JWT_SECRET`, `BONITA_SERVICE_PASSWORD` o `APP_SERVICE_PASSWORD` tienen el valor de ejemplo.
 
-## Puesta en marcha local (de cero)
+## Guía de Instalación y Despliegue desde Cero
 
-Requisitos: Bonita Studio Community 10.4.0, Python 3.12+, Node 20+, Chrome (solo para las pruebas por interfaz).
+Esta guía configura el entorno local completo de RescueSync: PostgreSQL 16 con dos
+bases (`rescuesync` y `nacional`), la API Nacional, el backend, el frontend y el
+proceso BPM de Bonita. Los valores mostrados son únicamente para desarrollo local.
 
-### 1. Bonita Studio
-1. Abrir Studio → **Archivo → Importar** → `entrega-3/entrega42_local.bos`.
-2. Editor de la **Organización** → importar `entrega-2/ACME.xml` → **Desplegar** (botón del editor; sin esto falla con "Actor … does not contain any members").
-3. Sobre el proceso `Gestion Integral de la Emergencia`: **Ejecutar**. Cada Ejecutar reinicia el motor y borra los casos.
-4. Comprobar `http://localhost:8080/bonita` (técnico `walter.bates` / `bpm`; de prueba `operador.municipal`, `coordinador.regional`, `ong.cruzroja`, `ong.bomberos`, todos `bpm`).
+### 1. Requisitos previos
 
-Si algo falla al desplegar, el motivo real está en `<Studio>\workspace\tomcat\server\logs\bonita.log`.
+Instalar y tener disponibles en el `PATH`:
 
-### 2. API Nacional (`:8002`)
+- **Docker Desktop**, con Docker Compose habilitado.
+- **Python 3.12 o superior**.
+- **Node.js 18 o superior** y npm.
+- **Bonita Studio 2023.2 o superior**, para importar y ejecutar el proceso BPM.
+
+Se recomienda utilizar PowerShell en Windows o Bash en Linux/macOS. Todos los
+comandos siguientes se ejecutan desde la raíz del repositorio.
+
+### 2. Paso 1: Configuración de variables de entorno (`.env`)
+
+Crear `backend/.env` copiando `backend/.env.example` y dejar, como mínimo, estas
+variables para la instalación local:
+
+```env
+DATABASE_URL=postgresql+psycopg://rescuesync:rescuesync@localhost:5433/rescuesync
+SESSION_SECRET=dev-only-change-me
+SHOW_DEMO_USERS=true
+NACIONAL_BASE_URL=http://localhost:8002
+BONITA_BASE_URL=http://localhost:8080/bonita
+BONITA_USERNAME=install
+BONITA_PASSWORD=install
+BONITA_API_KEY=rescuesync-dev-key
+```
+
+PowerShell:
+
+```powershell
+Copy-Item backend\.env.example backend\.env
+```
+
+Bash:
+
+```bash
+cp backend/.env.example backend/.env
+```
+
+Crear `nacional/.env` con la conexión a la segunda base PostgreSQL y las
+credenciales de desarrollo:
+
+```env
+DATABASE_URL=postgresql+psycopg://rescuesync:rescuesync@localhost:5433/nacional
+JWT_SECRET=dev-only-change-me
+JWT_EXPIRATION_MINUTES=60
+BONITA_SERVICE_USERNAME=bonita-service
+BONITA_SERVICE_PASSWORD=change-me
+APP_SERVICE_USERNAME=app-service
+APP_SERVICE_PASSWORD=change-me-app
+```
+
+No usar estos secretos en producción. La API Nacional rechaza los valores de
+ejemplo cuando se conecta a PostgreSQL fuera del modo local.
+
+### 3. Paso 2: Levantar PostgreSQL con Docker
+
+El servicio `db` usa `postgres:16-alpine`, publica el puerto host `5433` hacia el
+puerto interno `5432` y monta el volumen persistente `rescuesync-pgdata`.
+`docker/init-dbs.sql` crea la base `nacional` durante la primera inicialización
+del volumen.
+
+PowerShell o Bash:
+
+```bash
+docker compose up -d db
+docker compose ps
+```
+
+Comprobar que el contenedor está saludable:
+
+```bash
+docker compose exec db pg_isready -U rescuesync -d rescuesync
+```
+
+El script SQL de inicialización se ejecuta solo cuando el volumen se crea por
+primera vez. Si se modificó el script y se necesita reinicializar ambas bases
+(esto elimina los datos locales), ejecutar:
+
+```bash
+docker compose down -v
+docker compose up -d db
+```
+
+### 4. Paso 3: Instalar dependencias y preparar la API Nacional
+
+PowerShell:
+
+```powershell
+cd nacional
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m alembic upgrade head
+python -m app.seed
+uvicorn app.main:app --host 0.0.0.0 --port 8002 --reload
+```
+
+Bash:
+
 ```bash
 cd nacional
-python -m venv .venv && .venv\Scripts\activate        # Linux/Mac: source .venv/bin/activate
-pip install -r requirements.txt
-python -m alembic upgrade head && python -m app.seed   # SQLite por defecto (nacional.db); crea ONGs, stock y las cuentas de servicio
-uvicorn app.main:app --port 8002
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m alembic upgrade head
+python -m app.seed
+uvicorn app.main:app --host 0.0.0.0 --port 8002 --reload
 ```
-Los valores por defecto (`change-me`, `change-me-app`) son solo para local y coinciden con los del `.bos`. Swagger: http://localhost:8002/docs.
 
-### 3. App web (`:8001`) y front (`:5173`)
+Mantener este proceso abierto. La API queda disponible en
+`http://localhost:8002`; su estado se puede consultar en
+`http://localhost:8002/health` y su Swagger en `http://localhost:8002/docs`.
+
+### 5. Paso 4: Instalar dependencias y preparar el backend
+
+Abrir otra terminal en la raíz del repositorio.
+
+PowerShell:
+
+```powershell
+cd backend
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m alembic upgrade head
+python -m app.seed
+uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+```
+
+Bash:
+
 ```bash
 cd backend
-python -m venv .venv && .venv\Scripts\activate
-pip install -r requirements.txt
-copy .env.example .env                                 # Linux/Mac: cp
-# en .env: DATABASE_URL=sqlite:///./dev.db  (o Postgres, ver más abajo)
-python -m alembic upgrade head && python -m app.seed
-uvicorn app.main:app --port 8001
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m alembic upgrade head
+python -m app.seed
+uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 ```
+
+El backend queda disponible en `http://localhost:8001` y usa la base
+`rescuesync` de PostgreSQL.
+
+### 6. Paso 5: Instalar y ejecutar el frontend
+
+Abrir una tercera terminal:
+
 ```bash
-cd frontend && npm install && npm run dev              # http://localhost:5173 (Vite reenvía /api al backend)
+cd frontend
+npm install
+npm run dev
 ```
-Con todo arriba: entrar como `operador.municipal` en http://localhost:5173 y registrar una emergencia.
+
+La interfaz queda disponible en `http://localhost:5173`. Vite reenvía las
+llamadas `/api` al backend local.
+
+### 7. Paso 6: Importar y ejecutar Bonita
+
+1. Abrir Bonita Studio.
+2. Importar `entrega-3/entrega42_local.bos`.
+3. Abrir el editor de la organización e importar `entrega-2/ACME.xml`.
+4. Pulsar **Desplegar** en el editor de la organización. Este paso es necesario
+   para que los actores tengan miembros asignados.
+5. Ejecutar el proceso `Gestion Integral de la Emergencia`.
+6. Verificar `http://localhost:8080/bonita`.
+
+Para la integración local, Bonita debe poder acceder al backend en `:8001` y a
+la API Nacional en `:8002`. Las credenciales de los usuarios de demostración
+son `demo1234`; el usuario técnico configurado por defecto en el proceso es
+`walter.bates` con contraseña `bpm`. Si el proceso local usa otras credenciales,
+ajustar `BONITA_USERNAME` y `BONITA_PASSWORD` en `backend/.env`.
+
+Si falla el despliegue, revisar el log de Bonita en
+`<Studio>\workspace\tomcat\server\logs\bonita.log`.
+
+### 8. Paso 7: Verificación de la instalación
+
+Con todos los servicios activos:
+
+```bash
+curl http://localhost:8002/health
+curl http://localhost:8001/docs
+```
+
+Abrir `http://localhost:5173` e ingresar con `operador.municipal` y la
+contraseña `demo1234`. Luego registrar una emergencia para comprobar la
+comunicación entre frontend, backend, API Nacional y Bonita.
+
+## Guía de Uso y Escenarios de Prueba End-to-End (E2E)
+
+La siguiente guía describe las rutas principales y un recorrido completo por
+los tres sistemas locales: SPA, backend FastAPI, API Nacional y Bonita BPM.
+Antes de ejecutar los escenarios, completar la [instalación desde cero](#guía-de-instalación-y-despliegue-desde-cero)
+y comprobar que los servicios estén disponibles en `:5173`, `:8001`, `:8002` y
+`8080`.
+
+### 1. Catálogo de endpoints principales
+
+#### Backend principal — `http://localhost:8001`
+
+| Método | Ruta | Uso |
+|---|---|---|
+| `GET` | `/docs` | Documentación interactiva Swagger. |
+| `POST` | `/api/auth/login` | Autenticación de usuarios de la aplicación y creación de sesión. |
+| `POST` | `/api/emergencias` | Creación de una emergencia desde la SPA. |
+| `GET` | `/api/emergencias/{id}` | Consulta del detalle y estado de una emergencia. |
+| `GET` | `/api/emergencias/{id}/ofertas` | Consulta de las ofertas registradas para una emergencia. |
+| `POST` | `/api/bonita/emergencias/{id}/eventos` | Callback protegido con `BONITA_API_KEY` para que Bonita actualice eventos y estados. |
+| `GET` | `/api/bonita/emergencias/{id}/ofertas` | Consulta protegida que Bonita utiliza para obtener las ofertas de una emergencia. |
+
+El backend usa una sesión por cookie para los usuarios de la SPA. Los
+endpoints bajo `/api/bonita` no usan esa sesión: requieren la cabecera
+`X-Api-Key` configurada en `BONITA_API_KEY`.
+
+#### API Nacional — `http://localhost:8002` o Render
+
+| Método | Ruta | Uso |
+|---|---|---|
+| `GET` | `/docs` | Documentación interactiva Swagger. |
+| `POST` | `/login` | Autenticación de `bonita-service` o `app-service` y emisión de JWT. |
+| `POST` | `/evaluaciones` | Evaluación de cobertura y reserva inicial de stock nacional. |
+| `POST` | `/adjudicaciones/resolucion` | Resolución de la adjudicación y confirmación de recursos para las ONGs seleccionadas. |
+| `POST` | `/cierres/lote` | Cierre de varias adjudicaciones y liberación o descuento del stock comprometido. |
+
+Las rutas protegidas de la API Nacional requieren
+`Authorization: Bearer <JWT>`. La cuenta `bonita-service` es la utilizada por
+los conectores BPM para evaluar, adjudicar y cerrar recursos.
+
+### 2. Escenarios de prueba End-to-End
+
+#### Escenario 1: creación de una emergencia e inicio del proceso
+
+1. Abrir la SPA en `http://localhost:5173` e iniciar sesión con un usuario
+   operador. En el seed actual, usar `operador.municipal` / `demo1234`
+   (si el entorno contiene una cuenta alternativa como
+   `operador@rescuesync.com`, utilizar sus credenciales).
+2. Registrar una emergencia indicando tipo, ubicación y nivel de gravedad.
+   La SPA envía `POST /api/emergencias` al backend.
+3. Verificar que la emergencia se haya guardado consultando
+   `GET /api/emergencias/{id}` o desde la interfaz.
+4. Crear los lotes de recursos y publicar la convocatoria desde la SPA. El
+   backend persiste los lotes y coordina la instancia del proceso BPM mediante
+   la API REST de Bonita.
+
+En la implementación actual, la emergencia recién creada queda en estado
+`ABIERTA`; durante el flujo de ofertas pasa por `CONVOCATORIA` y, cuando vence
+la ventana, por `CERRADA`. Estos estados representan funcionalmente las etapas
+de pendiente de procesamiento y convocatoria abierta; no se utilizan
+literalmente los estados `PENDIENTE` u `OFERTADA`.
+
+#### Escenario 2: evaluación y cobertura nacional mediante Bonita BPM
+
+1. Bonita recibe el evento de la emergencia y ejecuta el conector REST que
+   primero llama a `POST /login` en la API Nacional con la cuenta
+   `bonita-service`.
+2. Con el JWT obtenido, Bonita llama a `POST /evaluaciones`. La API Nacional
+   consulta el catálogo de ONGs, certificaciones e inventarios, evalúa la
+   cobertura y reserva el stock correspondiente.
+3. Bonita notifica el resultado al backend mediante
+   `POST /api/bonita/emergencias/{id}/eventos`, incluyendo la cabecera
+   `X-Api-Key`.
+4. Consultar `GET /api/emergencias/{id}` para verificar el avance del proceso.
+   En el modelo actual, la convocatoria se representa con `CONVOCATORIA` y el
+   vencimiento de la ventana con `CERRADA`; la UI puede mostrar etiquetas
+   equivalentes como evaluada u ofertada según la tarea que esté activa.
+
+#### Escenario 3: selección de ofertas y adjudicación
+
+1. Desde la SPA, consultar las ofertas con
+   `GET /api/emergencias/{id}/ofertas`. Bonita obtiene la misma información
+   mediante `GET /api/bonita/emergencias/{id}/ofertas`.
+2. Revisar las cantidades ofrecidas y la cobertura de cada ONG. El operador
+   confirma la decisión desde la SPA o desde la tarea correspondiente en el
+   portal de Bonita.
+3. El backend registra la decisión y Bonita ejecuta el conector hacia
+   `POST /adjudicaciones/resolucion` en la API Nacional.
+4. La API Nacional reserva de forma atómica los recursos de las ONGs
+   seleccionadas. Si la reserva es válida, Bonita notifica el resultado al
+   backend mediante el endpoint de eventos.
+
+#### Escenario 4: cierre de la emergencia y liberación de recursos
+
+1. Una vez atendida la contingencia, completar las tareas de ejecución y
+   validación de cierre en Bonita.
+2. Bonita obtiene un JWT de servicio y llama a
+   `POST /cierres/lote` en la API Nacional. La operación consolida los cierres
+   y libera o descuenta exactamente el stock comprometido, de forma
+   idempotente.
+3. Bonita envía el evento final al backend mediante
+   `POST /api/bonita/emergencias/{id}/eventos`.
+4. Verificar con `GET /api/emergencias/{id}` que la emergencia haya quedado en
+   estado `RESUELTA`. En el flujo local, `CERRADA` identifica el vencimiento de
+   la ventana de ofertas; `RESUELTA` identifica el cierre bilateral completo.
+
+Para automatizar escenarios adicionales existe
+`backend/scripts/correr_escenarios.py`. Requiere Bonita, el backend y la API
+Nacional locales, y permite validar evaluación, topes de oferta, adjudicación,
+JWT y cierre sin depender únicamente de la interfaz gráfica.
 
 ## Usar la API Nacional de la nube
 
