@@ -67,7 +67,8 @@ Entrar a http://localhost:5173 como `operador.municipal` (clave `demo1234`) y re
 `cd backend && python scripts/ui_parada3.py`.
 
 ## Notas de la nube
-- Cada cierre de emergencia **descuenta stock real** en la base de Render y no hay reset automático (el seed es idempotente: no repone lo gastado). Si se agota, se repone con `PUT /ongs/{cuit}/inventario` desde Swagger (`/docs`, autenticado con `POST /login`).
+- **No borrar `backend/dev.db` mientras uses la nube.** Render recuerda cada emergencia cerrada por su número (referencia `emg-<n>-r1-<cuit>`) y no la vuelve a evaluar. Si se crea una base de la app nueva, la numeración vuelve a 1 y, si ese número ya se usó en un ensayo anterior, Bonita queda en la tarea «Validar en Sistema Nacional…» con el conector `evaluarOfertas` fallido (la API responde `409`). Se arregla borrando ese caso en Bonita (portal, usuario `walter.bates`) y registrando otra emergencia, que toma el número siguiente. Para ver qué números están usados: `GET /ongs/{cuit}/cierres` en Swagger.
+- **El stock no se gasta.** Durante la ventana y la adjudicación Render reserva lo ofrecido y al cerrar lo libera (comprometido vuelve a 0); el total de cada ONG no cambia. No hay nada que reponer. Se puede ver con `GET /recursos/disponibilidad` en Swagger.
 - Verificar el despliegue de la API (72 chequeos, no deja datos): `python nacional/scripts/verificar_despliegue.py https://rescuesync-nacional.onrender.com --clave <BONITA_SERVICE_PASSWORD>`.
 - Render construye `nacional/Dockerfile` desde la rama `dev` y redespliega en cada commit; `JWT_SECRET` y las dos contraseñas de servicio son variables de entorno del servicio (`render.yaml` es el blueprint de referencia).
 - Si la nube falla (Render caído, sin internet): [instalacion-local.md](instalacion-local.md).
