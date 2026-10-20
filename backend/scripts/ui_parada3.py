@@ -13,8 +13,8 @@ Nacional y en qué tarea quedó el caso de Bonita (y con qué usuario la complet
   7. El Coordinador valida el cierre; Bonita cierra en la API Nacional, avisa a la app y la emergencia queda RESUELTA.
   8. Las ONGs reciben el aviso en la campana y el Municipio ve la emergencia resuelta.
 
-El cierre descuenta el stock en la API Nacional (4 y 2 paramédicos): para repetirlo contra la misma base hay que restaurar el
-inventario.
+El cierre libera lo reservado en la API Nacional (4 y 2 paramédicos): el stock queda como estaba. Contra la nube, la emergencia
+no puede tener un número ya cerrado en Render (ver docs/instalacion-nube.md).
 
 Requisitos: Bonita con el `.bos` de JWT desplegado, app en :8001, front en :5173 y API Nacional en :8002 con el seed y nada
 comprometido; Chrome o Chromium. Tarda unos 6 minutos con la ventana de 2.
