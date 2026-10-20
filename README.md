@@ -108,7 +108,7 @@ nacional/       API Nacional (FastAPI): JWT, reservas, cierres, Dockerfile, scri
 bonita/         Herramientas: cliente REST y scripts que editan el .bos (conectores de cierre, login JWT, preparar_entorno.py).
 entrega-1/      Entrega 1 (entregada): modelo BPM inicial e informe.
 entrega-2/      Entrega 2 (entregada): RescueSync.bos, ACME.xml (organización) y bitácora de cambios en Bonita.
-entrega-3/      Entrega 3: entrega42_local.bos (proceso vigente), entrega41_20261017_1311.bos (export base), ficha de entrega y Swagger.
+entrega-3/      Entrega 3: entrega42_local.bos (proceso vigente), ficha de entrega y Swagger.
 render.yaml     Blueprint de Render para la API Nacional (referencia; el servicio vivo se creó desde el repo).
 docker-compose.yml   Postgres 16 para el backend (opcional).
 ```
