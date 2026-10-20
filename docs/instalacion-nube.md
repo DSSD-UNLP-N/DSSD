@@ -66,6 +66,8 @@ cd frontend && npm install && npm run dev              # Vite reenvía /api al b
 Entrar a http://localhost:5173 como `operador.municipal` (clave `demo1234`) y registrar una emergencia. Recorrido completo automático, con capturas (≈ 7 min):
 `cd backend && python scripts/ui_parada3.py`.
 
+Alta de ONGs de prueba: `http://localhost:5173/alta-ong` (no está en el menú). Crea la ONG en Bonita (grupo `/rescuesync/ong`), en la API Nacional con sus rubros y en la app; después se ingresa con ese usuario. La ONG queda creada en Render y no se puede borrar.
+
 ## Notas de la nube
 - **No borrar `backend/dev.db` mientras uses la nube.** Render recuerda cada emergencia cerrada por su número (referencia `emg-<n>-r1-<cuit>`) y no la vuelve a evaluar. Si se crea una base de la app nueva, la numeración vuelve a 1 y, si ese número ya se usó en un ensayo anterior, Bonita queda en la tarea «Validar en Sistema Nacional…» con el conector `evaluarOfertas` fallido (la API responde `409`). Se arregla borrando ese caso en Bonita (portal, usuario `walter.bates`) y registrando otra emergencia, que toma el número siguiente. Para ver qué números están usados: `GET /ongs/{cuit}/cierres` en Swagger.
 - **El stock no se gasta.** Durante la ventana y la adjudicación Render reserva lo ofrecido y al cerrar lo libera (comprometido vuelve a 0); el total de cada ONG no cambia. No hay nada que reponer. Se puede ver con `GET /recursos/disponibilidad` en Swagger.

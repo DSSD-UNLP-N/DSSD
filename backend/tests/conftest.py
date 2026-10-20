@@ -82,10 +82,29 @@ class FakeNacional:
         }
         self.validaciones = []  # (gravedad, items) de cada llamada a validar()
         self.liberadas = []  # referencia de cada llamada a liberar()
+        self.ongs_registradas = []  # kwargs de cada llamada a registrar_ong()
+        self.inventarios = {}  # cuit -> items declarados con declarar_inventario()
+        self.falla_registro = None  # NacionalError a lanzar en registrar_ong()
+        self.falla_inventario = None  # NacionalError a lanzar en declarar_inventario()
 
     def _verificar(self):
         if self.caido:
             raise NacionalError("Sistema Nacional caído (simulado)")
+
+    def registrar_ong(self, *, ong_nombre, cuit, nombre, username, password):
+        self._verificar()
+        if self.falla_registro:
+            raise self.falla_registro
+        self.ongs_registradas.append({"ong_nombre": ong_nombre, "cuit": cuit, "nombre": nombre,
+                                      "username": username, "password": password})
+        return f"tok-{cuit}"
+
+    def declarar_inventario(self, cuit, token, items):
+        self._verificar()
+        if self.falla_inventario:
+            raise self.falla_inventario
+        self.inventarios[cuit] = items
+        return items
 
     def liberar(self, referencia):
         self._verificar()

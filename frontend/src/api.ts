@@ -24,6 +24,22 @@ export type TipoRecurso = {
   certificacion_requerida: string | null;
 };
 
+export type AltaOngIn = {
+  ong_nombre: string;
+  cuit: string;
+  nombre: string;
+  username: string;
+  password: string;
+  rubros: { tipo_recurso: string; cantidad_total: number }[];
+};
+
+export type AltaOngOut = {
+  ong_nombre: string;
+  cuit: string;
+  username: string;
+  rubros: { tipo_recurso: string; cantidad_total: number }[];
+};
+
 export type Emergencia = {
   id: number;
   tipo: string;
@@ -171,6 +187,12 @@ export const api = {
       body: JSON.stringify(body),
     }),
   tiposRecurso: () => request<TipoRecurso[]>("/api/tipos-recurso"),
+  tiposRecursoAlta: () => request<TipoRecurso[]>("/api/ongs/alta/tipos-recurso"),
+  altaOng: (body: AltaOngIn) =>
+    request<AltaOngOut>("/api/ongs/alta", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   createLote: (
     id: number,
     body: { tipo_recurso: string; detalle?: string; cantidad: number; tipo: string },

@@ -12,6 +12,8 @@ from app.integrations.nacional import NacionalClient, NacionalError, get_naciona
 from app.models import Emergencia, Notificacion, Oferta, Rol, Usuario
 from app.schemas.api import (
     AdjudicarIn,
+    AltaOngIn,
+    AltaOngOut,
     DecisionIn,
     EmergenciaOut,
     LoginIn,
@@ -35,6 +37,7 @@ from app.services.emergencias import (
     registrar_emergencia,
     tarea_ong_en_bonita,
 )
+from app.services.alta_ong import AltaOngError, DatosAlta, alta_ong
 from app.services.ciclo import CicloError, adjudicar, decidir
 from app.services.ejecucion import finalizar, monitorear, resumen, validar_cierre
 from app.services.ofertas import OfertaError, publicar_oferta
@@ -287,6 +290,35 @@ def api_tipos_recurso(
         return nacional.tipos_recurso()
     except NacionalError as exc:
         raise HTTPException(status_code=503, detail=NACIONAL_CAIDO) from exc
+
+
+@router.get("/ongs/alta/tipos-recurso", response_model=list[TipoRecursoOut])
+def api_alta_tipos_recurso(nacional: NacionalClient = Depends(get_nacional)):
+    """Catálogo para la pantalla pública de alta de ONG (sin sesión)."""
+    try:
+        return nacional.tipos_recurso()
+    except NacionalError as exc:
+        raise HTTPException(status_code=503, detail=NACIONAL_CAIDO) from exc
+
+
+@router.post("/ongs/alta", response_model=AltaOngOut, status_code=201)
+def api_alta_ong(
+    body: AltaOngIn,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    nacional: NacionalClient = Depends(get_nacional),
+):
+    """Alta pública de una ONG en Bonita, el Sistema Nacional y la app."""
+    datos = DatosAlta(
+        ong_nombre=body.ong_nombre, cuit=body.cuit, nombre=body.nombre, username=body.username,
+        password=body.password, rubros=[r.model_dump() for r in body.rubros],
+    )
+    try:
+        usuario = alta_ong(db, settings, nacional, datos)
+    except AltaOngError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    return AltaOngOut(ong_nombre=usuario.ong.nombre, cuit=usuario.ong.cuit, username=usuario.username,
+                      rubros=body.rubros)
 
 
 @router.post("/emergencias/{emergencia_id}/lotes", response_model=LoteOut, status_code=201)
