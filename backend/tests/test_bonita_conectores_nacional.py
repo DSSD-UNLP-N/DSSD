@@ -1,8 +1,8 @@
-"""Los conectores de Bonita que llaman a la API Nacional entran con JWT.
+"""El `.bos` que se entrega (entrega-3/entrega42_local.bos): los conectores que llaman a la API Nacional entran con JWT.
 
-No hay forma de correr Bonita en CI, así que se arma el .bos con los scripts de `bonita/scripts` (partiendo del export
-versionado) y se revisa que la cadena `loginNacional -> llamada con Authorization: Bearer` esté completa en cada
-tarea de servicio que toca a Nacional. Que el motor la ejecute bien lo prueban los escenarios con Bonita real.
+No hay forma de correr Bonita en CI, así que se revisa el export versionado: la cadena `loginNacional -> llamada con
+Authorization: Bearer` completa en cada tarea de servicio que toca a Nacional, la tarea estándar y lo que hace
+`bonita/scripts/preparar_entorno.py` para apuntarlo a la nube. Que el motor la ejecute bien lo prueban los escenarios con Bonita real.
 """
 import re
 import sys
@@ -12,22 +12,19 @@ from pathlib import Path
 import pytest
 
 RAIZ = Path(__file__).resolve().parents[2]
-BASE = RAIZ / "entrega-3" / "entrega41_20261017_1311.bos"
+BOS = RAIZ / "entrega-3" / "entrega42_local.bos"
 sys.path.insert(0, str(RAIZ / "bonita" / "scripts"))
 
 import agregar_conector_cierre  # noqa: E402
 import agregar_login_nacional  # noqa: E402
+import preparar_entorno  # noqa: E402
 
-pytestmark = pytest.mark.skipif(not BASE.exists(), reason="no está el export de entrega-3")
+pytestmark = pytest.mark.skipif(not BOS.exists(), reason="no está entrega-3/entrega42_local.bos")
 
 
 @pytest.fixture(scope="module")
-def jwt_bos(tmp_path_factory) -> Path:
-    carpeta = tmp_path_factory.mktemp("bos")
-    cierre, jwt = carpeta / "cierre.bos", carpeta / "jwt.bos"
-    agregar_conector_cierre.main(str(BASE), str(cierre))
-    agregar_login_nacional.main(str(cierre), str(jwt))
-    return jwt
+def jwt_bos() -> Path:
+    return BOS
 
 
 def _proc(bos: Path) -> str:
@@ -96,3 +93,22 @@ def test_las_llamadas_a_la_app_no_cambian(jwt_bos):
 def test_aplicarlo_dos_veces_avisa(jwt_bos, tmp_path):
     with pytest.raises(ValueError):
         agregar_login_nacional.main(str(jwt_bos), str(tmp_path / "otra.bos"))
+
+
+def test_confirmar_finalizacion_es_tarea_estandar(jwt_bos):
+    tarea = re.search(r'<elements xmi:type="process:Task"[^>]*name="Confirmar Finalizacion de Actividades"[^>]*>', _proc(jwt_bos))
+    assert tarea and 'type="PARALLEL"' not in tarea.group(0)
+
+
+def test_preparar_entorno_apunta_a_la_nube_con_otra_clave(jwt_bos):
+    nube = preparar_entorno.nacional(_proc(jwt_bos), "https://api.ejemplo.com/", "clave-de-la-nube")
+    assert "localhost:8002" not in nube and "change-me" not in nube
+    assert nube.count("&quot;https://api.ejemplo.com/") == 6  # 3 logins + evaluar, resolver y cerrar
+    assert nube.count("password: &quot;clave-de-la-nube&quot;") == 3
+    assert nube.count("localhost:8001") == _proc(jwt_bos).count("localhost:8001")  # la app no cambia
+
+
+def test_preparar_entorno_no_se_aplica_dos_veces(jwt_bos):
+    nube = preparar_entorno.nacional(_proc(jwt_bos), "https://api.ejemplo.com", "otra-clave")
+    with pytest.raises(ValueError):
+        preparar_entorno.nacional(nube, "https://otra.com", "x")
