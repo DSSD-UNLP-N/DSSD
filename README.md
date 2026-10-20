@@ -44,6 +44,8 @@ Bonita y la app siempre corren en la PC; lo que cambia es **dónde está la API 
 No se pueden tener los dos `.bos` activos a la vez en Studio (mismo nombre y versión de proceso): se importa uno, y para cambiar se reimporta el otro. Las guías
 explican cada paso, qué URL tiene cada conector y cómo comprobarlo (`python bonita/scripts/ver_conectores.py <bos>`).
 
+Para dar de alta una ONG de prueba hay una pantalla oculta en `http://localhost:5173/alta-ong` (no está en el menú); ver el paso 5 de cada guía.
+
 ## Pruebas
 
 | Qué | Cómo | Necesita |
