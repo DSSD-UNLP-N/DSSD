@@ -26,7 +26,9 @@ def olvidar_tokens() -> None:
 
 
 class NacionalError(RuntimeError):
-    pass
+    def __init__(self, mensaje: str, status: int | None = None):
+        super().__init__(mensaje)
+        self.status = status  # HTTP status si la API contestó; None si no hubo respuesta (red, timeout)
 
 
 class NacionalClient:
@@ -65,6 +67,39 @@ class NacionalClient:
                 return resp.json()
             except (requests.RequestException, ValueError) as exc:
                 raise NacionalError(f"Sistema Nacional: {method} {path} falló ({exc})") from exc
+
+    def _llamar_sin_servicio(self, method: str, path: str, token: str | None = None, **kwargs) -> dict | list:
+        """Llamada sin la cuenta de servicio (registro público o token de la ONG); conserva el status y el detail."""
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        try:
+            resp = requests.request(method, f"{self.base_url}{path}", timeout=self.timeout, headers=headers, **kwargs)
+        except requests.RequestException as exc:
+            raise NacionalError(f"Sistema Nacional: {method} {path} falló ({exc})") from exc
+        if not resp.ok:
+            try:
+                detalle = resp.json().get("detail")
+            except (ValueError, AttributeError):
+                detalle = None
+            raise NacionalError(str(detalle) if detalle else f"Sistema Nacional: {method} {path} falló ({resp.status_code})",
+                                resp.status_code)
+        try:
+            return resp.json()
+        except ValueError as exc:
+            raise NacionalError(f"Sistema Nacional: {method} {path} devolvió una respuesta inválida",
+                                resp.status_code) from exc
+
+    def registrar_ong(self, *, ong_nombre: str, cuit: str, nombre: str, username: str, password: str) -> str:
+        """Alta pública de una ONG con su primer usuario (POST /ongs, sin token de servicio). Devuelve su access_token."""
+        cuerpo = self._llamar_sin_servicio("POST", "/ongs", json={
+            "ong_nombre": ong_nombre, "cuit": cuit, "nombre": nombre, "username": username, "password": password})
+        try:
+            return cuerpo["access_token"]
+        except (KeyError, TypeError) as exc:
+            raise NacionalError("Sistema Nacional: respuesta inválida al registrar la ONG") from exc
+
+    def declarar_inventario(self, cuit: str, token: str, items: list[dict]) -> list[dict]:
+        """Declara el inventario de la ONG (PUT /ongs/{cuit}/inventario) con el token de la propia ONG."""
+        return self._llamar_sin_servicio("PUT", f"/ongs/{cuit}/inventario", token=token, json={"items": items})
 
     def tipos_recurso(self) -> list[dict]:
         """Catálogo: [{codigo, nombre, categoria, unidad, certificacion_requerida}]."""

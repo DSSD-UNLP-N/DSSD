@@ -150,3 +150,48 @@ def test_get_nacional_usa_la_cuenta_de_servicio_de_la_configuracion():
     s = get_settings()
     c = get_nacional(s)
     assert (c.username, c.password) == (s.nacional_service_username, s.nacional_service_password)
+
+
+# --- Alta de ONG: registro público e inventario con el token de la ONG ---------------------------------------------
+
+CUIT_ONG = "30-71234567-8"
+
+
+def _registrar(cliente=None):
+    return (cliente or _cliente()).registrar_ong(
+        ong_nombre="Ong Nueva", cuit=CUIT_ONG, nombre="Ana", username="ana", password="clave-larga")
+
+
+@responses.activate
+def test_registrar_ong_no_usa_token_de_servicio():
+    responses.add(responses.POST, f"{BASE}/ongs", status=201,
+                  json={"access_token": "t1", "token_type": "bearer", "user": {}})
+    assert _registrar() == "t1"
+    assert [c.request.url for c in responses.calls] == [f"{BASE}/ongs"]
+    assert _auth(0) is None
+
+
+@responses.activate
+def test_registrar_ong_409_conserva_status():
+    responses.add(responses.POST, f"{BASE}/ongs", status=409, json={"detail": "El CUIT ya está registrado"})
+    with pytest.raises(NacionalError) as exc:
+        _registrar()
+    assert exc.value.status == 409
+    assert "CUIT" in str(exc.value)
+
+
+@responses.activate
+def test_registrar_ong_timeout_status_none():
+    responses.add(responses.POST, f"{BASE}/ongs", body=requests.ConnectTimeout())
+    with pytest.raises(NacionalError) as exc:
+        _registrar()
+    assert exc.value.status is None
+
+
+@responses.activate
+def test_declarar_inventario_manda_bearer_de_la_ong():
+    responses.add(responses.PUT, f"{BASE}/ongs/{CUIT_ONG}/inventario", json=[])
+    items = [{"tipo_recurso": "RACION_ALIMENTO", "cantidad_total": 0}]
+    assert _cliente().declarar_inventario(CUIT_ONG, "t1", items) == []
+    assert _auth(0) == "Bearer t1"
+    assert json.loads(responses.calls[0].request.body) == {"items": items}
