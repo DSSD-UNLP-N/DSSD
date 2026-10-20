@@ -112,3 +112,14 @@ def test_preparar_entorno_no_se_aplica_dos_veces(jwt_bos):
     nube = preparar_entorno.nacional(_proc(jwt_bos), "https://api.ejemplo.com", "otra-clave")
     with pytest.raises(ValueError):
         preparar_entorno.nacional(nube, "https://otra.com", "x")
+
+
+def test_el_bos_de_la_nube_es_el_local_apuntando_a_render():
+    nube_bos = BOS.with_name("entrega42_nube.bos")
+    if not nube_bos.exists():
+        pytest.skip("no está entrega42_nube.bos")
+    local, nube = _proc(BOS), _proc(nube_bos)
+    assert "localhost:8002" not in nube and "change-me" not in nube
+    assert nube.count("&quot;https://rescuesync-nacional.onrender.com/") == 6
+    assert re.sub(r"https://rescuesync-nacional\.onrender\.com|http://localhost:8002", "X", re.sub(r"password: &quot;[^&]+&quot;", "P", nube)) == \
+        re.sub(r"https://rescuesync-nacional\.onrender\.com|http://localhost:8002", "X", re.sub(r"password: &quot;[^&]+&quot;", "P", local))

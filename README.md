@@ -72,11 +72,11 @@ La API Nacional está desplegada en Render (Docker construido desde `nacional/Do
 
 1. **App:** en `backend/.env`: `NACIONAL_BASE_URL=https://rescuesync-nacional.onrender.com`, `NACIONAL_SERVICE_PASSWORD=<APP_SERVICE_PASSWORD>` y
    `NACIONAL_TIMEOUT_SECONDS=90` (el plan gratis duerme tras 15 min y la primera llamada tarda ~30-60 s).
-2. **Bonita:** los conectores llevan escrita la URL y la clave de `bonita-service`. Generar el `.bos` para la nube (no se sube al repo, lleva la clave):
+2. **Bonita:** importar `entrega-3/entrega42_nube.bos` en Studio como arriba (ya trae la URL de Render y la clave de `bonita-service`, no hay que generar nada).
+   Para volver a local, reimportar `entrega42_local.bos`. Si cambian la URL o la clave de la API, se rehace con:
    ```bash
    NACIONAL_BONITA_PASSWORD=<BONITA_SERVICE_PASSWORD> python bonita/scripts/preparar_entorno.py entrega-3/entrega42_local.bos entrega-3/entrega42_nube.bos --nacional https://rescuesync-nacional.onrender.com
    ```
-   e importarlo en Studio como arriba. Para volver a local, reimportar `entrega42_local.bos`.
 3. Despertar el servicio antes de empezar: `curl https://rescuesync-nacional.onrender.com/health`.
 
 Verificar un despliegue de la API (72 chequeos, no deja datos): `python nacional/scripts/verificar_despliegue.py <URL> --clave <BONITA_SERVICE_PASSWORD>`.
@@ -108,7 +108,7 @@ nacional/       API Nacional (FastAPI): JWT, reservas, cierres, Dockerfile, scri
 bonita/         Herramientas: cliente REST y scripts que editan el .bos (conectores de cierre, login JWT, preparar_entorno.py).
 entrega-1/      Entrega 1 (entregada): modelo BPM inicial e informe.
 entrega-2/      Entrega 2 (entregada): RescueSync.bos, ACME.xml (organización) y bitácora de cambios en Bonita.
-entrega-3/      Entrega 3: entrega42_local.bos (proceso vigente), ficha de entrega y Swagger.
+entrega-3/      Entrega 3: entrega42_local.bos y entrega42_nube.bos (el proceso vigente, local y contra la API de Render), ficha de entrega y Swagger.
 render.yaml     Blueprint de Render para la API Nacional (referencia; el servicio vivo se creó desde el repo).
 docker-compose.yml   Postgres 16 para el backend (opcional).
 ```
