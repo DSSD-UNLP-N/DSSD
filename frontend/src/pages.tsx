@@ -1,7 +1,7 @@
 import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { api, type Emergencia, type Meta, type Notificacion, type Oferta, type Rol, type TipoRecurso } from "./api";
+import { api, type AltaOngIn, type Emergencia, type Meta, type Notificacion, type Oferta, type Rol, type TipoRecurso } from "./api";
 import { useAuth } from "./auth";
 import { FlowBubbles } from "./FlowBubbles";
 import { PageHeader } from "./PageHeader";
@@ -580,6 +580,180 @@ export function NuevaEmergenciaPage() {
               </ol>
             </div>
           </aside>
+        </div>
+      </motion.div>
+    </Shell>
+  );
+}
+
+type RubroRow = { key: number; tipo: string; cantidad: string };
+
+export function AltaOngPage() {
+  const [tipos, setTipos] = useState<TipoRecurso[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [ok, setOk] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [nextKey, setNextKey] = useState(1);
+  const [rows, setRows] = useState<RubroRow[]>([{ key: 0, tipo: "", cantidad: "0" }]);
+
+  useEffect(() => {
+    void api
+      .tiposRecursoAlta()
+      .then(setTipos)
+      .catch((err) => setError(err instanceof Error ? err.message : "No se pudo cargar el catálogo"));
+  }, []);
+
+  function updateRow(key: number, patch: Partial<RubroRow>) {
+    setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  }
+
+  function addRow() {
+    setRows((rs) => [...rs, { key: nextKey, tipo: "", cantidad: "0" }]);
+    setNextKey((k) => k + 1);
+  }
+
+  function removeRow(key: number) {
+    setRows((rs) => (rs.length > 1 ? rs.filter((r) => r.key !== key) : rs));
+  }
+
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const fd = new FormData(form);
+    if (rows.some((r) => !r.tipo)) {
+      setError("Elegí un tipo de recurso en cada rubro.");
+      return;
+    }
+    const body: AltaOngIn = {
+      ong_nombre: String(fd.get("ong_nombre")).trim(),
+      cuit: String(fd.get("cuit")).trim(),
+      nombre: String(fd.get("nombre")).trim(),
+      username: String(fd.get("username")).trim(),
+      password: String(fd.get("password")),
+      rubros: rows.map((r) => ({
+        tipo_recurso: r.tipo,
+        cantidad_total: Math.max(0, Math.floor(Number(r.cantidad) || 0)),
+      })),
+    };
+    setBusy(true);
+    setError(null);
+    try {
+      await api.altaOng(body);
+      setOk(true);
+      form.reset();
+      setRows([{ key: nextKey, tipo: "", cantidad: "0" }]);
+      setNextKey((k) => k + 1);
+    } catch (err) {
+      setOk(false);
+      setError(err instanceof Error ? err.message : "Error al registrar la ONG");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Shell>
+      <motion.div {...fade}>
+        <PageHeader
+          to="/login"
+          label="Ir al ingreso"
+          kicker="ONG"
+          title="Alta de ONG"
+          lede="Registrá tu organización y declará los rubros con los que cuenta para responder a emergencias."
+        />
+        {ok && (
+          <div className="alert ok">
+            ONG registrada. Ya podés ingresar con tu usuario. <Link to="/login">Ir al ingreso</Link>
+          </div>
+        )}
+        {error && <div className="alert">{error}</div>}
+        <div className="form-layout">
+          <form className="panel" onSubmit={onSubmit}>
+            <div className="field">
+              <label htmlFor="ong_nombre">Nombre de la ONG</label>
+              <input id="ong_nombre" name="ong_nombre" minLength={2} maxLength={120} required />
+            </div>
+            <div className="field-row two">
+              <div className="field">
+                <label htmlFor="cuit">CUIT</label>
+                <input id="cuit" name="cuit" placeholder="30-12345678-9" pattern="\d{2}-?\d{8}-?\d" required />
+              </div>
+              <div className="field">
+                <label htmlFor="nombre">Persona de contacto</label>
+                <input id="nombre" name="nombre" minLength={2} maxLength={120} required />
+              </div>
+            </div>
+            <div className="field-row two">
+              <div className="field">
+                <label htmlFor="username">Usuario</label>
+                <input id="username" name="username" minLength={3} maxLength={60} autoComplete="off" required />
+              </div>
+              <div className="field">
+                <label htmlFor="password">Contraseña</label>
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  minLength={8}
+                  maxLength={128}
+                  autoComplete="new-password"
+                  required
+                />
+              </div>
+            </div>
+            <h3>Rubros</h3>
+            {rows.map((r, i) => (
+              <div className="field-row two" key={r.key}>
+                <div className="field">
+                  <label htmlFor={`rubro-${r.key}`}>Tipo de recurso</label>
+                  <select
+                    id={`rubro-${r.key}`}
+                    value={r.tipo}
+                    onChange={(e) => updateRow(r.key, { tipo: e.target.value })}
+                    required
+                  >
+                    <option value="">Elegí un tipo</option>
+                    {tipos.map((t) => (
+                      <option
+                        key={t.codigo}
+                        value={t.codigo}
+                        disabled={rows.some((o) => o.key !== r.key && o.tipo === t.codigo)}
+                      >
+                        {t.nombre} ({t.unidad})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor={`cant-${r.key}`}>Cantidad total</label>
+                  <input
+                    id={`cant-${r.key}`}
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={r.cantidad}
+                    onChange={(e) => updateRow(r.key, { cantidad: e.target.value })}
+                    required
+                  />
+                  {rows.length > 1 && (
+                    <button className="btn btn-ghost" type="button" onClick={() => removeRow(r.key)}>
+                      Quitar rubro {i + 1}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+            <div className="form-actions">
+              <button className="btn btn-ghost" type="button" onClick={addRow} disabled={rows.length >= tipos.length}>
+                Agregar rubro
+              </button>
+            </div>
+            <div className="form-actions">
+              <button className="btn btn-primary" disabled={busy}>
+                {busy ? "Registrando…" : "Registrar ONG"}
+              </button>
+            </div>
+          </form>
         </div>
       </motion.div>
     </Shell>

@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./auth";
 import {
+  AltaOngPage,
   DetallePage,
   EmergenciasPage,
   HomePage,
@@ -46,6 +47,7 @@ export default function App() {
             </RequireAuth>
           }
         />
+        <Route path="/alta-ong" element={<AltaOngPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AuthProvider>
