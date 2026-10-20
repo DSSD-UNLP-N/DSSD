@@ -29,19 +29,32 @@ Ficha de la Entrega 3 (URLs, Swagger, repositorio y Dockerfile): [`entrega-3/ENT
   entra de nuevo en cada tarea de servicio (conector `loginNacional`). Las ONGs y sus altas (`POST /ongs`) también pasan por JWT.
 - Con Postgres, la API Nacional **no arranca** si `JWT_SECRET`, `BONITA_SERVICE_PASSWORD` o `APP_SERVICE_PASSWORD` tienen el valor de ejemplo.
 
-## Puesta en marcha local (de cero)
+## Puesta en marcha
 
-Requisitos: Bonita Studio Community 10.4.0, Python 3.12+, Node 20+, Chrome (solo para las pruebas por interfaz).
+Requisitos: Bonita Studio Community 10.4.0, Python 3.12+, Node 20+, Chrome (solo para las pruebas por interfaz). Bonita y la app siempre corren en la
+PC; lo que cambia es **dónde está la API Nacional**. Elegí una de las dos y seguí los 4 pasos con la columna que corresponda:
+
+| | **Nube** (la de la entrega) | **Local** |
+|---|---|---|
+| API Nacional | https://rescuesync-nacional.onrender.com (ya desplegada, no se instala nada) | `nacional/` en `:8002` |
+| `.bos` de Bonita | `entrega-3/entrega42_nube.bos` | `entrega-3/entrega42_local.bos` |
+| Configuración de la app | `backend/.env.nube` | `backend/.env.example` |
+
+No se pueden tener los dos `.bos` activos a la vez en Studio (mismo nombre y versión de proceso): se importa uno, y para cambiar se reimporta el otro.
 
 ### 1. Bonita Studio
-1. Abrir Studio → **Archivo → Importar** → `entrega-3/entrega42_local.bos`.
+1. **Archivo → Importar** → el `.bos` de la tabla.
 2. Editor de la **Organización** → importar `entrega-2/ACME.xml` → **Desplegar** (botón del editor; sin esto falla con "Actor … does not contain any members").
 3. Sobre el proceso `Gestion Integral de la Emergencia`: **Ejecutar**. Cada Ejecutar reinicia el motor y borra los casos.
 4. Comprobar `http://localhost:8080/bonita` (técnico `walter.bates` / `bpm`; de prueba `operador.municipal`, `coordinador.regional`, `ong.cruzroja`, `ong.bomberos`, todos `bpm`).
 
 Si algo falla al desplegar, el motivo real está en `<Studio>\workspace\tomcat\server\logs\bonita.log`.
 
-### 2. API Nacional (`:8002`)
+### 2. API Nacional
+**Nube:** no hay nada que levantar. El plan gratis de Render duerme el servicio tras 15 min sin uso y la primera llamada tarda 30-60 s: antes de empezar,
+abrir `https://rescuesync-nacional.onrender.com/health` (o `curl` a esa URL) hasta que responda `ok`.
+
+**Local:**
 ```bash
 cd nacional
 python -m venv .venv && .venv\Scripts\activate        # Linux/Mac: source .venv/bin/activate
@@ -49,38 +62,36 @@ pip install -r requirements.txt
 python -m alembic upgrade head && python -m app.seed   # SQLite por defecto (nacional.db); crea ONGs, stock y las cuentas de servicio
 uvicorn app.main:app --port 8002
 ```
-Los valores por defecto (`change-me`, `change-me-app`) son solo para local y coinciden con los del `.bos`. Swagger: http://localhost:8002/docs.
+Los valores por defecto (`change-me`, `change-me-app`) son solo para local y coinciden con los del `.bos` local. Swagger: http://localhost:8002/docs.
 
-### 3. App web (`:8001`) y front (`:5173`)
+### 3. App web (`:8001`)
 ```bash
 cd backend
 python -m venv .venv && .venv\Scripts\activate
 pip install -r requirements.txt
-copy .env.example .env                                 # Linux/Mac: cp
-# en .env: DATABASE_URL=sqlite:///./dev.db  (o Postgres, ver más abajo)
-python -m alembic upgrade head && python -m app.seed
+copy .env.nube .env                                    # nube. Local: copy .env.example .env   (Linux/Mac: cp)
+python -m alembic upgrade head && python -m app.seed   # SQLite (dev.db); para Postgres ver backend/README.md
 uvicorn app.main:app --port 8001
 ```
+`.env.nube` ya trae la URL de Render, la clave de la cuenta `app-service` y `NACIONAL_TIMEOUT_SECONDS=90` (por el despertar del plan gratis); no hay que generar
+ni editar nada. Si se cambia el `.env` con la app corriendo, reiniciarla.
+
+### 4. Front (`:5173`)
 ```bash
-cd frontend && npm install && npm run dev              # http://localhost:5173 (Vite reenvía /api al backend)
+cd frontend && npm install && npm run dev              # Vite reenvía /api al backend
 ```
-Con todo arriba: entrar como `operador.municipal` en http://localhost:5173 y registrar una emergencia.
+Con todo arriba: entrar a http://localhost:5173 como `operador.municipal` (clave `demo1234`) y registrar una emergencia.
 
-## Usar la API Nacional de la nube
-
-La API Nacional está desplegada en Render (Docker construido desde `nacional/Dockerfile`, rama `dev`, Postgres). Para que la app y Bonita la usen:
-
-1. **App:** copiar `backend/.env.nube` a `backend/.env` (`copy backend\.env.nube backend\.env`; ya trae la URL de Render, la clave de `app-service`, el timeout de 90 s y SQLite). Reiniciar la app.
-   El timeout alto es por el plan gratis, que duerme tras 15 min y tarda ~30-60 s en la primera llamada. Para volver a local: `copy backend\.env.example backend\.env`.
-2. **Bonita:** importar `entrega-3/entrega42_nube.bos` en Studio como arriba (ya trae la URL de Render y la clave de `bonita-service`, no hay que generar nada).
-   Para volver a local, reimportar `entrega42_local.bos`. Si cambian la URL o la clave de la API, se rehace con:
-   ```bash
-   NACIONAL_BONITA_PASSWORD=<BONITA_SERVICE_PASSWORD> python bonita/scripts/preparar_entorno.py entrega-3/entrega42_local.bos entrega-3/entrega42_nube.bos --nacional https://rescuesync-nacional.onrender.com
-   ```
-3. Despertar el servicio antes de empezar: `curl https://rescuesync-nacional.onrender.com/health`.
-
-Verificar un despliegue de la API (72 chequeos, no deja datos): `python nacional/scripts/verificar_despliegue.py <URL> --clave <BONITA_SERVICE_PASSWORD>`.
-Las dos contraseñas y `JWT_SECRET` se cargan como variables de entorno del servicio en Render, que construye `nacional/Dockerfile` desde la rama `dev` (`render.yaml` es el blueprint de referencia).
+### Notas de la nube
+- Cada cierre de emergencia **descuenta stock real** en la base de Render y no hay reset automático (el seed es idempotente: no repone lo gastado). Si se agota,
+  se repone con `PUT /ongs/{cuit}/inventario` desde Swagger (`/docs`, autenticado con `POST /login`).
+- Verificar un despliegue de la API (72 chequeos, no deja datos): `python nacional/scripts/verificar_despliegue.py <URL> --clave <BONITA_SERVICE_PASSWORD>`.
+- Si cambian la URL o la clave de la API, el `.bos` de la nube se rehace con:
+  ```bash
+  NACIONAL_BONITA_PASSWORD=<BONITA_SERVICE_PASSWORD> python bonita/scripts/preparar_entorno.py entrega-3/entrega42_local.bos entrega-3/entrega42_nube.bos --nacional https://rescuesync-nacional.onrender.com
+  ```
+- Render construye `nacional/Dockerfile` desde la rama `dev` y redespliega en cada commit; las dos contraseñas de servicio y `JWT_SECRET` son variables de entorno del
+  servicio (`render.yaml` es el blueprint de referencia).
 
 ## Pruebas
 
