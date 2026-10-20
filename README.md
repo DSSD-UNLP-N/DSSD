@@ -70,8 +70,8 @@ Con todo arriba: entrar como `operador.municipal` en http://localhost:5173 y reg
 
 La API Nacional está desplegada en Render (Docker construido desde `nacional/Dockerfile`, rama `dev`, Postgres). Para que la app y Bonita la usen:
 
-1. **App:** en `backend/.env`: `NACIONAL_BASE_URL=https://rescuesync-nacional.onrender.com`, `NACIONAL_SERVICE_PASSWORD=<APP_SERVICE_PASSWORD>` y
-   `NACIONAL_TIMEOUT_SECONDS=90` (el plan gratis duerme tras 15 min y la primera llamada tarda ~30-60 s).
+1. **App:** copiar `backend/.env.nube` a `backend/.env` (`copy backend\.env.nube backend\.env`; ya trae la URL de Render, la clave de `app-service`, el timeout de 90 s y SQLite). Reiniciar la app.
+   El timeout alto es por el plan gratis, que duerme tras 15 min y tarda ~30-60 s en la primera llamada. Para volver a local: `copy backend\.env.example backend\.env`.
 2. **Bonita:** importar `entrega-3/entrega42_nube.bos` en Studio como arriba (ya trae la URL de Render y la clave de `bonita-service`, no hay que generar nada).
    Para volver a local, reimportar `entrega42_local.bos`. Si cambian la URL o la clave de la API, se rehace con:
    ```bash
