@@ -17,17 +17,15 @@ backend/uvicorn.err
 # Informe de la entrega: se trabaja en local y no se versiona
 Entrega 2 - DSSD.pdf
 
-# .bos con la clave de la API Nacional en la nube (se genera con bonita/scripts/preparar_entorno.py)
-entrega-3/*_nube.bos
-
 # Documentación de trabajo de las entregas 3 en adelante (planes, estado, guías, capturas, .bos intermedios): queda solo en local.
-# Se versiona la ficha de cada entrega (ENTREGA.md) y el .bos vigente, que se nombra *_local.bos (ej. entrega42_local.bos).
+# Se versiona la ficha de cada entrega (ENTREGA.md) y los .bos vigentes, que se nombran *_local.bos y *_nube.bos (ej. entrega42_local.bos).
 entrega-[3-9]/*.md
 entrega-[3-9]/*.html
 !entrega-[3-9]/ENTREGA.md
 entrega-[3-9]/img/
 entrega-[3-9]/*.bos
 !entrega-[3-9]/*_local.bos
+!entrega-[3-9]/*_nube.bos
 
 # Python
 __pycache__/

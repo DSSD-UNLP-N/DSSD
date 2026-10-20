@@ -9,7 +9,7 @@ Los conectores de Bonita tienen escrita la dirección de la API Nacional (`http:
   clave               si hay --nacional, la clave de `bonita-service` se toma de la variable NACIONAL_BONITA_PASSWORD
                       (así no queda en el historial ni en el repositorio).
 
-No modifica el archivo de entrada. El `.bos` con la clave de la nube NO se sube al repositorio (`*_nube.bos` está en .gitignore).
+No modifica el archivo de entrada. `entrega-3/entrega42_nube.bos` ya está generado y versionado (con la clave de la API de la demo); este script sirve para rehacerlo si cambia la URL o la clave.
 
     python bonita/scripts/preparar_entorno.py <bos con los conectores de cierre y el login> entrega-3/entrega42_local.bos --estandar
     NACIONAL_BONITA_PASSWORD=... python bonita/scripts/preparar_entorno.py entrega-3/entrega42_local.bos entrega-3/entrega42_nube.bos \\
