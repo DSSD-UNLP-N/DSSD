@@ -424,7 +424,8 @@ def fase_timer(u: Ui, admin: BonitaClient, app: str, case_id: int, emergencia_id
     u.r.check(f"'{TAREA_TRAS_PUBLICAR}' se cerró sola", admin.find_task(case_id, TAREA_TRAS_PUBLICAR) is None)
     u.entrar(app, "ong.cruzroja")
     u.abrir(app, emergencia_id)
-    u.ve("ventana de ofertas cerró", "La ONG ve que la ventana cerró")
+    # «cerró» solo se muestra mientras la emergencia está CERRADA; apenas Bonita pide el consolidado pasa a EN_EVALUACION.
+    u.ve(re.compile("ventana de ofertas cerró|En evaluación", re.I), "La ONG ve que la ventana cerró (o que ya está en evaluación)")
     u.ve("Enviar oferta", "Ya no puede ofertar", visible=False)
     u.foto("ong-ventana-cerrada")
     u.salir()

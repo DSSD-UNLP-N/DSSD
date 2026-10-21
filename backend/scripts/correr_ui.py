@@ -33,6 +33,7 @@ import subprocess
 import sys
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import requests
@@ -82,10 +83,11 @@ def liberar_reservas() -> None:
 
     s = requests.Session()
     s.post("http://localhost:8001/api/auth/login", json={"username": "coordinador.regional", "password": DEMO_PASSWORD}, timeout=30)
-    for e in s.get("http://localhost:8001/api/emergencias", timeout=30).json():
-        for ronda in (1, 2, 3):
-            for cuit in ONGS:
-                post(f"{base}/adjudicaciones/emg-{e['id']}-r{ronda}-{cuit}/liberar", timeout=90)
+    # Solo donde puede haber una reserva: sin evaluar todavía (REGISTRADA, CONVOCATORIA) o ya cerrada (RESUELTA) no hay ninguna.
+    refs = [f"emg-{e['id']}-r{ronda}-{cuit}" for e in s.get("http://localhost:8001/api/emergencias", timeout=30).json()
+            if e["estado"] in ("CERRADA", "EN_EVALUACION", "ADJUDICACION", "EN_EJECUCION") for ronda in (1, 2) for cuit in ONGS]
+    with ThreadPoolExecutor(8) as pool:
+        list(pool.map(lambda ref: post(f"{base}/adjudicaciones/{ref}/liberar", timeout=90), refs))
 
 
 def correr(nombre: str, args: list[str], resultados: dict) -> None:
