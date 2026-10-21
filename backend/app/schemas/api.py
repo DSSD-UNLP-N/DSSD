@@ -149,7 +149,7 @@ class AltaOngIn(BaseModel):
     ong_nombre: str = Field(min_length=2, max_length=120)
     cuit: str = Field(pattern=r"^\d{2}-?\d{8}-?\d$")
     nombre: str = Field(min_length=2, max_length=120)
-    username: str = Field(min_length=3, max_length=60)
+    username: str = Field(min_length=3, max_length=60, pattern=r"^[A-Za-z0-9._-]+$")  # lo mismo que exige la API Nacional
     password: str = Field(min_length=8, max_length=128)
     rubros: list[RubroIn] = Field(min_length=1)
 

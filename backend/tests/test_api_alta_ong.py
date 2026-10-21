@@ -60,3 +60,8 @@ def test_tipos_recurso_publico(client, seeded, nacional):
     assert "PARAMEDICO" in [t["codigo"] for t in r.json()]
     nacional.caido = True
     assert client.get(f"{URL}/tipos-recurso").status_code == 503
+
+
+def test_alta_username_con_caracteres_que_la_api_nacional_rechaza_422(client, seeded, nacional):
+    for username in ("ana paz", "ana@mail", "ñandú"):
+        assert client.post(URL, json=_body(username=username)).status_code == 422, username
