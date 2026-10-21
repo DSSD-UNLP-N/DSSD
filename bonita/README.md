@@ -1,92 +1,48 @@
-# Automatizacion de Bonita para RescueSync
+# Bonita: herramientas del repo
 
-> **Desactualizado en un punto:** la organización que realmente se usa hoy es
-> `entrega-2/ACME.xml` (ACME editada de forma aditiva), no
-> `organizations/RescueSyncOrg.xml` de más abajo. Los pasos de instalación
-> completos y vigentes están en el `README.md` de la raíz del repo.
+Lo que hay alrededor del proceso `Gestion Integral de la Emergencia`. El diagrama en sí (lanes, tareas, timer, variables, actor
+mapping) se diseña en Bonita Studio Community 10.4.0; lo demás se automatiza desde acá. Cómo levantar todo:
+[`docs/instalacion-nube.md`](../docs/instalacion-nube.md) (por defecto) y [`docs/instalacion-local.md`](../docs/instalacion-local.md) (plan B).
 
-Este folder junta todo lo que se puede automatizar alrededor de Bonita
-Studio/Engine para la Entrega 2. Resumen de la investigacion (ver fuentes
-al final):
+## Qué `.bos` se usa
 
-- **No hay forma de automatizar el diseno del proceso** (crear variables,
-  mapear actores a lanes, configurar la expresion del timer) sin abrir
-  Bonita Studio. La herramienta que sí lo permite en teoria
-  (`BonitaStudioBuilder`, para generar `.bar` por linea de comandos) es
-  una feature de las ediciones Subscription -- no esta disponible en
-  Community, que es la que tenemos instalada.
-- Editar a mano el `.proc` (el XML interno del `.bos`, formato XMI/EMF de
-  Eclipse) es tecnicamente posible pero no tiene schema publico y no hay
-  forma de validar que Studio lo siga abriendo bien sin GUI -- no vale la
-  pena el riesgo para algo que en Studio son 5 minutos de trabajo con el
-  mouse.
-- Lo que SI es automatizable de punta a punta es todo lo que pasa
-  **despues** de que el proceso esta desplegado: login, arrancar
-  instancias, setear variables de un caso, consultar tareas -- eso es la
-  REST API de Bonita Engine, disponible en Community.
+| Archivo | Para qué |
+|---|---|
+| `entrega-3/entrega42_nube.bos` | Proceso vigente con los conectores apuntando a la API Nacional de Render. |
+| `entrega-3/entrega42_local.bos` | El mismo proceso con los conectores apuntando a `localhost:8002`. |
+| `entrega-2/RescueSync.bos` | Export de la Entrega 2: lo lee `backend/tests/test_bonita_contract.py` para comprobar el contrato de instanciación. |
 
-## Lo que queda manual en Studio (una sola vez, ~15-20 min)
+En Studio solo puede haber uno activo a la vez (mismo nombre y versión de proceso). Los dos vigentes se generaron con los
+scripts de abajo y `backend/tests/test_bonita_conectores_nacional.py` comprueba que el de la nube es el local apuntando a Render.
 
-La checklist detallada y con orden de dependencia ya esta en
-`entrega-1/contrato-instanciacion.md` (seccion 6) -- ese documento es la
-fuente de verdad congelada del contrato (10 variables, 4 inputs, 4
-operations, script del timer). No la duplico aca para que no queden dos
-versiones pisandose; si algo de este README no coincide con ese `.md`,
-gana el `.md`.
+## `scripts/`
 
-Un agregado a esa checklist: el mapeo de actores es por **grupo**, no por
-rol (`organizations/RescueSyncOrg.xml` ya viene con la jerarquia
-`/rescuesync/{municipio,coordinador,ong}` que pide el punto 6). La lane
-"Entidad Nacional / Sistema RescueSync" no necesita actor mapping: son
-todas `serviceTask`, las ejecuta el motor via conectores.
+Los scripts que editan el `.bos` trabajan sobre el XML interno (`.proc`, formato XMI) dentro del zip, no tocan el archivo de
+entrada y escriben uno nuevo para importar en Studio. Cada uno explica su uso en el docstring.
 
-**Antes de importar la organizacion nueva**, anota el usuario
-administrador/tecnico con el que Studio te deja entrar al Portal --
-Bonita solo permite una organizacion activa a la vez, asi que
-`RescueSyncOrg.xml` va a reemplazar a `ACME` por completo (sus usuarios
-tambien). Si el admin tecnico de Bonita es independiente de la
-organizacion (suele serlo), no deberia pasar nada, pero conviene
-verificarlo antes de perder acceso.
+| Script | Qué hace |
+|---|---|
+| `bonita_client.py` | Cliente REST de Bonita (login con el token CSRF, instanciar, tareas, variables) y una CLI mínima para instanciar un caso. La app tiene su propio cliente en `backend/app/integrations/bonita.py`. |
+| `agregar_conector_cierre.py` | Agrega los conectores de «Liberar Recursos y Notificar Cierre» y deja «Confirmar Finalizacion de Actividades» como tarea estándar. |
+| `agregar_login_nacional.py` | Agrega el conector `loginNacional` (JWT) antes de cada llamada a la API Nacional y la cabecera `Authorization: Bearer`. |
+| `preparar_entorno.py` | Cambia la URL de la API Nacional y la clave de `bonita-service` de un `.bos` (así se generó el de la nube a partir del local). |
+| `ver_conectores.py` | Muestra a qué URLs llama cada tarea de servicio de un `.bos`. |
 
-## `organizations/RescueSyncOrg.xml`
+## `organizations/`
 
-Organizacion lista para importar: grupo raiz `rescuesync` con 3 subgrupos
-(`municipio`, `coordinador`, `ong`) y 4 usuarios de prueba
-(`operador.municipal`, `coordinador.regional`, `ong.cruzroja`,
-`ong.bomberos`, todos con password `bpm`, rol generico `member` como en
-ACME). Hay dos ONGs para poder probar en serio la tarea multi-instancia
-"Confirmar Finalizacion de Actividades" (una instancia por ONG
-adjudicada) -- el checklist del contrato pide 1 por grupo como minimo,
-esta segunda es un agregado mio; borrala si no la queres. Estructura
-verificada contra el `ACME.xml` real que ya viene en el `.bos` (mismo
-schema `organization-xml-schema/1.1` y mismo patron `parentPath` para
-grupos anidados), asi que el formato es correcto.
+`RescueSyncOrg.xml` es una organización de referencia. **La que se usa es `entrega-2/ACME.xml`** (ACME editada de forma aditiva, con los
+grupos `/rescuesync/{municipio,coordinador,ong,auditoria}` y un usuario por perfil). Importarla y **Desplegarla** desde el editor de la
+organización; Bonita solo tiene una organización activa a la vez. Los cambios hechos a mano en Studio están en
+[`entrega-2/CAMBIOS-BONITA.md`](../entrega-2/CAMBIOS-BONITA.md).
 
-## `scripts/bonita_client.py`
+## Lo que solo se hace en Studio
 
-Cliente Python (`pip install requests`) que hace login con manejo del
-token CSRF (`X-Bonita-API-Token`), resuelve el `processDefinitionId`,
-arranca una instancia mandando los 4 inputs del contrato (seccion 1 y 5
-de `contrato-instanciacion.md`) y lista las tareas humanas abiertas.
-Tambien trae `set_case_variable(s)` para pisar a mano una variable
-interna durante una prueba (ej. forzar `coberturaCompleta=true` sin
-esperar al ServiceTask real, para probar la rama del gateway). Es el
-punto de partida para T-07/T-08/T-13.
+Crear o cambiar variables, lanes, el timer y el actor mapping (la edición Community no trae `BonitaStudioBuilder`). Después de cambiar
+el diagrama hay que exportar el `.bos`, y si cambia el contrato de instanciación actualizar `CONTRACT_INPUTS` en
+`backend/app/integrations/bonita.py`: el test del contrato avisa si no coinciden.
 
-**No fue probado contra un servidor real** porque no hay forma de correr
-Bonita desde esta sesion -- esta armado siguiendo la documentacion oficial
-de los endpoints, pero lo mas probable es que al correrlo contra tu
-instancia local aparezcan ajustes puntuales (nombres de campos, algun
-endpoint que cambio entre versiones). Eso es exactamente el trabajo de
-"pulir e investigar" que quieren hacer este finde -- corranlo, vean el
-error real, y lo ajustamos.
+## API REST de Bonita
 
-## Fuentes
-
-- [REST API Overview](https://documentation.bonitasoft.com/bonita/2021.2/api/rest-api-overview)
-- [Manage a process](https://documentation.bonitasoft.com/bonita/latest/api/manage-a-process)
-- [Automating build of artifacts outside the Studio](https://documentation.bonitasoft.com/bonita/2021.1/automating-builds) (BonitaStudioBuilder, Subscription only)
-- [CSRF security](https://documentation.bonitasoft.com/bonita/2022.2/security/csrf-security)
-- [Getting the X-Bonita-API-Token (foro)](https://community.bonitasoft.com/questions-and-answers/getting-x-bonita-api-token)
-- [Manage an organization](https://documentation.bonitasoft.com/bonita/latest/api/manage-an-organization)
-- [Organization overview](https://documentation.bonitasoft.com/bonita/latest/identity/organization-overview)
+Todo lo que pasa con el proceso desplegado (login, instanciar, tareas, variables) es la REST API del motor, disponible en Community:
+[REST API Overview](https://documentation.bonitasoft.com/bonita/latest/api/rest-api-overview) y
+[CSRF security](https://documentation.bonitasoft.com/bonita/latest/security/csrf-security).

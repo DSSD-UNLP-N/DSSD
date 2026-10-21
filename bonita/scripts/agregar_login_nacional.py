@@ -11,8 +11,8 @@ ofertas duran horas).
   Liberar Recursos y Notificar Cierre                           loginNacional → cerrarAdjudicaciones
 
 Clona el conector REST `evaluarOfertas` (así queda con la misma configuración que los demás) y cambia solo lo que difiere.
-Las URLs y la clave están escritas en los conectores igual que el resto (X-Api-Key, URLs de localhost): llevarlas a
-parámetros del proceso es el trabajo de «Local vs Production» (WP12). Para la nube hay que cambiar acá USUARIO y CLAVE.
+Las URLs y la clave están escritas en los conectores igual que el resto (X-Api-Key, URLs de localhost): para
+apuntar el `.bos` a otra API (la nube) se usa `preparar_entorno.py`, que cambia la URL y la clave.
 
 No modifica el archivo de entrada: escribe uno nuevo para importarlo en Studio (Archivo > Importar) y volver a ejecutar.
 Si una tarea ya tiene `loginNacional`, no hace nada. Se aplica sobre un .bos que ya tenga los conectores de cierre

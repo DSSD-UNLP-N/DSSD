@@ -1,5 +1,8 @@
 # Cambios manuales en Bonita Studio (rama `migracion-bonita`)
 
+> **Bitácora histórica de la Entrega 2.** Describe cómo estaba Bonita en ese momento (por ejemplo, la app entraba con `BONITA_TEST_PASSWORD`, variable que
+> ya no existe). Lo vigente está en el `README.md` de la raíz y en `docs/`.
+
 Bitácora de lo que se cambió a mano en Studio/motor y cómo deshacerlo. Studio no versiona
 el diagrama como texto, así que un rollback por git solo alcanza para `ACME.xml` y el `.bos`.
 El resto hay que revertirlo a mano con estos pasos.

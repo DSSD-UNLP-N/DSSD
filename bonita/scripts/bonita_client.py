@@ -31,8 +31,8 @@ import time
 
 import requests
 
-# Tipos Java segun entrega-1/contrato-instanciacion.md (10 variables, es la
-# fuente de verdad congelada -- no el .bpmn/.proc, que quedo desactualizado).
+# Tipos Java de las variables del proceso (el contrato de instanciacion esta en
+# CONTRACT_INPUTS de backend/app/integrations/bonita.py y lo comprueba un test contra el .bos).
 VARIABLE_TYPES = {
     "emergenciaId": "java.lang.Long",
     "municipioId": "java.lang.Long",
@@ -100,7 +100,7 @@ class BonitaClient:
     def start_case(self, process_definition_id: str, contract_inputs: dict) -> str:
         """
         POST /API/bpm/process/{id}/instantiation
-        Segun el contrato congelado en entrega-1/contrato-instanciacion.md,
+        Segun el contrato de instanciacion del proceso,
         Studio va a tener 4 operations "Set variable" que copian estos 4
         inputs del contrato a las variables homonimas -- por eso se mandan
         directo en el body de instanciacion, no via caseVariable despues.
