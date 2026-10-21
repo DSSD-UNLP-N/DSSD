@@ -147,3 +147,30 @@ def test_evaluar_con_un_pedido_coherente_sigue_reservando(client):
 def test_evaluar_rechaza_ids_y_cantidades_fuera_de_rango(client):
     assert _evaluar(client, emergencia=PASADO_DE_INT32).status_code == 422
     assert _evaluar(client, lotes=({**LOTE, "cantidad": PASADO_DE_INT32},)).status_code == 422
+
+
+# --- Lo que Postgres rechazaría con 500 y SQLite deja pasar ---
+
+def test_un_caracter_nul_en_un_texto_se_rechaza_con_422(client):
+    assert client.post("/cierres", json={"cuit": CRUZ_ROJA, "referencia": "a\u0000b"}).status_code == 422
+    assert client.post("/login", json={"username": "a\u0000b", "password": "x"}).status_code == 422
+    assert client.get("/recursos/disponibilidad", params={"tipo_recurso": "A\u0000"}).status_code == 422
+    r = client.post("/validaciones", json={"gravedad": "MEDIO", "items": [{"cuit": CRUZ_ROJA, "tipo_recurso": "A\u0000", "cantidad": 1}]})
+    assert r.status_code == 422
+
+
+def test_un_cuerpo_con_nan_da_422_y_no_500(client):
+    r = client.post("/validaciones", content=b"NaN", headers={"Content-Type": "application/json"})
+    assert r.status_code == 422
+
+
+def test_el_id_de_un_cierre_pasado_de_int32_da_422(client):
+    assert client.get(f"/cierres/{PASADO_DE_INT32}").status_code == 422
+    assert client.get("/cierres/0").status_code == 422
+
+
+def test_el_cuit_solo_admite_digitos_ascii(client):
+    arabes = "٣٠-٥٤٦٦٦٥٤٤-٥"
+    r = client.post("/validaciones", json={"gravedad": "MEDIO", "items": [{"cuit": arabes, "tipo_recurso": "FRAZADA", "cantidad": 1}]})
+    assert r.status_code == 422
+    assert client.post("/ongs", json=_registro(cuit=arabes)).status_code == 422
