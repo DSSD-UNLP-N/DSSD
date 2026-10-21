@@ -1,10 +1,14 @@
 """Verifica un despliegue de la API Nacional por HTTP: catálogo, fichas, disponibilidad y las reglas de
-validación de ofertas. No deja datos modificados: lecturas, `POST /validaciones` (no guarda nada), `PUT` que
-fallan antes de escribir y, en la sección R, una reserva que se libera al final. Espera los datos del seed
-(app/seed.py) sin nada comprometido.
+validación de ofertas. Recorre los 19 endpoints. No deja datos modificados: lecturas, `POST /validaciones` (no guarda
+nada), `PUT` que fallan antes de escribir y reservas, cierres y una adjudicación directa que se liberan al final.
+Espera los datos del seed (app/seed.py) sin nada comprometido; puede haber más ONGs registradas.
+
+Con `--crear-ong` suma el caso feliz de `POST /ongs`, que registra una ONG de verificación y **la deja en la base** (no hay
+forma de borrarla desde la API): usarlo a propósito, no en cada corrida.
 
     python scripts/verificar_despliegue.py https://sistema-nacional-latest.onrender.com --clave <BONITA_SERVICE_PASSWORD>
     python scripts/verificar_despliegue.py http://localhost:8002
+    python scripts/verificar_despliegue.py <URL> --clave <BONITA_SERVICE_PASSWORD> --crear-ong
 
 La API exige JWT: entra como la cuenta de servicio de Bonita (por defecto `bonita-service` con la clave de ejemplo, que
 sirve contra una API local; contra la nube pasar `--clave` o la variable NACIONAL_VERIFY_PASSWORD). Para las pruebas de
@@ -72,6 +76,7 @@ def main() -> int:
     ap.add_argument("url", nargs="?", default="http://localhost:8002")
     ap.add_argument("--usuario", default=os.environ.get("NACIONAL_VERIFY_USER", "bonita-service"))
     ap.add_argument("--clave", default=os.environ.get("NACIONAL_VERIFY_PASSWORD", "change-me"))
+    ap.add_argument("--crear-ong", action="store_true", help="registra una ONG de verificación (queda en la base)")
     args = ap.parse_args()
     v = Verificador(args.url, args.usuario, args.clave)
     print(f"API Nacional en {v.base}")
@@ -85,8 +90,10 @@ def main() -> int:
     rutas = set(api["paths"]) if status == 200 else set()
     esperadas = {"/tipos-recurso", "/certificaciones", "/ongs", "/ongs/{cuit}", "/ongs/{cuit}/inventario",
                  "/recursos/disponibilidad", "/validaciones", "/evaluaciones", "/login",
-                 "/adjudicaciones/{referencia}/confirmar", "/adjudicaciones/{referencia}/liberar", "/cierres", "/cierres/lote"}
-    v.check("Swagger expone catálogo, inventario, validación, reservas y cierre", esperadas <= rutas, sorted(esperadas - rutas))
+                 "/adjudicaciones/{referencia}/confirmar", "/adjudicaciones/{referencia}/liberar", "/cierres", "/cierres/lote",
+                 "/adjudicaciones", "/adjudicaciones/resolucion", "/cierres/{cierre_id}", "/ongs/{cuit}/cierres", "/health"}
+    v.check("Swagger expone los 19 endpoints (catálogo, inventario, validación, reservas, adjudicación y cierre)",
+            esperadas <= rutas, sorted(esperadas - rutas))
     print(f"     endpoints: {', '.join(sorted(rutas))}")
 
     print("\n== A0. Autenticación (JWT)")
@@ -126,7 +133,9 @@ def main() -> int:
     print("\n== A4-A5. ONGs y fichas")
     _, todas = v.pedir("GET", "/ongs")
     _, habilitadas = v.pedir("GET", "/ongs?estado=HABILITADA")
-    v.check("3 ONGs registradas, 2 habilitadas", (len(todas), len(habilitadas)) == (3, 2), (len(todas), len(habilitadas)))
+    cuits_todas, cuits_hab = {o["cuit"] for o in todas}, {o["cuit"] for o in habilitadas}
+    v.check("Están las 3 ONGs del seed (puede haber más registradas), 2 de ellas habilitadas",
+            {CRUZ_ROJA, BOMBEROS, SUSPENDIDA} <= cuits_todas and {CRUZ_ROJA, BOMBEROS} <= cuits_hab, (len(todas), len(habilitadas)))
     v.check("La suspendida no figura entre las habilitadas", SUSPENDIDA not in {o["cuit"] for o in habilitadas})
     v.check("Estado inválido → 422", v.pedir("GET", "/ongs?estado=NOSE")[0] == 422)
     _, cruz = v.pedir("GET", f"/ongs/{CRUZ_ROJA}")
@@ -146,10 +155,11 @@ def main() -> int:
 
     print("\n== A6. Disponibilidad global")
     _, disp = v.pedir("GET", "/recursos/disponibilidad?tipo_recurso=PARAMEDICO")
-    v.check("Paramédicos: 10 disponibles (4 + 6), desglosados por ONG",
-            disp[0]["disponible"] == 10 and {o["cuit"] for o in disp[0]["por_ong"]} == {CRUZ_ROJA, BOMBEROS}, disp)
+    v.check("Paramédicos: al menos 10 disponibles (4 + 6 del seed), desglosados por ONG",
+            disp[0]["disponible"] >= 10 and {CRUZ_ROJA, BOMBEROS} <= {o["cuit"] for o in disp[0]["por_ong"]}, disp)
     _, raciones = v.pedir("GET", "/recursos/disponibilidad?tipo_recurso=RACION_ALIMENTO")
-    v.check("Raciones: la ONG suspendida no suma (5000, no 5800)", raciones[0]["cantidad_total"] == 5000, raciones)
+    v.check("Raciones: la ONG suspendida no suma ni aparece en el desglose",
+            SUSPENDIDA not in {o["cuit"] for o in raciones[0]["por_ong"]} and raciones[0]["cantidad_total"] >= 5000, raciones)
     v.check("Tipo inexistente → 404", v.pedir("GET", "/recursos/disponibilidad?tipo_recurso=NADA")[0] == 404)
 
     print("\n== A7. PUT de inventario: solo la propia ONG, y falla antes de escribir")
@@ -293,6 +303,11 @@ def main() -> int:
     status, lista = v.pedir("GET", f"/ongs/{CRUZ_ROJA}/cierres")
     v.check("C6 El cierre queda en GET /ongs/{cuit}/cierres",
             status == 200 and any(c["id"] == cie["id"] for c in lista), (status, lista))
+    status, uno_cierre = v.pedir("GET", f"/cierres/{cie['id']}")
+    v.check("C6b GET /cierres/{id} devuelve el cierre informado",
+            status == 200 and (uno_cierre["id"], uno_cierre["cuit"], uno_cierre["referencia"]) == (cie["id"], CRUZ_ROJA, ref3), (status, uno_cierre))
+    v.check("C6c Un cierre que no existe → 404", v.pedir("GET", "/cierres/999999999")[0] == 404)
+    v.check("C6d Una ONG no consulta cierres → 403", v.pedir("GET", f"/cierres/{cie['id']}", token=ong)[0] == 403)
     lote = emergencia + 4
     v.pedir("POST", "/evaluaciones", {**pedido, "emergencia_id": lote})
     refs = [f"emg-{lote}-r1-{CRUZ_ROJA}", f"emg-{lote}-r1-{BOMBEROS}"]
@@ -306,6 +321,75 @@ def main() -> int:
     status, otra = v.pedir("POST", "/cierres/lote", cuerpo_lote)
     v.check("C8 Repetir el lote devuelve los mismos cierres, sin restar de nuevo",
             status == 200 and [c["id"] for c in otra] == [c["id"] for c in cerrados] and comprometidos() == (0, 0))
+
+    print("\n== D. Adjudicación directa (POST /adjudicaciones): compromete y se libera (deja el inventario como estaba)")
+
+    def comprometido_seed() -> int:
+        return sum(i["cantidad_comprometida"] for c in (CRUZ_ROJA, BOMBEROS, SUSPENDIDA)
+                   for i in v.pedir("GET", f"/ongs/{c}")[1]["inventario"])
+
+    directa = f"verif-{emergencia}-directa"
+
+    def cuerpo_d(ong_id: int, inv_id: int, cantidad: int = 1, ref: str = directa) -> dict:
+        return {"referencia_id": ref, "ong_id": ong_id, "emergencia_id": emergencia + 5,
+                "items": [{"inventario_id": inv_id, "cantidad": cantidad}]}
+
+    previo = comprometido_seed()
+    hallado = None
+    # ong_id e inventario_id son ids internos que ningún endpoint publica: se buscan entre los primeros (400 = no coincide, 409 = sin stock).
+    for ong_id in range(1, 6):
+        for inv_id in range(1, 41):
+            status, adj = v.pedir("POST", "/adjudicaciones", cuerpo_d(ong_id, inv_id))
+            if status == 201:
+                hallado = (ong_id, inv_id, adj)
+                break
+            if status not in (400, 409):
+                break
+        if hallado:
+            break
+    v.check("D1 Una ONG no adjudica → 403 y sin token → 401",
+            v.pedir("POST", "/adjudicaciones", cuerpo_d(1, 1, ref="verif-sin-permiso"), token=ong)[0] == 403
+            and v.pedir("POST", "/adjudicaciones", cuerpo_d(1, 1, ref="verif-sin-permiso"), token=None)[0] == 401)
+    v.check("D2 Adjudicar compromete lo pedido (201, ADJUDICADA)",
+            hallado is not None and hallado[2]["estado"] == "ADJUDICADA" and hallado[2]["referencia_id"] == directa
+            and comprometido_seed() == previo + 1, hallado)
+    if hallado:
+        ong_id, inv_id, adj = hallado
+        status, otra = v.pedir("POST", "/adjudicaciones", cuerpo_d(ong_id, inv_id))
+        v.check("D3 Repetir la referencia devuelve la misma (200) sin comprometer otra vez",
+                status == 200 and otra["id"] == adj["id"] and comprometido_seed() == previo + 1, (status, otra))
+        v.check("D4 Pedir más de lo disponible → 409 y no compromete nada",
+                v.pedir("POST", "/adjudicaciones", cuerpo_d(ong_id, inv_id, 10**9, ref=directa + "-de-mas"))[0] == 409
+                and comprometido_seed() == previo + 1)
+        v.check("D5 Un inventario que no es de esa ONG o no existe → 400",
+                v.pedir("POST", "/adjudicaciones", cuerpo_d(ong_id, 10**6, ref=directa + "-inexistente"))[0] == 400)
+        v.check("D6 El mismo inventario dos veces en un pedido → 400",
+                v.pedir("POST", "/adjudicaciones", {**cuerpo_d(ong_id, inv_id, ref=directa + "-repetido"),
+                                                    "items": [{"inventario_id": inv_id, "cantidad": 1}] * 2})[0] == 400)
+        v.check("D7 Cantidad 0 → 422",
+                v.pedir("POST", "/adjudicaciones", cuerpo_d(ong_id, inv_id, 0, ref=directa + "-cero"))[0] == 422)
+        status, lib = v.pedir("POST", f"/adjudicaciones/{directa}/liberar")
+        v.check("D8 Liberarla devuelve el stock: el inventario queda como al principio",
+                status == 200 and lib["estado"] == "LIBERADA" and comprometido_seed() == previo, (status, lib))
+
+    if args.crear_ong:
+        print("\n== O. Registro de una ONG nueva (POST /ongs): DEJA UNA ONG EN LA BASE")
+        marca = int(time.time())
+        cuit_nuevo, usuario_nuevo = f"30-{marca % 10**8:08d}-9", f"verif.{marca}"
+        cuerpo_o = {"ong_nombre": f"ONG de verificación {marca}", "cuit": cuit_nuevo, "nombre": "Verificador",
+                    "username": usuario_nuevo, "password": "clave-de-verificacion"}
+        status, reg = v.pedir("POST", "/ongs", cuerpo_o, token=None)
+        v.check("O1 Registrar una ONG nueva → 201 con su token", status == 201 and reg["user"]["cuit"] == cuit_nuevo, (status, reg))
+        token_nuevo = v.entrar(usuario_nuevo, "clave-de-verificacion")
+        v.check("O2 La cuenta nueva inicia sesión", token_nuevo is not None)
+        status, ficha = v.pedir("GET", f"/ongs/{cuit_nuevo}")
+        v.check("O3 Queda HABILITADA y sin inventario", status == 200 and ficha["estado"] == "HABILITADA" and ficha["inventario"] == [], (status, ficha))
+        status, inv = v.pedir("PUT", f"/ongs/{cuit_nuevo}/inventario",
+                              {"items": [{"tipo_recurso": "FRAZADA", "cantidad_total": 5}]}, token=token_nuevo)
+        v.check("O4 Declara su inventario con su propio token (200)",
+                status == 200 and any(i["tipo_recurso"] == "FRAZADA" and i["cantidad_total"] == 5 for i in inv), (status, inv))
+        v.check("O5 Figura en GET /ongs", cuit_nuevo in {o["cuit"] for o in v.pedir("GET", "/ongs")[1]})
+        v.check("O6 Registrarla de nuevo → 409", v.pedir("POST", "/ongs", cuerpo_o, token=None)[0] == 409)
 
     print(f"\n{v.ok}/{v.total} verificaciones OK")
     return 0 if v.ok == v.total else 1

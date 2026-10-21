@@ -131,7 +131,8 @@ uso y la primera llamada tarda 30-60 s; abrir `/health` antes de usarlo.
 `.github/workflows/deploy-nacional.yml` construye la imagen en cada PR que toca `nacional/` y, si existe el secret `RENDER_DEPLOY_HOOK_URL`,
 dispara el deploy; como Render ya despliega solo desde GitHub, el hook es opcional.
 
-Verificar un servicio desplegado (no deja datos modificados): `python scripts/verificar_despliegue.py <URL> --clave <BONITA_SERVICE_PASSWORD>`.
+Verificar un servicio desplegado (recorre los 19 endpoints y no deja datos modificados): `python scripts/verificar_despliegue.py <URL> --clave <BONITA_SERVICE_PASSWORD>`.
+Con `--crear-ong` suma el registro de una ONG nueva, que sí queda en la base (la API no permite borrarla).
 
 ## Tests
 
