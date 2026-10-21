@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.config import Settings, get_settings
 from app.db import get_db
 from app.models import Cuenta, RolCuenta
+from app.schemas import CuitPath
 
 _ITERATIONS = 200_000
 _bearer = HTTPBearer(auto_error=False)
@@ -92,7 +93,7 @@ def require_servicio(
     return cuenta
 
 
-def require_ong_account(cuit: str, cuenta: Cuenta = Depends(get_current_account)) -> Cuenta:
+def require_ong_account(cuit: CuitPath, cuenta: Cuenta = Depends(get_current_account)) -> Cuenta:
     if cuenta.rol is not RolCuenta.ONG or cuenta.ong is None or cuenta.ong.cuit != cuit:
         raise HTTPException(status_code=403, detail="Solo podés modificar el inventario de tu propia ONG")
     return cuenta

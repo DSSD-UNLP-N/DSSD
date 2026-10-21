@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.db import get_db
 from app.models import Cuenta, Inventario, Ong, OngCertificacion, TipoRecurso
 from app.routers.catalogo import inventario_out
-from app.schemas import InventarioIn, InventarioOut
+from app.schemas import CuitPath, InventarioIn, InventarioOut
 from app.security import require_ong_account
 
 router = APIRouter(tags=["inventario"])
@@ -18,7 +18,7 @@ router = APIRouter(tags=["inventario"])
     summary="Declarar el inventario de una ONG (upsert por tipo de recurso)",
 )
 def declarar_inventario(
-    cuit: str,
+    cuit: CuitPath,
     body: InventarioIn,
     db: Session = Depends(get_db),
     _cuenta: Cuenta = Depends(require_ong_account),

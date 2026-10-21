@@ -67,10 +67,17 @@ lo mismo con `bonita-service`: sus parámetros de proceso `nacionalServiceUserna
 `/login` y el JWT devuelto se manda en las llamadas protegidas. Las cuentas de ONG (`POST /ongs`) sirven para usar esta
 API directamente, por ejemplo desde Swagger.
 
+### Reglas de entrada (todos los endpoints)
+
+- **CUIT**: se acepta con o sin guiones y con espacios alrededor (`30546665445`, ` 30-54666544-5 `) y siempre se guarda y compara como `NN-NNNNNNNN-N`. En un cuerpo, un CUIT que no tiene 11 dígitos da **422**; en una ruta (`/ongs/{cuit}`…) da 404 como cualquier CUIT no registrado. No se controla el dígito verificador.
+- **Cantidades e ids**: enteros entre 1 y 2 147 483 647 (el inventario admite 0). Las columnas son de 32 bits: pasarse daría un error de Postgres, así que se rechaza con **422**.
+- **Registro (`POST /ongs`)**: el usuario solo admite letras, números, `.`, `_` y `-`; usuario y nombre de ONG son únicos sin distinguir mayúsculas (409); la contraseña no puede ser solo espacios.
+- **`POST /evaluaciones`**: no repite lotes, `tipo` es `PRINCIPAL` o `APOYO`, y cada ítem ofrecido apunta a un lote del mismo pedido y de su mismo `tipo_recurso`; si no, 422 y no se reserva nada.
+
 ### `POST /validaciones`
 
 Recibe la `gravedad` de la emergencia y ítems `{cuit, tipo_recurso, cantidad}`; los de la misma ONG y recurso se
-suman. Siempre responde 200 con un resultado por (ONG, recurso):
+suman. Un pedido bien formado siempre responde 200 con un resultado por (ONG, recurso); un CUIT bien formado que no está registrado no es un error, se informa en el resultado (`ong: null`):
 
 - `alcanza`: lo pedido entra en `disponible` (= total − comprometido). Una ONG suspendida o no registrada tiene 0.
 - `nivel` + `asignacion_sugerida`, sin rechazos binarios: certificación vigente con `riesgo_max` ≥ gravedad →

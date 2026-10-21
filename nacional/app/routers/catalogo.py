@@ -8,6 +8,7 @@ from app.db import get_db
 from app.models import Certificacion, EstadoOng, Inventario, Ong, OngCertificacion, TipoRecurso
 from app.schemas import (
     CertificacionOut,
+    CuitPath,
     DisponibilidadOngOut,
     DisponibilidadOut,
     FichaOngOut,
@@ -69,7 +70,7 @@ def listar_ongs(
 
 
 @router.get("/ongs/{cuit}", response_model=FichaOngOut, summary="Ficha de una ONG")
-def ficha_ong(cuit: str, db: Session = Depends(get_db)):
+def ficha_ong(cuit: CuitPath, db: Session = Depends(get_db)):
     ong = db.scalar(
         select(Ong).where(Ong.cuit == cuit).options(
             selectinload(Ong.certificaciones).selectinload(OngCertificacion.certificacion),
