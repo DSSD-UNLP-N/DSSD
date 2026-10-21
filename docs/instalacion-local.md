@@ -61,7 +61,7 @@ cd frontend && npm install && npm run dev              # Vite reenvía /api al b
 ```
 
 ### 5. Probar
-Entrar a http://localhost:5173 como `operador.municipal` (clave `demo1234`) y registrar una emergencia. Recorrido completo automático, con capturas (≈ 7 min): `cd backend && python scripts/ui_parada3.py` (toma la URL de la API Nacional del `backend/.env`).
+Entrar a http://localhost:5173 como `operador.municipal` (clave `demo1234`) y registrar una emergencia. Recorrido completo automático, con capturas (≈ 2-3 min): `cd backend && python scripts/ui_parada3.py` (toma la URL de la API Nacional del `backend/.env`).
 
 Alta de ONGs de prueba: `http://localhost:5173/alta-ong` (no está en el menú). Crea la ONG en Bonita (grupo `/rescuesync/ong`), en la API Nacional con sus rubros y en la app; después se ingresa con ese usuario.
 

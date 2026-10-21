@@ -52,8 +52,9 @@ Para dar de alta una ONG de prueba hay una pantalla oculta en `http://localhost:
 |---|---|---|
 | Unitarias: app, API Nacional, tipos del front | `python scripts/verificar_todo.py` | nada |
 | Escenarios con Bonita real (evaluación, tope, adjudicación, cierre, variantes, JWT) | `cd backend && python scripts/correr_escenarios.py` (≈ 25 min) | Bonita + app + API Nacional **locales** |
-| Recorrido completo por la interfaz, con capturas | `cd backend && python scripts/ui_parada3.py` (≈ 7 min; sirve contra local y contra la nube) | + front `:5173`, Chrome |
-| Otras pruebas de interfaz | `scripts/e2e_ui.py`, `scripts/ui_parada2.py`, `scripts/ui_ejecucion.py` | ídem |
+| Recorrido completo por la interfaz, con capturas | `cd backend && python scripts/ui_parada3.py` (≈ 2-3 min; sirve contra local y contra la nube) | + front `:5173`, Chrome |
+| Todas las pruebas de interfaz a la vez | `cd backend && python scripts/correr_ui.py` (≈ 4 min; `--completo` suma el caso de cobertura parcial) | ídem |
+| Pruebas de interfaz sueltas | `scripts/e2e_ui.py`, `scripts/ui_parada2.py`, `scripts/ui_ejecucion.py` | ídem |
 
 `ESCENARIO_VENTANA_S` (por defecto 60) acorta o alarga la ventana de ofertas de los escenarios. En la nube no hace falta reponer nada (el cierre libera lo reservado); lo único que Render recuerda son las emergencias ya cerradas por número: ver las notas de [`docs/instalacion-nube.md`](docs/instalacion-nube.md).
 

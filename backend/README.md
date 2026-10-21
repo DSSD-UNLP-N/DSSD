@@ -70,7 +70,10 @@ Los scripts de `scripts/` necesitan Bonita, la app y (según el caso) la API Nac
 - `e2e_ui.py`: recorre el flujo con los perfiles de demo **en un navegador real** (Playwright + Chrome) contra la SPA, verifica además lo que
   pasa en Bonita y deja una captura por paso en `scripts/capturas/` (gitignoreado). `--demo` lo hace visible y lento; `--timer 90` suma el cierre por timer.
 - `ui_parada2.py`, `ui_ejecucion.py`, `ui_parada3.py`: recorridos por la interfaz de cada tramo; `ui_parada3.py` es el completo (alta,
-  ofertas de dos ONGs, evaluación, adjudicación, ejecución y cierre) y sirve contra local y contra la nube.
+  ofertas de dos ONGs, evaluación, adjudicación, ejecución y cierre) y sirve contra local y contra la nube. `ui_parada2.py` corre el caso de
+  reformulación (raciones); su caso de cobertura parcial es opcional (`--con-parcial`) porque usa los mismos paramédicos que `ui_parada3.py`.
+- `correr_ui.py`: corre `e2e_ui.py`, `ui_parada2.py` y `ui_parada3.py` **a la vez** (usan recursos distintos), en lugar de uno tras otro: casi todo lo que
+  tardan es esperar a que venza la ventana de ofertas. `--completo` suma después el caso parcial; `--sin-capturas` omite las fotos.
 
 Usan el Chrome instalado; sin Chrome, `playwright install chromium`.
 
