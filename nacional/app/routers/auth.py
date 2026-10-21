@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -42,9 +42,9 @@ def registrar_ong(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ):
-    if db.scalar(select(Cuenta.id).where(Cuenta.username == body.username)):
+    if db.scalar(select(Cuenta.id).where(func.lower(Cuenta.username) == body.username.lower())):
         raise HTTPException(status_code=409, detail="El nombre de usuario ya está registrado")
-    if db.scalar(select(Ong.id).where(Ong.nombre == body.ong_nombre)):
+    if db.scalar(select(Ong.id).where(func.lower(Ong.nombre) == body.ong_nombre.lower())):
         raise HTTPException(status_code=409, detail="La ONG ya está registrada")
     if db.scalar(select(Ong.id).where(Ong.cuit == body.cuit)):
         raise HTTPException(status_code=409, detail="El CUIT ya está registrado")

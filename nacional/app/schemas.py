@@ -1,8 +1,28 @@
 import enum
+import re
 from datetime import date, datetime
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, field_validator, model_validator
 from app.models import CategoriaRecurso, EstadoAdjudicacion, EstadoOng, Riesgo
+
+# Las columnas numéricas son INTEGER (32 bits): un valor mayor llegaría a Postgres y volvería como 500.
+MAX_ENTERO = 2_147_483_647
+Cantidad = Annotated[int, Field(gt=0, le=MAX_ENTERO)]
+IdExterno = Annotated[int, Field(gt=0, le=MAX_ENTERO)]
+
+
+def normalizar_cuit(valor):
+    """`30546665445`, ` 30-54666544-5 ` y `30-54666544-5` son el mismo CUIT: se guarda y se busca como `NN-NNNNNNNN-N`.
+    Lo que no tiene 11 dígitos se deja tal cual para que el patrón lo rechace."""
+    if not isinstance(valor, str):
+        return valor
+    m = re.fullmatch(r"([0-9]{2})-?([0-9]{8})-?([0-9])", valor.strip())
+    return f"{m[1]}-{m[2]}-{m[3]}" if m else valor.strip()
+
+
+Cuit = Annotated[str, BeforeValidator(normalizar_cuit), Field(pattern=r"^[0-9]{2}-[0-9]{8}-[0-9]$")]
+CuitPath = Annotated[str, BeforeValidator(normalizar_cuit)]  # en la ruta no se rechaza: un CUIT que no existe da 404
 
 
 class LoginIn(BaseModel):
@@ -12,15 +32,22 @@ class LoginIn(BaseModel):
 
 class RegisterOngIn(BaseModel):
     ong_nombre: str = Field(min_length=2, max_length=120)
-    cuit: str = Field(pattern=r"^\d{2}-?\d{8}-?\d$")
+    cuit: Cuit
     nombre: str = Field(min_length=2, max_length=120)
-    username: str = Field(min_length=3, max_length=60)
+    username: str = Field(min_length=3, max_length=60, pattern=r"^[A-Za-z0-9._-]+$")
     password: str = Field(min_length=8, max_length=128)
 
-    @field_validator("ong_nombre", "nombre", "username", "cuit", mode="before")
+    @field_validator("ong_nombre", "nombre", "username", mode="before")
     @classmethod
     def strip_text(cls, value):
         return value.strip() if isinstance(value, str) else value
+
+    @field_validator("password")
+    @classmethod
+    def password_no_vacia(cls, value):
+        if not value.strip():
+            raise ValueError("La contraseña no puede ser solo espacios")
+        return value
 
 
 class CuentaOut(BaseModel):
@@ -99,8 +126,8 @@ class DisponibilidadOut(BaseModel):
 
 
 class InventarioItemIn(BaseModel):
-    tipo_recurso: str
-    cantidad_total: int = Field(ge=0)
+    tipo_recurso: str = Field(min_length=1)
+    cantidad_total: int = Field(ge=0, le=MAX_ENTERO)
 
 
 class InventarioIn(BaseModel):
@@ -119,9 +146,9 @@ class Asignacion(str, enum.Enum):
 
 
 class ItemValidacionIn(BaseModel):
-    cuit: str
-    tipo_recurso: str
-    cantidad: int = Field(gt=0)
+    cuit: Cuit
+    tipo_recurso: str = Field(min_length=1)
+    cantidad: Cantidad
 
 
 class ValidacionIn(BaseModel):
@@ -150,7 +177,9 @@ class ValidacionOut(BaseModel):
 
 
 class CierreIn(BaseModel):
-    cuit: str = Field(min_length=1, max_length=13)
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    cuit: Cuit
     referencia: str = Field(min_length=1, max_length=80)
 
 
@@ -179,14 +208,16 @@ class CierreOut(BaseModel):
 
 
 class AdjudicacionItemIn(BaseModel):
-    inventario_id: int = Field(gt=0)
-    cantidad: int = Field(gt=0)
+    inventario_id: IdExterno
+    cantidad: Cantidad
 
 
 class AdjudicacionIn(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     referencia_id: str = Field(min_length=1, max_length=80)
-    ong_id: int = Field(gt=0)
-    emergencia_id: int = Field(gt=0)
+    ong_id: IdExterno
+    emergencia_id: IdExterno
     items: list[AdjudicacionItemIn] = Field(min_length=1)
 
 
@@ -208,31 +239,51 @@ class AdjudicacionOut(BaseModel):
 # --- Evaluación y reserva (eslabón 4): lo que Bonita manda tal cual lo recibió de la app local ---
 
 class LoteEvaluacionIn(BaseModel):
-    lote_id: int
+    lote_id: IdExterno
     tipo_recurso: str | None = None  # None = lote anterior al catálogo: no se puede cubrir
-    cantidad: int = Field(gt=0)
-    tipo: str = "PRINCIPAL"
+    cantidad: Cantidad
+    tipo: Literal["PRINCIPAL", "APOYO"] = "PRINCIPAL"
 
 
 class ItemOfertaIn(BaseModel):
-    lote_id: int
-    tipo_recurso: str
-    cantidad: int = Field(gt=0)
+    lote_id: IdExterno
+    tipo_recurso: str = Field(min_length=1)
+    cantidad: Cantidad
 
 
 class OfertaEvaluacionIn(BaseModel):
-    cuit: str = Field(min_length=1, max_length=13)
+    cuit: Cuit
     ong: str | None = None
     version: int | None = None
     items: list[ItemOfertaIn] = Field(min_length=1)
 
 
 class EvaluacionIn(BaseModel):
-    emergencia_id: int = Field(gt=0)
-    ronda: int = Field(default=1, ge=1)
+    emergencia_id: IdExterno
+    ronda: int = Field(default=1, ge=1, le=MAX_ENTERO)
     gravedad: Riesgo
     lotes: list[LoteEvaluacionIn]
     ofertas: list[OfertaEvaluacionIn]
+
+    @model_validator(mode="after")
+    def lotes_y_ofertas_coherentes(self):
+        """Cada lote una sola vez y cada ítem ofrecido apunta a un lote del pedido y de su mismo recurso: si no, se
+        reservaría stock para algo que no se pidió o se contaría como cobertura de otro recurso."""
+        ids = [l.lote_id for l in self.lotes]
+        if len(set(ids)) != len(ids):
+            raise ValueError("Hay lotes repetidos")
+        por_id = {l.lote_id: l for l in self.lotes}
+        for oferta in self.ofertas:
+            for item in oferta.items:
+                lote = por_id.get(item.lote_id)
+                if lote is None:
+                    raise ValueError(f"La oferta de {oferta.cuit} apunta al lote {item.lote_id}, que no está en el pedido")
+                if lote.tipo_recurso != item.tipo_recurso:
+                    raise ValueError(
+                        f"La oferta de {oferta.cuit} ofrece {item.tipo_recurso} para el lote {item.lote_id}, "
+                        f"que pide {lote.tipo_recurso}"
+                    )
+        return self
 
 
 class LoteCoberturaOut(BaseModel):

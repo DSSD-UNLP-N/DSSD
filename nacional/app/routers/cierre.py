@@ -1,5 +1,5 @@
 """Cierre operativo: terminó la actividad de una adjudicación y se libera exactamente lo que tenía comprometido."""
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Path, Response
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.db import get_db
 from app.models import CierreItem, CierreOperativo, Ong
 from app.routers.reservas import _ERRORES, _http
-from app.schemas import CierreIn, CierreItemOut, CierreLoteIn, CierreOut
+from app.schemas import MAX_ENTERO, CierreIn, CierreItemOut, CierreLoteIn, CierreOut, CuitPath
 from app.security import require_servicio
 from app.services import reservas
 
@@ -93,7 +93,7 @@ def informar_cierres(body: CierreLoteIn, db: Session = Depends(get_db)):
 
 
 @router.get("/cierres/{cierre_id}", response_model=CierreOut, summary="Ver un cierre ya informado")
-def obtener_cierre(cierre_id: int, db: Session = Depends(get_db)):
+def obtener_cierre(cierre_id: int = Path(gt=0, le=MAX_ENTERO), db: Session = Depends(get_db)):
     cierre = _cargar_cierre(db, cierre_id)
     if cierre is None:
         raise HTTPException(status_code=404, detail="Cierre no encontrado")
@@ -101,7 +101,7 @@ def obtener_cierre(cierre_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/ongs/{cuit}/cierres", response_model=list[CierreOut], summary="Cierres informados por una ONG")
-def cierres_de_la_ong(cuit: str, db: Session = Depends(get_db)):
+def cierres_de_la_ong(cuit: CuitPath, db: Session = Depends(get_db)):
     ong = db.scalar(select(Ong).where(Ong.cuit == cuit))
     if ong is None:
         raise HTTPException(status_code=404, detail="ONG no registrada")

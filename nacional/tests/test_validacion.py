@@ -104,7 +104,7 @@ def test_una_ong_suspendida_no_puede_comprometer_nada(client):
 
 
 def test_una_ong_no_registrada_se_informa_sin_fallar(client):
-    r = _unico(client, "BAJO", "00-0-0", "RACION_ALIMENTO", 10)
+    r = _unico(client, "BAJO", "99-99999999-9", "RACION_ALIMENTO", 10)
     assert (r["ong"], r["nivel"], r["alcanza"]) == (None, "SUPERVISADA", False)
     assert "ONG no registrada en el Sistema Nacional" in r["observaciones"]
 

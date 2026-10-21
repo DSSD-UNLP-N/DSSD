@@ -151,7 +151,8 @@ def main() -> int:
     vencida = next(c for c in bomb["certificaciones"] if c["codigo"] == "SALUD_PREHOSP")
     v.check("Bomberos: SALUD_PREHOSP vencida → sus paramédicos sin riesgo permitido",
             not vencida["vigente"] and inv_bomb["PARAMEDICO"]["riesgo_permitido"] is None, (vencida, inv_bomb["PARAMEDICO"]))
-    v.check("CUIT inexistente → 404", v.pedir("GET", "/ongs/00-0-0")[0] == 404)
+    v.check("CUIT inexistente → 404", v.pedir("GET", "/ongs/99-99999999-9")[0] == 404)
+    v.check("El CUIT sin guiones encuentra la misma ficha", v.pedir("GET", f"/ongs/{CRUZ_ROJA.replace('-', '')}")[1].get("cuit") == CRUZ_ROJA)
 
     print("\n== A6. Disponibilidad global")
     _, disp = v.pedir("GET", "/recursos/disponibilidad?tipo_recurso=PARAMEDICO")
@@ -170,6 +171,8 @@ def main() -> int:
     v.check("Tipo inexistente → 404 (y no guarda el resto)",
             v.pedir("PUT", f"/ongs/{CRUZ_ROJA}/inventario", {"items": [
                 {"tipo_recurso": "PARAMEDICO", "cantidad_total": 99}, {"tipo_recurso": "NADA", "cantidad_total": 1}]}, token=ong)[0] == 404)
+    v.check("Cantidad de más de 32 bits → 422 (en Postgres sería un 500)",
+            v.pedir("PUT", f"/ongs/{CRUZ_ROJA}/inventario", {"items": [{"tipo_recurso": "PARAMEDICO", "cantidad_total": 3_000_000_000}]}, token=ong)[0] == 422)
     v.check("Cantidad negativa → 422",
             v.pedir("PUT", f"/ongs/{CRUZ_ROJA}/inventario", {"items": [{"tipo_recurso": "PARAMEDICO", "cantidad_total": -1}]}, token=ong)[0] == 422)
 
@@ -201,8 +204,10 @@ def main() -> int:
     r = v.uno("BAJO", SUSPENDIDA, "RACION_ALIMENTO", 1)
     v.check("V10 ONG suspendida: SUPERVISADA y disponible 0",
             (r["nivel"], r["disponible"], r["alcanza"]) == ("SUPERVISADA", 0, False), r)
-    r = v.uno("BAJO", "00-0-0", "RACION_ALIMENTO", 1)
-    v.check("V11 CUIT desconocido: se informa sin error (ong = null)", (r["ong"], r["nivel"]) == (None, "SUPERVISADA"), r)
+    r = v.uno("BAJO", "99-99999999-9", "RACION_ALIMENTO", 1)
+    v.check("V11 CUIT bien formado pero no registrado: se informa sin error (ong = null)", (r["ong"], r["nivel"]) == (None, "SUPERVISADA"), r)
+    r = v.uno("BAJO", CRUZ_ROJA.replace("-", ""), "RACION_ALIMENTO", 1)
+    v.check("V11a El CUIT sin guiones es el mismo CUIT", (r["ong"], r["cuit"]) == ("Cruz Roja Argentina", CRUZ_ROJA), r)
     r = v.uno("BAJO", CRUZ_ROJA, "BOTE_RESCATE", 1)
     v.check("V11b Recurso que la ONG no tiene ni está certificada: disponible 0, SUPERVISADA",
             (r["disponible"], r["nivel"]) == (0, "SUPERVISADA"), r)
@@ -215,12 +220,20 @@ def main() -> int:
         ("cantidad 0", {"gravedad": "ALTO", "items": [{"cuit": CRUZ_ROJA, "tipo_recurso": "PARAMEDICO", "cantidad": 0}]}),
         ("gravedad inválida", {"gravedad": "ENORME", "items": [{"cuit": CRUZ_ROJA, "tipo_recurso": "PARAMEDICO", "cantidad": 1}]}),
         ("sin ítems", {"gravedad": "ALTO", "items": []}),
+        ("CUIT mal formado", {"gravedad": "ALTO", "items": [{"cuit": "abc", "tipo_recurso": "PARAMEDICO", "cantidad": 1}]}),
+        ("cantidad de más de 32 bits", {"gravedad": "ALTO", "items": [{"cuit": CRUZ_ROJA, "tipo_recurso": "PARAMEDICO", "cantidad": 3_000_000_000}]}),
     ]:
         v.check(f"V13 {nombre} → 422", v.pedir("POST", "/validaciones", cuerpo)[0] == 422)
     _, antes = v.pedir("GET", f"/ongs/{CRUZ_ROJA}")
     v.validar("ALTO", (CRUZ_ROJA, "PARAMEDICO", 3))
     _, despues = v.pedir("GET", f"/ongs/{CRUZ_ROJA}")
     v.check("V14 Validar no guarda nada: la ficha queda igual", antes == despues)
+    for nombre, items in [("a un lote que no está en el pedido", [{"lote_id": 77, "tipo_recurso": "PARAMEDICO", "cantidad": 1}]),
+                          ("otro recurso que el del lote", [{"lote_id": 1, "tipo_recurso": "AGUA_POTABLE", "cantidad": 1}])]:
+        status, _ = v.pedir("POST", "/evaluaciones", {
+            "emergencia_id": int(time.time()), "gravedad": "ALTO",
+            "lotes": [{"lote_id": 1, "tipo_recurso": "PARAMEDICO", "cantidad": 2}], "ofertas": [{"cuit": CRUZ_ROJA, "items": items}]})
+        v.check(f"V15 Evaluar una oferta {nombre} → 422 (no reserva nada)", status == 422)
 
     print("\n== R. Reserva: evaluar, confirmar y liberar (deja el inventario como estaba)")
     emergencia = int(time.time())  # única por corrida: una referencia liberada no se puede evaluar de nuevo

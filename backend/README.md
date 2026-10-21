@@ -70,9 +70,18 @@ Los scripts de `scripts/` necesitan Bonita, la app y (según el caso) la API Nac
 - `e2e_ui.py`: recorre el flujo con los perfiles de demo **en un navegador real** (Playwright + Chrome) contra la SPA, verifica además lo que
   pasa en Bonita y deja una captura por paso en `scripts/capturas/` (gitignoreado). `--demo` lo hace visible y lento; `--timer 90` suma el cierre por timer.
 - `ui_parada2.py`, `ui_ejecucion.py`, `ui_parada3.py`: recorridos por la interfaz de cada tramo; `ui_parada3.py` es el completo (alta,
-  ofertas de dos ONGs, evaluación, adjudicación, ejecución y cierre) y sirve contra local y contra la nube.
+  ofertas de dos ONGs, evaluación, adjudicación, ejecución y cierre) y sirve contra local y contra la nube. `ui_parada2.py` corre el caso de
+  reformulación (raciones); su caso de cobertura parcial es opcional (`--con-parcial`) porque usa los mismos paramédicos que `ui_parada3.py`.
+- `correr_ui.py`: corre `e2e_ui.py`, `ui_parada2.py` y `ui_parada3.py` **a la vez** (usan recursos distintos), en lugar de uno tras otro: casi todo lo que
+  tardan es esperar a que venza la ventana de ofertas. `--completo` suma después el caso parcial; `--sin-capturas` omite las fotos.
 
 Usan el Chrome instalado; sin Chrome, `playwright install chromium`.
+
+**Presupuesto de casos de Bonita.** La edición Community no deja iniciar procesos tras **150 casos en 30 días** por proyecto de Studio (cuenta los
+casos iniciados aunque se borren). Cada corrida gasta: `e2e_ui` 1, `ui_parada3` 1, `ui_parada2` 1 (2 con `--con-parcial`), `correr_ui` 3, y los escenarios
+`evaluacion` 2, `adjudicacion` 2, `cierre` 1, `tope` 3, `variantes` ~6, `jwt` ~2 (`correr_escenarios` completo, ~16). Al llegar al 80 % y 90 % `bonita.log` avisa
+(`allowed cases`); al agotarse la app contesta 502 «No se pudo iniciar el caso en Bonita» y el log dice `Process start limit (150 cases during last 30 days)`.
+La salida es importar el `.bos` en Studio como proyecto nuevo (base H2 nueva) y desplegar la organización.
 
 ## Login y roles
 

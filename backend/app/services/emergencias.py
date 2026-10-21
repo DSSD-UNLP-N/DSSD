@@ -12,7 +12,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 import requests
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -46,15 +46,19 @@ def cerrar_ventanas_vencidas(db: Session) -> None:
     """
     ahora = datetime.now(timezone.utc)
     vencidas = [
-        e for e in db.scalars(select(Emergencia).where(
+        e.id for e in db.scalars(select(Emergencia).where(
             Emergencia.estado == EstadoEmergencia.CONVOCATORIA,
             Emergencia.ventana_ofertas_fin.is_not(None),
         ))
         if e.ventana_ofertas_fin.replace(tzinfo=e.ventana_ofertas_fin.tzinfo or timezone.utc) <= ahora
     ]
-    for e in vencidas:
-        e.estado = EstadoEmergencia.CERRADA
     if vencidas:
+        # Condicional en la BD: justo al vencer la ventana llegan a la vez el pedido de Bonita (que la pasa a EN_EVALUACION)
+        # y las pantallas que consultan. Con `e.estado = CERRADA` desde el objeto leído, la consulta que había leído
+        # CONVOCATORIA antes pisaba el EN_EVALUACION de Bonita y la evaluación quedaba rechazada con 409.
+        db.execute(update(Emergencia).where(
+            Emergencia.id.in_(vencidas), Emergencia.estado == EstadoEmergencia.CONVOCATORIA,
+        ).values(estado=EstadoEmergencia.CERRADA))
         db.commit()
 
 

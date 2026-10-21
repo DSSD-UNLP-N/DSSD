@@ -125,7 +125,7 @@ def test_una_cerrada_no_se_vuelve_a_evaluar_ni_a_liberar_ni_a_confirmar(client):
 def test_ong_o_referencia_inexistente_da_404(client):
     _adjudicar(client, 12, (CRUZ_ROJA, 2))
 
-    assert _cerrar(client, _ref(12), cuit="00-0-0").status_code == 404
+    assert _cerrar(client, _ref(12), cuit="99-99999999-9").status_code == 404
     assert _cerrar(client, "emg-99-r1-30-54666544-5").status_code == 404
     assert client.get("/cierres/999").status_code == 404
     assert client.get("/ongs/00-0-0/cierres").status_code == 404
@@ -191,7 +191,7 @@ def test_el_lote_valida_existencia_repetidos_y_forma(client):
     _adjudicar(client, 12, (CRUZ_ROJA, 2))
 
     assert client.post("/cierres/lote", json=_lote((CRUZ_ROJA, "no-existe"))).status_code == 404
-    assert client.post("/cierres/lote", json=_lote(("00-0-0", _ref(12)))).status_code == 404
+    assert client.post("/cierres/lote", json=_lote(("99-99999999-9", _ref(12)))).status_code == 404
     assert client.post("/cierres/lote", json=_lote((BOMBEROS, _ref(12)))).status_code == 404  # es de otra ONG
     assert client.post("/cierres/lote", json=_lote((CRUZ_ROJA, _ref(12)), (CRUZ_ROJA, _ref(12)))).status_code == 400
     assert client.post("/cierres/lote", json={"cierres": []}).status_code == 422

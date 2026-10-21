@@ -10,6 +10,10 @@ frontend (`npm run dev`), base migrada + seedeada, y Chrome o Chromium instalado
     python scripts/e2e_ui.py --demo             # navegador visible y lento, para mostrarlo
     python scripts/e2e_ui.py --timer 120        # además espera a que dispare el boundary timer
     python scripts/e2e_ui.py --app http://localhost:5173
+    python scripts/e2e_ui.py --sin-capturas     # sin fotos (más rápido)
+
+Cada perfil entra por la pantalla de login una sola vez; después se repone su cookie de sesión. El cierre de sesión se
+prueba una vez (Auditor). Para correr esto junto con las paradas, ver correr_ui.py.
 
 Deja una emergencia nueva por corrida y capturas de cada paso en scripts/capturas/.
 """
@@ -90,8 +94,22 @@ def esperar_tarea(admin: BonitaClient, case_id, prefijo: str, segundos: int) -> 
     while time.monotonic() < limite:
         if admin.find_task(case_id, prefijo) is not None:
             return True
-        time.sleep(5)
+        time.sleep(POLL_S)
     return False
+
+
+def esperar_hasta(momento: datetime, holgura_s: float = 0) -> None:
+    """Duerme hasta `momento`: mientras la ventana está abierta no hay nada que ver, y recargar la pantalla cada
+    segundo solo carga a la app, a Bonita y al navegador."""
+    falta = (momento - datetime.now().astimezone()).total_seconds() + holgura_s
+    if falta > 0:
+        time.sleep(falta)
+
+
+def cierre_de_ventana(margen_s: float) -> datetime:
+    """Cierre de la convocatoria: el campo de la pantalla tiene precisión de minuto, así que se redondea hacia arriba.
+    Garantiza al menos `margen_s` desde ahora (el tiempo que tarda el guion en cargar las ofertas) y a lo sumo un minuto más."""
+    return (datetime.now().astimezone() + timedelta(seconds=margen_s)).replace(second=0, microsecond=0) + timedelta(minutes=1)
 
 
 def iniciado_por(admin: BonitaClient, case_id) -> str:
@@ -113,11 +131,15 @@ LOTES = [("BRIGADISTA_FORESTAL", "Brigadista forestal", "30", "PRINCIPAL"),
          ("AUTOBOMBA", "Autobomba", "3", "PRINCIPAL"),
          ("RACION_ALIMENTO", "Ración de alimento", "200", "APOYO")]
 PLAZO = 8000  # ms que se espera a que la SPA muestre algo
+PLAZO_LENTO = 25000  # lo que pasa por la API Nacional (en la nube, y con otros guiones en paralelo, tarda más)
+POLL_S = 1.0  # cada cuánto se consulta a Bonita o a la app mientras se espera un cambio
+SIN_CAPTURAS = False  # --sin-capturas: no se guardan las fotos de cada paso
 
 
 class Ui:
     def __init__(self, page: Page, r: Reporte) -> None:
         self.page, self.r, self.n = page, r, 0
+        self.sesiones: dict[str, list] = {}  # usuario -> cookies de su sesión (la app firma la cookie: no hay estado en el servidor)
 
     def ve(self, texto: str, nombre: str | None = None, visible: bool = True, timeout: int = PLAZO) -> bool:
         """Verifica que un texto aparezca (o, con visible=False, que no esté) en la pantalla."""
@@ -127,23 +149,44 @@ class Ui:
             ok = True
         except Exception:
             ok = False
-        return self.r.check(nombre or (f"Se ve «{texto}»" if visible else f"No se ve «{texto}»"), ok, self.page.url)
+        detalle = self.page.url
+        if not ok:  # lo que había en pantalla (un mensaje de error de la app, por ejemplo) explica la falla
+            try:
+                detalle += " | " + " ".join(self.page.locator("body").inner_text(timeout=2000).split())[-300:]
+            except Exception:
+                pass
+        return self.r.check(nombre or (f"Se ve «{texto}»" if visible else f"No se ve «{texto}»"), ok, detalle)
 
     def foto(self, nombre: str) -> None:
         self.n += 1
+        if SIN_CAPTURAS:
+            return
         CAPTURAS.mkdir(exist_ok=True)
         self.page.screenshot(path=str(CAPTURAS / f"{self.n:02d}-{nombre}.png"), full_page=True)
 
     def entrar(self, app: str, usuario: str, clave: str = DEMO_PASSWORD, esperar: bool = True) -> None:
+        """La primera vez de cada perfil entra por la pantalla de login; las siguientes reponen su cookie de sesión
+        (el login ya está probado) y se ahorran el recorrido por el formulario."""
         p = self.page
+        ctx = p.context
+        ctx.clear_cookies()
+        if esperar and clave == DEMO_PASSWORD and usuario in self.sesiones:
+            ctx.add_cookies(self.sesiones[usuario])
+            p.goto(f"{app}/")
+            return
         p.goto(f"{app}/login")
         p.get_by_placeholder("ej. operador.municipal").fill(usuario)
         p.locator("input[type=password]").fill(clave)
         p.get_by_role("button", name="Entrar al panel").click()
         if esperar:  # sin esto, un goto inmediato cancela el login en curso
             p.wait_for_url(lambda url: "/login" not in url, timeout=PLAZO)
+            if clave == DEMO_PASSWORD:
+                self.sesiones[usuario] = ctx.cookies()
 
     def salir(self) -> None:
+        """Deja al perfil: el próximo `entrar` cambia de cookie. Para probar el cierre de sesión en sí, `cerrar_sesion`."""
+
+    def cerrar_sesion(self) -> None:
         self.page.get_by_role("button", name="Salir").click()
         self.page.wait_for_url(re.compile(r"/login"), timeout=PLAZO)
 
@@ -236,7 +279,7 @@ def fase_lotes_y_publicacion(u: Ui, app: str, emergencia_id: int, espera: int) -
         u.page.locator("[name=cantidad]").fill(cantidad)
         u.page.locator("[name=tipo]").select_option(tipo)
         u.page.get_by_role("button", name="Agregar lote").click()
-        u.ve(nombre, f"Lote '{nombre}' aparece en la lista")
+        u.ve(nombre, f"Lote '{nombre}' aparece en la lista", timeout=PLAZO_LENTO)
     u.r.check("El formulario se limpia tras agregar", u.page.locator("[name=tipo_recurso]").input_value() == "")
     u.r.check("El lote de apoyo sale etiquetado", u.page.get_by_text("APOYO").count() > 0)
     u.foto("coordinador-lotes")
@@ -282,8 +325,8 @@ def retirar_ofertas_previas(app: str, emergencia_id: int, r: Reporte) -> None:
         sesion = requests.Session()
         sesion.post(f"{app}/api/auth/login", json={"username": usuario, "password": DEMO_PASSWORD}).raise_for_status()
         for e in sesion.get(f"{app}/api/emergencias").json():
-            if e["id"] == emergencia_id or e["estado"] != "CONVOCATORIA":
-                continue
+            if e["id"] == emergencia_id or e["estado"] != "CONVOCATORIA" or "(UI e2e)" not in e["zona_afectada"]:
+                continue  # solo lo que dejó una corrida de este mismo guion: otros guiones pueden estar corriendo a la vez
             for o in sesion.get(f"{app}/api/emergencias/{e['id']}/ofertas").json():
                 if not o["retirada"]:
                     sesion.post(f"{app}/api/emergencias/{e['id']}/ofertas", json={"items": []})
@@ -364,7 +407,7 @@ def fase_auditor(u: Ui, app: str, emergencia_id: int) -> None:
     u.r.check("Sin formularios de operación",
               all(u.page.get_by_text(t).count() == 0 for t in ("Agregar lote", "Publicar a la red", "Enviar oferta")))
     u.foto("auditor")
-    u.salir()
+    u.cerrar_sesion()  # el único cierre de sesión real del recorrido
     u.page.goto(f"{app}/emergencias")
     u.page.wait_for_url(re.compile(r"/login"), timeout=PLAZO)
     u.r.check("Tras salir, /emergencias vuelve al login", "/login" in u.page.url)
@@ -381,7 +424,8 @@ def fase_timer(u: Ui, admin: BonitaClient, app: str, case_id: int, emergencia_id
     u.r.check(f"'{TAREA_TRAS_PUBLICAR}' se cerró sola", admin.find_task(case_id, TAREA_TRAS_PUBLICAR) is None)
     u.entrar(app, "ong.cruzroja")
     u.abrir(app, emergencia_id)
-    u.ve("ventana de ofertas cerró", "La ONG ve que la ventana cerró")
+    # «cerró» solo se muestra mientras la emergencia está CERRADA; apenas Bonita pide el consolidado pasa a EN_EVALUACION.
+    u.ve(re.compile("ventana de ofertas cerró|En evaluación", re.I), "La ONG ve que la ventana cerró (o que ya está en evaluación)")
     u.ve("Enviar oferta", "Ya no puede ofertar", visible=False)
     u.foto("ong-ventana-cerrada")
     u.salir()
@@ -392,10 +436,14 @@ def main() -> int:
     ap.add_argument("--app", default="http://localhost:5173")
     ap.add_argument("--timer", type=int, metavar="SEGUNDOS", help="cierre de ofertas a esa distancia; espera al timer")
     ap.add_argument("--demo", action="store_true", help="navegador visible y lento")
+    ap.add_argument("--sin-capturas", action="store_true", help="no guardar las fotos de cada paso")
     args = ap.parse_args()
 
-    for vieja in CAPTURAS.glob("*.png"):  # solo quedan las de esta corrida
-        vieja.unlink()
+    global SIN_CAPTURAS
+    SIN_CAPTURAS = args.sin_capturas
+    if not SIN_CAPTURAS:
+        for vieja in CAPTURAS.glob("*.png"):  # solo quedan las de esta corrida
+            vieja.unlink()
     settings = get_settings()
     r = Reporte()
     admin = BonitaClient(settings.bonita_base_url, settings.bonita_timeout_seconds)
