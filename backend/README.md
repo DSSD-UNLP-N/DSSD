@@ -77,6 +77,12 @@ Los scripts de `scripts/` necesitan Bonita, la app y (según el caso) la API Nac
 
 Usan el Chrome instalado; sin Chrome, `playwright install chromium`.
 
+**Presupuesto de casos de Bonita.** La edición Community no deja iniciar procesos tras **150 casos en 30 días** por proyecto de Studio (cuenta los
+casos iniciados aunque se borren). Cada corrida gasta: `e2e_ui` 1, `ui_parada3` 1, `ui_parada2` 1 (2 con `--con-parcial`), `correr_ui` 3, y los escenarios
+`evaluacion` 2, `adjudicacion` 2, `cierre` 1, `tope` 3, `variantes` ~6, `jwt` ~2 (`correr_escenarios` completo, ~16). Al llegar al 80 % y 90 % `bonita.log` avisa
+(`allowed cases`); al agotarse la app contesta 502 «No se pudo iniciar el caso en Bonita» y el log dice `Process start limit (150 cases during last 30 days)`.
+La salida es importar el `.bos` en Studio como proyecto nuevo (base H2 nueva) y desplegar la organización.
+
 ## Login y roles
 
 Sesión por cookie firmada (`SESSION_SECRET`). Usuarios de demo (`python -m app.seed`, pass `demo1234`): `operador.municipal`,
