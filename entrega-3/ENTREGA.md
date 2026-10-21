@@ -19,7 +19,7 @@ gestión de ONGs y el compromiso/liberación de recursos. URLs de servicios, doc
 2. Botón **Authorize** → pegar el token. Todos los endpoints (salvo `/health` y `/login`) exigen JWT.
 3. Probar `GET /tipos-recurso`, `GET /ongs`, `POST /validaciones`, `POST /evaluaciones`, etc.
 
-Verificación automática de un despliegue (72 chequeos, no deja datos modificados):
+Verificación automática de un despliegue (no deja datos modificados):
 `python nacional/scripts/verificar_despliegue.py https://rescuesync-nacional.onrender.com --clave <BONITA_SERVICE_PASSWORD>`.
 
 ## Servicios mínimos de la consigna → endpoints
@@ -34,4 +34,4 @@ Verificación automática de un despliegue (72 chequeos, no deja datos modificad
 
 ## Qué más hay detrás
 La API la consumen la app web (JWT con la cuenta `app-service`) y el proceso de Bonita (conector `loginNacional` + `Authorization: Bearer`). El recorrido completo
-(emergencia → ofertas → evaluación → adjudicación → ejecución → cierre) está probado con Bonita real y con esta API en la nube (`backend/scripts/ui_parada3.py`, 47 verificaciones); cómo levantarlo y probarlo: raíz [`README.md`](../README.md).
+(emergencia → ofertas → evaluación → adjudicación → ejecución → cierre) está probado con Bonita real y con esta API en la nube (`backend/scripts/ui_parada3.py`); cómo levantarlo y probarlo: raíz [`README.md`](../README.md).

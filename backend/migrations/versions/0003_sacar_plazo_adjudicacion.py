@@ -1,7 +1,7 @@
 """saca emergencia.plazo_adjudicacion
 
 La consigna no pide un plazo de adjudicación y `plazoAdjudicacionISO` no la lee ningún
-nodo del proceso (ver entrega-1/contrato-instanciacion.md), así que la columna quedaba vacía.
+nodo del proceso (contrato: CONTRACT_INPUTS en app/integrations/bonita.py), así que la columna quedaba vacía.
 
 Revision ID: 0003
 Revises: 0002

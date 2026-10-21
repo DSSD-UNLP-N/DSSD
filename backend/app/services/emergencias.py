@@ -1,7 +1,7 @@
 """T-05/T-06/T-07/T-08: alta de emergencia, de punta a punta.
 
 El formulario propio de la app reemplaza el formulario nativo de Bonita para la
-tarea "Registrar Emergencia" (ver CLAUDE.md, stack elegido), así que además de
+tarea "Registrar Emergencia" (la interfaz es la SPA, no los formularios de Bonita), así que además de
 instanciar el caso, esta capa completa esa primera tarea en nombre del
 Municipio: si no lo hiciéramos, el caso quedaría esperando para siempre a que
 alguien la complete desde la UI nativa de Bonita, que la app no usa.
@@ -75,8 +75,8 @@ class AltaEmergenciaError(RuntimeError):
 
 
 def _ventana_provisoria(settings: Settings) -> str:
-    # Ver CLAUDE.md, "Decisión: ventana de ofertas" (opción A): valor provisorio válido
-    # al alta; T-10 lo sobrescribe con la ventana real antes de publicar la convocatoria.
+    # Ver backend/README.md, "Ventana de ofertas": valor provisorio válido al alta; la publicación
+    # de lotes lo sobrescribe con la ventana real antes de completar «Publicar Convocatoria».
     vencimiento = datetime.now().astimezone() + timedelta(hours=settings.ventana_provisoria_horas)
     return vencimiento.isoformat(timespec="seconds")
 
@@ -154,7 +154,7 @@ def tarea_ong_en_bonita(settings: Settings, emergencia: Emergencia, user: Usuari
     """Nombre de la tarea que Bonita tiene pendiente para ESTE representante en este caso, o
     None si no hay ninguna: la convocatoria no está abierta, la ventana ya venció (el timer la
     cerró) o Bonita no respondió. Puramente informativo: la app nunca completa esta tarea (ver
-    "Reglas para la app web" en CLAUDE.md), así que un fallo acá no debe romper la página."""
+    "Reglas" en la sección Bonita de backend/README.md), así que un fallo acá no debe romper la página."""
     if user.rol is not Rol.ONG or emergencia.bonita_case_id is None:
         return None
     try:

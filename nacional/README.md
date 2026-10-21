@@ -1,8 +1,9 @@
-# Sistema Nacional de Gestión de Recursos y Riesgos (versión local)
+# Sistema Nacional de Gestión de Recursos y Riesgos
 
 API externa de la consigna (servicio 3): catálogo de certificaciones y recursos, inventario de las
-ONGs y validación de ofertas por niveles de competencia. Corre aparte de `backend/` (la app local).
-SQLite en desarrollo y Postgres en la nube. Emite los JWT que la app local reenvía en sus llamadas.
+ONGs, validación de ofertas por niveles de competencia, reserva y liberación de recursos. Corre aparte de `backend/` (la app local).
+Desplegada en Render (https://rescuesync-nacional.onrender.com/docs); en desarrollo corre local con SQLite y en la nube con Postgres.
+Emite los JWT con los que la app local y Bonita le hablan.
 
 ## Correr
 
@@ -10,7 +11,7 @@ SQLite en desarrollo y Postgres en la nube. Emite los JWT que la app local reenv
 cd nacional
 pip install -r requirements-dev.txt     # sirve el venv de backend/ (mismas versiones)
 alembic upgrade head
-python -m app.seed                      # 3 ONGs, 4 certificaciones, 11 tipos de recurso, inventarios
+python -m app.seed                      # ONGs, certificaciones, tipos de recurso e inventarios de demo
 uvicorn app.main:app --port 8002 --reload
 ```
 
@@ -77,7 +78,7 @@ suman. Siempre responde 200 con un resultado por (ONG, recurso):
   habilitada → **SUPERVISADA / APOYO**. Los recursos sin certificación requerida (insumos) son PLENA.
 
 La app local (`backend/`) lo usa al publicar una oferta: suma lo que la ONG ya ofreció en sus otras convocatorias
-abiertas y rechaza si no alcanza. Más adelante lo puede usar Bonita al vencer el timer.
+abiertas y rechaza si no alcanza. Bonita, al vencer la ventana, usa `POST /evaluaciones`, que valida y además reserva el stock.
 
 ### `POST /cierres`
 
@@ -102,7 +103,6 @@ actualiza `cantidad_comprometida` junto con la cabecera y sus ítems en una úni
 La referencia es única: repetirla devuelve la adjudicación existente con 200 sin volver a
 comprometer recursos; una nueva adjudicación creada responde 201 y el stock insuficiente
 responde 409.
-- La misma actividad se identifica con `referencia`: un segundo aviso no vuelve a descontar.
 
 ## Docker y deploy
 
@@ -111,13 +111,27 @@ docker build -t rescuesync-nacional ./nacional
 docker run --rm -p 8002:8002 rescuesync-nacional
 ```
 
-Al arrancar corre `alembic upgrade head` y el seed. `DATABASE_URL` en Postgres (`postgres://` de Render se normaliza a `postgresql+psycopg://`). Sin esa variable usa SQLite dentro del contenedor.
+`scripts/start.sh` (el `CMD` del Dockerfile) aplica `alembic upgrade head`, corre el seed (idempotente) y levanta uvicorn en `$PORT` (Render lo
+inyecta; sin él, 8002). Sin `DATABASE_URL` usa SQLite dentro del contenedor.
 
-El blueprint está en `render.yaml` (servicio web + Postgres free). En Render: New → Blueprint, con este repo; pide
-`BONITA_SERVICE_PASSWORD` y `APP_SERVICE_PASSWORD` (las mismas que van en los conectores de Bonita y en
-`NACIONAL_SERVICE_PASSWORD` de la app) y genera solo el `JWT_SECRET`. La URL pública es la del servicio `rescuesync-nacional` (`/health` y `/docs`).
+**El servicio de la entrega** es un Web Service de Render con runtime Docker, construido desde este repo (rama `dev`, `dockerfilePath` `./nacional/Dockerfile`,
+contexto `./nacional`) y con deploy automático: cada commit a `dev` lo redespliega. Variables de entorno del servicio:
 
-Para que un push a `main` o `dev` despliegue solo: en el servicio, Settings → Deploy Hook, y guardar esa URL como secret `RENDER_DEPLOY_HOOK_URL` del repo. El workflow `.github/workflows/deploy-nacional.yml` construye la imagen en cada PR y, si el secret existe, dispara el hook.
+| Variable | Qué es |
+|---|---|
+| `DATABASE_URL` | Postgres de Render. Con el prefijo `postgres://` o `postgresql://` se normaliza a `postgresql+psycopg://`. |
+| `JWT_SECRET` | Secreto con el que se firman los tokens. |
+| `BONITA_SERVICE_PASSWORD` | Clave de `bonita-service`; es la que llevan los conectores del `.bos`. |
+| `APP_SERVICE_PASSWORD` | Clave de `app-service`; es `NACIONAL_SERVICE_PASSWORD` en el `.env` de la app. |
+
+Con Postgres la API no arranca si esos tres secretos quedan con el valor de ejemplo. `render.yaml` es el blueprint equivalente (servicio web + Postgres
+free) para crearlo de cero con New → Blueprint: genera solo el `JWT_SECRET` y pide las dos claves. El plan gratis duerme el servicio tras 15 minutos sin
+uso y la primera llamada tarda 30-60 s; abrir `/health` antes de usarlo.
+
+`.github/workflows/deploy-nacional.yml` construye la imagen en cada PR que toca `nacional/` y, si existe el secret `RENDER_DEPLOY_HOOK_URL`,
+dispara el deploy; como Render ya despliega solo desde GitHub, el hook es opcional.
+
+Verificar un servicio desplegado (no deja datos modificados): `python scripts/verificar_despliegue.py <URL> --clave <BONITA_SERVICE_PASSWORD>`.
 
 ## Tests
 
@@ -125,20 +139,23 @@ Para que un push a `main` o `dev` despliegue solo: en el servicio, Settings → 
 pytest
 ```
 
+`tests/test_concurrencia_adjudicacion.py` prueba el locking pesimista y solo corre si se define `POSTGRES_TEST_DATABASE_URL`; en CI corre
+contra un Postgres real. `tests/test_documentacion.py` comprueba que la tabla de endpoints de este README coincida con las rutas de la API.
+
 ## Estructura
 
 ```
 app/
   main.py      # app FastAPI
-  config.py    # variables de entorno (DATABASE_URL, JWT y cuenta de Bonita)
+  config.py    # variables de entorno (DATABASE_URL, JWT y cuentas de servicio)
   db.py        # engine, sesión, Base
-  models.py    # cuenta, ong, certificacion, tipo_recurso, inventario, cierre
+  security.py  # JWT, hash de claves y dependencias de permisos por rol
+  models.py    # cuenta, ong, certificacion, tipo_recurso, inventario, adjudicación, cierre
   schemas.py   # entrada/salida de la API
-  routers/     # catalogo, inventario, validacion, cierre
-  services/    # reglas (competencia y validación), sin HTTP
+  routers/     # auth, catalogo, inventario, validacion, reservas, adjudicacion, cierre
+  services/    # reglas (catálogo, competencia, validación, reservas), sin HTTP
   seed.py      # datos de demo (mismos CUIT que backend/)
 migrations/    # Alembic
+scripts/       # start.sh (arranque del contenedor) y verificar_despliegue.py
 tests/
 ```
-
-Plan completo: `entrega-3/plan-modelado-validacion.md`.
