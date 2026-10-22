@@ -44,7 +44,7 @@ sys.path.insert(0, str(HERE))
 
 from escenario_adjudicacion import BOMBEROS, CRUZ_ROJA, comprometido, esperar  # noqa: E402
 from escenario_cierre import sin_tareas  # noqa: E402
-from escenario_tope import Escenario, crear_y_publicar  # noqa: E402
+from escenario_tope import Escenario, crear, publicar  # noqa: E402
 from recuperar_cierre import recuperar  # noqa: E402
 
 from nacional_auth import nacional_get  # noqa: E402
@@ -52,7 +52,10 @@ from app.core.config import get_settings  # noqa: E402
 from app.integrations.bonita import BonitaClient  # noqa: E402
 from app.seed import DEMO_PASSWORD  # noqa: E402
 
-VENTANA_S = int(os.environ.get("ESCENARIO_VENTANA_S", 60)) + 15  # la primera emergencia vence a los 75 s
+# La primera ventana vence VENTANA_S después de haber creado todas las emergencias: crear (instanciar el caso en Bonita) es lo
+# lento y no puede comerse la ventana, porque entonces la primera se evalúa y reserva stock antes de que se ofrezca en las demás.
+VENTANA_S = int(os.environ.get("ESCENARIO_VENTANA_S", 60)) * 3 // 4
+RONDA2_S = 70  # la ronda 2 de C solo necesita publicar y una oferta, pero con las demás variantes en curso hay más carga
 ESCALON_S = 12  # cada emergencia vence unos segundos después de la anterior
 NACIONAL_DB = REPO / "nacional" / "nacional.db"
 CLAVES = [(CRUZ_ROJA, "PARAMEDICO"), (BOMBEROS, "PARAMEDICO"), (CRUZ_ROJA, "AGUA_POTABLE")]
@@ -331,7 +334,7 @@ def variante_c_parte1(ctx: Ctx) -> None:
     e.check("C: REFORMULAR → vuelve a REGISTRADA en la ronda 2", r.status_code == 200 and r.json()["estado"] == "REGISTRADA", r.text)
     e.check("C: Bonita volvió a «Revisar Informacion»", ctx.espera_tarea(caso, "Revisar Informacion"), ctx.tareas(caso))
     e.check("C: la reserva de la ronda 1 se liberó", ctx.estado_ref(f"emg-{emg}-r1-{CRUZ_ROJA}") == "LIBERADA")
-    v["fin2"] = datetime.now().astimezone() + timedelta(seconds=110)
+    v["fin2"] = datetime.now().astimezone() + timedelta(seconds=RONDA2_S)
     r = e.post("coordinador.regional", f"/emergencias/{emg}/publicar", {"ventana_fin": v["fin2"].isoformat(timespec="seconds")})
     e.check("C: el Coordinador publica la ronda 2", r.status_code == 200 and r.json()["estado"] == "CONVOCATORIA", r.text)
     e.esperar("C: Cruz Roja ofrece los 3000 L completos", e.ofrecer("ong.cruzroja", emg, (v["lotes"]["AGUA_POTABLE"], 3000)), 201)
@@ -344,7 +347,7 @@ def variante_c_parte2(ctx: Ctx) -> None:
     if not v.get("ok1"):
         return
     print(f"\n== C (2/2): ronda 2 (vence {v['fin2']:%H:%M:%S}) y cierre de la referencia r2")
-    d = esperar(e, emg, lambda d: d["evaluacion"] is not None and d["evaluacion"]["ronda"] == 2, 360)
+    d = esperar(e, emg, lambda d: d["evaluacion"] is not None and d["evaluacion"]["ronda"] == 2, 240, desde=v["fin2"])
     e.check("C: la ronda 2 cubre todo y va a ADJUDICACION", d is not None and d["estado"] == "ADJUDICACION", d and d["estado"])
     if d is None or not ctx.adjudicar("C", emg, caso, [CRUZ_ROJA], decidir=False):
         return
@@ -480,7 +483,6 @@ def main() -> int:
     previos = {k: comprometido(ctx.nacional, *k) for k in CLAVES}
     e.check("La API Nacional no tiene nada comprometido al empezar", not any(previos.values()), previos)
     e.check("Bonita no tiene casos abiertos", ctx.admin._request("GET", "/API/bpm/case", params={"p": 0, "c": 50}).json() == [])
-    base = datetime.now().astimezone() + timedelta(seconds=VENTANA_S)
     plan = [  # variante, zona, lotes, ofertas (usuario, cantidad)
         ("A", [("PARAMEDICO", 10, "PRINCIPAL")], [("ong.cruzroja", 1), ("ong.bomberos", 1)]),
         ("B", [("PARAMEDICO", 2, "PRINCIPAL")], [("ong.cruzroja", 1), ("ong.bomberos", 1)]),
@@ -489,28 +491,43 @@ def main() -> int:
         ("D", [("PARAMEDICO", 10, "PRINCIPAL")], [("ong.cruzroja", 1), ("ong.bomberos", 1)]),
         ("D2", [("PARAMEDICO", 10, "PRINCIPAL")], [("ong.bomberos", 2)]),
     ]
-    i = 0
-    for nombre, lotes, ofertas in plan:
-        if nombre not in pedidas and not (nombre == "A" and "F" in pedidas):
-            continue
-        fin = base + timedelta(seconds=i * ESCALON_S)
-        i += 1
-        emg, caso, ids = crear_y_publicar(e, f"Variante {nombre}", "ALTO", lotes, fin)
+    elegidas = [p for p in plan if p[0] in pedidas or (p[0] == "A" and "F" in pedidas)]
+    for nombre, lotes, _ in elegidas:  # primero se crean todas (lo lento), después se publican y se ofrece, escalonadas
+        emg, caso, ids = crear(e, f"Variante {nombre}", "ALTO", lotes)
         ctx.emg[nombre] = {"id": emg, "caso": caso, "lotes": ids}
+    base = datetime.now().astimezone() + timedelta(seconds=VENTANA_S)
+    for i, (nombre, lotes, ofertas) in enumerate(elegidas):
+        v = ctx.emg[nombre]
+        fin = base + timedelta(seconds=i * ESCALON_S)
+        publicar(e, v["id"], fin)
         for usuario, n in ofertas:
-            e.esperar(f"{nombre}: {usuario} ofrece {n}", e.ofrecer(usuario, emg, (ids[lotes[0][0]], n)), 201)
-        print(f"     {nombre} = emergencia #{emg} (caso {caso}) · vence {fin:%H:%M:%S}")
+            e.esperar(f"{nombre}: {usuario} ofrece {n}", e.ofrecer(usuario, v["id"], (v["lotes"][lotes[0][0]], n)), 201)
+        print(f"     {nombre} = emergencia #{v['id']} (caso {v['caso']}) · vence {fin:%H:%M:%S}")
 
-    # C se reformula apenas se evalúa; su segunda mitad espera a que venza la ronda 2.
-    pasos = [("C", variante_c_parte1), ("A", variante_a), ("B", variante_b), ("E", variante_e), ("C", variante_c_parte2),
-             ("D", variante_d), ("D2", variante_d2), ("F", variante_f)]
-    for nombre, paso in pasos:
-        if nombre not in pedidas:
-            continue
-        try:
-            paso(ctx)
-        except Exception:  # noqa: BLE001
-            e.check(f"{nombre}: la variante terminó sin excepciones", False, traceback.format_exc(limit=4))
+    tiempos: dict[str, float] = {}
+
+    def correr(nombre: str, *pasos) -> None:
+        inicio = time.monotonic()
+        for paso in pasos:
+            try:
+                paso(ctx)
+            except Exception:  # noqa: BLE001
+                e.check(f"{nombre}: la variante terminó sin excepciones", False, traceback.format_exc(limit=4))
+        tiempos[nombre] = time.monotonic() - inicio
+
+    # A, B, C y E no se pisan (cada una tiene su emergencia y las ofertas ya suman 4 y 6 paramédicos, lo que hay): corren a la
+    # vez. C se reformula apenas se evalúa y su segunda mitad espera a que venza la ronda 2. D y D2 apagan servidores (y F lee
+    # lo que dejó A): van después, de a una.
+    simultaneas = {"A": (variante_a,), "B": (variante_b,), "E": (variante_e,), "C": (variante_c_parte1, variante_c_parte2)}
+    hilos = [threading.Thread(target=correr, args=(n, *p)) for n, p in simultaneas.items() if n in pedidas]
+    for h in hilos:
+        h.start()
+    for h in hilos:
+        h.join()
+    for nombre, paso in (("D", variante_d), ("D2", variante_d2), ("F", variante_f)):
+        if nombre in pedidas:
+            correr(nombre, paso)
+    print("\n== Tiempos: " + ", ".join(f"{n} {t:.0f} s" for n, t in tiempos.items()))
 
     print("\n== Al final")
     e.check("Nacional: nada comprometido, como al empezar", {k: comprometido(ctx.nacional, *k) for k in CLAVES} == previos,
