@@ -8,7 +8,10 @@ backend/app/static/islands/
 
 # Documentacion de trabajo interna (no se entrega)
 entrega-1/*.md
-.claude/
+# Skills y subagentes del equipo: se versionan. El resto de .claude/ (launch.json con rutas absolutas, ajustes locales) no.
+.claude/*
+!.claude/agents/
+!.claude/skills/
 
 # Logs de uvicorn al correr la app a mano
 backend/uvicorn.log
@@ -30,3 +33,6 @@ entrega-[3-9]/*.bos
 # Python
 __pycache__/
 *.pyc
+
+# Cache de Schemathesis
+.schemathesis/

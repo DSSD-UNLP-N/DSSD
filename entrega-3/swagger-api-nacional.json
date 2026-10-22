@@ -1428,7 +1428,7 @@
           "estado"
         ],
         "summary": "Estado del servicio",
-        "description": "Responde `{\"estado\": \"ok\"}` sin autenticación. En Render (plan gratis) la primera llamada tras un rato de inactividad tarda 30-60 s.",
+        "description": "Responde `{\"estado\": \"ok\", \"commit\": \"<sha>\"}` sin autenticación: `commit` es la versión desplegada (en Render la pone\nla plataforma; en local es `local`). En Render (plan gratis) la primera llamada tras un rato de inactividad tarda 30-60 s.",
         "operationId": "health_health_get",
         "responses": {
           "200": {

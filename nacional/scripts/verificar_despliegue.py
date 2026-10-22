@@ -85,7 +85,7 @@ def main() -> int:
     inicio = time.monotonic()
     status, salud = v.pedir("GET", "/health")
     print(f"     /health respondió en {time.monotonic() - inicio:.1f} s (si estaba dormido, tarda)")
-    v.check("/health responde ok", status == 200 and salud == {"estado": "ok"}, (status, salud))
+    v.check("/health responde ok", status == 200 and isinstance(salud, dict) and salud.get("estado") == "ok", (status, salud))
     status, api = v.pedir("GET", "/openapi.json")
     rutas = set(api["paths"]) if status == 200 else set()
     esperadas = {"/tipos-recurso", "/certificaciones", "/ongs", "/ongs/{cuit}", "/ongs/{cuit}/inventario",

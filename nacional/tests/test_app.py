@@ -1,7 +1,12 @@
 def test_health(client):
     r = client.get("/health")
     assert r.status_code == 200
-    assert r.json() == {"estado": "ok"}
+    assert r.json() == {"estado": "ok", "commit": "local"}
+
+
+def test_health_dice_que_commit_esta_desplegado(client, monkeypatch):
+    monkeypatch.setenv("RENDER_GIT_COMMIT", "abc1234")
+    assert client.get("/health").json()["commit"] == "abc1234"
 
 
 def test_swagger_expone_el_titulo(client):
