@@ -119,6 +119,16 @@ jobs:
           for i in $(seq 1 30); do curl -sf http://localhost:8002/health && break; sleep 1; done
       - name: Verificar la API en marcha (JWT, catálogo, validaciones, reservas)
         run: python scripts/verificar_despliegue.py http://localhost:8002 --clave "$BONITA_SERVICE_PASSWORD"
+      - name: Fuzz del contrato OpenAPI contra Postgres (ningún pedido puede dar 5xx)
+        # Genera pedidos válidos y hostiles a partir de /openapi.json. Lo que SQLite deja pasar y Postgres rechaza
+        # (NUL, enteros de más de 32 bits) aparece acá como 500. La semilla queda en el log para reproducir.
+        run: |
+          pip install "schemathesis==4.32.3"
+          TOKEN=$(curl -sf -X POST http://localhost:8002/login -H 'Content-Type: application/json' \
+            -d "{\"username\":\"bonita-service\",\"password\":\"$BONITA_SERVICE_PASSWORD\"}" \
+            | python -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
+          schemathesis run http://localhost:8002/openapi.json --header "Authorization: Bearer $TOKEN" \
+            --checks not_a_server_error --max-examples 50
       - name: Log del servidor si algo falló
         if: failure()
         run: cat ../uvicorn.log
@@ -162,10 +172,18 @@ jobs:
         if: failure()
         run: cat ../uvicorn.log
 
+  # Claves o tokens subidos por error. Mira el árbol de trabajo (no el historial) y respeta .gitleaks.toml.
+  secretos:
+    name: Secretos (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.21.2 dir /repo --config /repo/.gitleaks.toml --redact
+
   # Un solo chequeo para exigir: si se suma o renombra un job de arriba, la regla de la rama no cambia.
   ci-verde:
     name: CI verde
-    needs: [backend, nacional, frontend, nacional-despliegue, backend-postgres]
+    needs: [backend, nacional, frontend, nacional-despliegue, backend-postgres, secretos]
     if: always()
     runs-on: ubuntu-latest
     steps:

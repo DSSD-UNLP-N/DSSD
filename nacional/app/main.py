@@ -1,3 +1,4 @@
+import os
 from urllib.parse import unquote
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -61,5 +62,6 @@ app.include_router(adjudicacion.router, prefix="/adjudicaciones", tags=["adjudic
 
 @app.get("/health", tags=["estado"], summary="Estado del servicio")
 def health() -> dict[str, str]:
-    """Responde `{"estado": "ok"}` sin autenticación. En Render (plan gratis) la primera llamada tras un rato de inactividad tarda 30-60 s."""
-    return {"estado": "ok"}
+    """Responde `{"estado": "ok", "commit": "<sha>"}` sin autenticación: `commit` es la versión desplegada (en Render la pone
+    la plataforma; en local es `local`). En Render (plan gratis) la primera llamada tras un rato de inactividad tarda 30-60 s."""
+    return {"estado": "ok", "commit": os.environ.get("RENDER_GIT_COMMIT", "local")}
