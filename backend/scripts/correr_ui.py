@@ -90,6 +90,26 @@ def liberar_reservas() -> None:
         list(pool.map(lambda ref: post(f"{base}/adjudicaciones/{ref}/liberar", timeout=90), refs))
 
 
+def retirar_ofertas_abiertas() -> int:
+    """Retira las ofertas de las dos ONGs en convocatorias abiertas (las que dejó e2e_ui o una corrida a medias): cada una descuenta
+    del inventario de la ONG y hace fallar al guion siguiente con «No alcanza tu inventario»."""
+    _nacional()  # deja `app` importable
+    from app.seed import DEMO_PASSWORD
+
+    app = "http://localhost:8001/api"
+    retiradas = 0
+    for usuario in ("ong.cruzroja", "ong.bomberos"):
+        s = requests.Session()
+        s.post(f"{app}/auth/login", json={"username": usuario, "password": DEMO_PASSWORD}, timeout=30).raise_for_status()
+        for e in s.get(f"{app}/emergencias", timeout=30).json():
+            if e["estado"] != "CONVOCATORIA":
+                continue
+            for o in s.get(f"{app}/emergencias/{e['id']}/ofertas", timeout=30).json():
+                if not o["retirada"]:
+                    retiradas += s.post(f"{app}/emergencias/{e['id']}/ofertas", json={"items": []}, timeout=60).ok
+    return retiradas
+
+
 def correr(nombre: str, args: list[str], resultados: dict) -> None:
     inicio = time.monotonic()
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}

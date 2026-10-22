@@ -38,6 +38,8 @@ CRUZ_ROJA, BOMBEROS = "30-54666544-5", "30-68522415-9"
 # Segundos de la ventana de ofertas. Tiene que alcanzar para crear las emergencias y cargar las ofertas (unos 20 s en una PC
 # cargada); es casi todo lo que tarda cada escenario, así que se puede achicar o agrandar con ESCENARIO_VENTANA_S.
 VENTANA_S = int(os.environ.get("ESCENARIO_VENTANA_S", 60))
+# Ronda 2: la ventana solo tiene que alcanzar para publicar y que Cruz Roja ofrezca (una sola oferta).
+RONDA2_S = int(os.environ.get("ESCENARIO_VENTANA_S", 60)) * 3 // 4
 
 
 def comprometido(nacional: str, cuit: str, tipo: str) -> int:
@@ -45,8 +47,11 @@ def comprometido(nacional: str, cuit: str, tipo: str) -> int:
     return next(i["cantidad_comprometida"] for i in ficha["inventario"] if i["tipo_recurso"] == tipo)
 
 
-def esperar(e: Escenario, emergencia: int, condicion, segundos: int) -> dict | None:
-    """Mira el detalle del Coordinador cada pocos segundos hasta que `condicion(detalle)` sea cierta."""
+def esperar(e: Escenario, emergencia: int, condicion, segundos: int, desde: datetime | None = None) -> dict | None:
+    """Mira el detalle del Coordinador cada 1,5 s hasta que `condicion(detalle)` sea cierta. Con `desde` (el cierre de la
+    ventana) primero duerme hasta ese momento, sin consultar: antes no hay nada que ver; `segundos` cuenta desde ahí."""
+    if desde is not None:
+        time.sleep(max(0.0, (desde - datetime.now().astimezone()).total_seconds()))
     limite = time.monotonic() + segundos
     while time.monotonic() < limite:
         try:
@@ -55,7 +60,7 @@ def esperar(e: Escenario, emergencia: int, condicion, segundos: int) -> dict | N
             d = None
         if d is not None and condicion(d):
             return d
-        time.sleep(6)
+        time.sleep(1.5)
     return None
 
 
@@ -82,8 +87,7 @@ def main() -> int:
     e.esperar("B1 Cruz Roja ofrece 2000 L de agua", e.ofrecer("ong.cruzroja", eb, (lb["AGUA_POTABLE"], 2000)), 201)
 
     print(f"\n== Esperando la evaluación de Bonita ({fin:%H:%M:%S})")
-    espera = VENTANA_S + 200
-    da = esperar(e, ea, lambda d: d["evaluacion"] is not None, espera)
+    da = esperar(e, ea, lambda d: d["evaluacion"] is not None, 200, desde=fin)
     db = esperar(e, eb, lambda d: d["evaluacion"] is not None, 60)
     e.check("A y B quedaron evaluadas (en EN_EVALUACION: la cobertura no alcanza)",
             da is not None and db is not None and da["estado"] == db["estado"] == "EN_EVALUACION",
@@ -136,12 +140,12 @@ def main() -> int:
             [t["displayName"] for t in admin.get_human_tasks(caso_b)])
 
     print("\n== B: segunda ronda")
-    fin2 = datetime.now().astimezone() + timedelta(seconds=100)
+    fin2 = datetime.now().astimezone() + timedelta(seconds=RONDA2_S)
     r = e.post("coordinador.regional", f"/emergencias/{eb}/publicar", {"ventana_fin": fin2.isoformat(timespec="seconds")})
     e.check("B8 El Coordinador publica de nuevo", r.status_code == 200 and r.json()["estado"] == "CONVOCATORIA", r.text)
     e.esperar("B9 Cruz Roja ofrece los 3000 L completos", e.ofrecer("ong.cruzroja", eb, (lb["AGUA_POTABLE"], 3000)), 201)
     print(f"     la ronda 2 vence {fin2:%H:%M:%S}")
-    d = esperar(e, eb, lambda d: d["evaluacion"] is not None, 100 + 200)
+    d = esperar(e, eb, lambda d: d["evaluacion"] is not None, 200, desde=fin2)
     e.check("B10 La evaluación de la ronda 2 cubre todo y va directo a ADJUDICACION",
             d is not None and d["estado"] == "ADJUDICACION" and d["evaluacion"]["cobertura_completa"] is True
             and d["evaluacion"]["ronda"] == 2, d and (d["estado"], d["evaluacion"]["ronda"]))
