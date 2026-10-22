@@ -10,6 +10,7 @@ PC está cargada y aparecen fallas de «ventana cerrada»).
 
     python scripts/correr_escenarios.py                       # los seis, unos 25 min
     python scripts/correr_escenarios.py --solo cierre,jwt     # algunos
+    python scripts/correr_escenarios.py --ventana 40          # ventana de ofertas más corta (PC holgada)
     python scripts/correr_escenarios.py --sin-unitarios
 
 Requisitos: los de cada escenario (Bonita con el `.bos` de JWT, app en :8001 y API Nacional en :8002 con seed y nada comprometido).
@@ -18,6 +19,7 @@ Los de la interfaz (e2e_ui.py, ui_parada2.py, ui_ejecucion.py) necesitan además
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -62,6 +64,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--solo", default="", help=f"separados por coma: {', '.join(ESCENARIOS)}")
     ap.add_argument("--sin-unitarios", action="store_true")
+    ap.add_argument("--ventana", type=int, metavar="SEGUNDOS",
+                    help="duración de la ventana de ofertas (ESCENARIO_VENTANA_S; 60 por defecto): en una PC holgada se puede bajar")
     args = ap.parse_args()
     elegidos = [n for n in ESCENARIOS if not args.solo or n in args.solo.split(",")]
 
@@ -75,8 +79,9 @@ def main() -> int:
         borrados = borrar_casos_abiertos()
         t = time.monotonic()
         print(f"\n########## {nombre} (casos de Bonita borrados antes: {borrados})", flush=True)
+        env = {**os.environ, "ESCENARIO_VENTANA_S": str(args.ventana)} if args.ventana else None
         p = subprocess.Popen([sys.executable, "-u", str(HERE / ESCENARIOS[nombre])], cwd=str(HERE.parent), stdout=subprocess.PIPE,
-                             stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
+                             stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", env=env)
         texto = []
         for linea in p.stdout:
             print(linea, end="", flush=True)

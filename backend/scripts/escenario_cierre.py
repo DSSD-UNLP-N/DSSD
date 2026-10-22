@@ -44,7 +44,7 @@ def sin_tareas(admin: BonitaClient, caso: int, segundos: int = 60) -> bool:
     while time.monotonic() < limite:
         if not admin.get_human_tasks(caso):
             return True
-        time.sleep(3)
+        time.sleep(1)
     return False
 
 
@@ -69,7 +69,7 @@ def main() -> int:
     e.esperar("Bomberos ofrece 2", e.ofrecer("ong.bomberos", emg, (lotes["PARAMEDICO"], 2)), 201)
 
     print(f"\n== Evaluación y adjudicación (la ventana vence {fin:%H:%M:%S})")
-    d = esperar(e, emg, lambda d: d["evaluacion"] is not None, VENTANA_S + 200)
+    d = esperar(e, emg, lambda d: d["evaluacion"] is not None, 200, desde=fin)
     e.check("Bonita evaluó: EN_EVALUACION con 60 %", d is not None and d["estado"] == "EN_EVALUACION", d and d["estado"])
     if d is None:
         print(f"\n{e.ok}/{e.total} verificaciones OK")
