@@ -9,8 +9,8 @@ Una prueba por vez. Si algo falla, parar y diagnosticar (el subagente `lector-de
 
 ## 0. Modo y preflight
 - **Nube**: `backend/.env` = `.env.nube` (Render, `NACIONAL_TIMEOUT_SECONDS=90`) y en Studio el proyecto con `entrega-3/entrega42_nube.bos` (proceso desplegado + organización).
-  **Local**: `.env.local`, `entrega42_local.bos`, API Nacional en `:8002` (`preview_start rescuesync-nacional`).
-- Levantar app (`preview_start rescuesync-backend`) y front (`rescuesync-frontend`).
+  **Local**: `.env.local`, `entrega42_local.bos`, API Nacional en `:8002` (`cd nacional && python -m uvicorn app.main:app --port 8002`).
+- Levantar la app (`cd backend && python -m uvicorn app.main:app --port 8001`) y el front (`cd frontend && npm run dev`).
 - `python backend/scripts/preflight.py` — tiene que dar 0 fallas. Si Bonita es un proyecto nuevo, los ids de caso arrancan en 1: la app ya los resuelve.
 
 ## 1. Sin Bonita
@@ -36,5 +36,5 @@ e2e_ui 1, parada2 1 (2 con `--con-parcial`), parada3 1, variantes ~8, jwt ~5. El
 - Reportar con los conteos de cada prueba y el commit que sirve Render (`/health`).
 
 ## Si falla
-Mirar primero `preflight.py` (modo, proyecto de Bonita, casos abiertos). Luego el log del escenario y el de la app (`preview_logs`). Casos típicos: ventana
+Mirar primero `preflight.py` (modo, proyecto de Bonita, casos abiertos). Luego el log del escenario y el de la app. Casos típicos: ventana
 cerrada antes de tiempo (subir `ESCENARIO_VENTANA_S`), Bonita sin el proceso desplegado, convocatorias viejas que descuentan inventario, referencia ya cerrada en Render (409).

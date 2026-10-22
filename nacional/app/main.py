@@ -60,7 +60,9 @@ app.include_router(cierre.router)
 app.include_router(reservas.router)
 app.include_router(adjudicacion.router, prefix="/adjudicaciones", tags=["adjudicaciones"])
 
-@app.get("/health", tags=["estado"], summary="Estado del servicio")
+@app.get("/health", tags=["estado"], summary="Estado del servicio",
+         responses={200: {"description": "El servicio está en pie",
+                          "content": {"application/json": {"example": {"estado": "ok", "commit": "aff993cda27a377fc693c84fe9804abee9ff536e"}}}}})
 def health() -> dict[str, str]:
     """Responde `{"estado": "ok", "commit": "<sha>"}` sin autenticación: `commit` es la versión desplegada (en Render la pone
     la plataforma; en local es `local`). En Render (plan gratis) la primera llamada tras un rato de inactividad tarda 30-60 s."""
