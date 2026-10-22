@@ -122,13 +122,6 @@ class NacionalClient:
             raise NacionalError("Sistema Nacional: respuesta inválida al liberar la reserva")
         return resultado
 
-    def adjudicar_recursos_nacional(self, datos_adjudicacion: dict) -> dict:
-        """Compromete recursos en el Sistema Nacional de forma idempotente."""
-        resultado = self._request("POST", "/adjudicaciones", json=datos_adjudicacion)
-        if not isinstance(resultado, dict):
-            raise NacionalError("Sistema Nacional: respuesta inválida al adjudicar recursos")
-        return resultado
-
 
 def get_nacional(settings: Settings = Depends(get_settings)) -> NacionalClient:
     return NacionalClient(settings.nacional_base_url, settings.nacional_timeout_seconds,
