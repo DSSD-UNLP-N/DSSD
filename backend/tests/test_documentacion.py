@@ -10,8 +10,6 @@ from pathlib import Path
 import pytest
 
 RAIZ = Path(__file__).resolve().parents[2]
-# Documentos de planificación de un momento puntual: nombran archivos que después cambiaron de lugar.
-EXCLUIDOS = ("docs/superpowers/",)
 # Rutas que se nombran a propósito aunque git no las guarde (carpetas generadas).
 PERMITIDOS = {"scripts/capturas/"}
 EXTENSIONES = r"md|html|bos|py|sh|json|yml|yaml|xml|tsx|ts"
@@ -59,7 +57,7 @@ def _documentos_en_codigo(texto: str) -> set[str]:
 def test_los_md_no_citan_archivos_que_no_estan_en_git(versionados):
     faltan = []
     for archivo in sorted(versionados):
-        if not archivo.endswith(".md") or archivo.startswith(EXCLUIDOS):
+        if not archivo.endswith(".md"):
             continue
         texto = (RAIZ / archivo).read_text(encoding="utf-8")
         faltan += [f"{archivo}: `{r}`" for r in sorted(_rutas_en_markdown(texto)) if r not in PERMITIDOS and not _existe(r, archivo, versionados)]
@@ -69,7 +67,7 @@ def test_los_md_no_citan_archivos_que_no_estan_en_git(versionados):
 def test_los_comentarios_del_codigo_no_citan_documentos_que_no_estan_en_git(versionados):
     faltan = []
     for archivo in sorted(versionados):
-        if not re.search(r"\.(py|sh|ya?ml|example|toml)$", archivo) or archivo.startswith(EXCLUIDOS):
+        if not re.search(r"\.(py|sh|ya?ml|example|toml)$", archivo):
             continue
         try:
             texto = (RAIZ / archivo).read_text(encoding="utf-8")
