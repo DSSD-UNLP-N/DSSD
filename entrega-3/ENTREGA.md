@@ -19,6 +19,8 @@ gestión de ONGs y el compromiso/liberación de recursos. URLs de servicios, doc
 2. Botón **Authorize** → pegar el token. Todos los endpoints (salvo `/health` y `/login`) exigen JWT.
 3. Probar `GET /tipos-recurso`, `GET /ongs`, `POST /validaciones`, `POST /evaluaciones`, etc.
 
+Los datos mal formados (CUIT que no tiene 11 dígitos, cantidades fuera de rango, textos con caracteres inválidos, cuerpos rotos) responden **422** y no guardan nada; las reglas están en [`nacional/README.md`](../nacional/README.md#reglas-de-entrada-todos-los-endpoints).
+
 Verificación automática de un despliegue (no deja datos modificados):
 `python nacional/scripts/verificar_despliegue.py https://rescuesync-nacional.onrender.com --clave <BONITA_SERVICE_PASSWORD>`.
 
