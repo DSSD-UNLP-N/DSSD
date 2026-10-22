@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 import responses
 
 from app.core.config import get_settings
-from app.models import Emergencia
+from app.models import Emergencia, Municipio
 
 BASE = get_settings().bonita_base_url
 BASE_PATH = urlparse(BASE).path  # "/bonita"
@@ -60,6 +60,22 @@ def test_alta_crea_emergencia_instancia_y_completa_registrar(login, seeded):
         "/API/bpm/humanTask", "/API/system/session/unusedid",
         "/API/bpm/userTask/9001", "/API/bpm/userTask/9001/execution",
     ]
+
+
+@responses.activate
+def test_un_caso_nuevo_con_el_numero_de_uno_viejo_se_lo_queda_y_el_viejo_queda_sin_caso(login, seeded):
+    """Proyecto de Bonita nuevo: la numeración vuelve a 1 y la base de la app ya tenía una emergencia con ese caso."""
+    with seeded() as s:
+        s.add(Emergencia(municipio_id=s.query(Municipio).one().id, tipo="incendio", nivel_gravedad="BAJO",
+                         zona_afectada="Sur", descripcion="vieja", bonita_case_id=4242))
+        s.commit()
+        vieja = s.query(Emergencia).one().id
+    _mock_alta_ok(case_id="4242")
+    assert login("operador.municipal").post(ALTA, json=DATOS).status_code == 201
+
+    with seeded() as s:
+        assert s.get(Emergencia, vieja).bonita_case_id is None
+        assert s.query(Emergencia).filter_by(bonita_case_id=4242).one().id != vieja
 
 
 @responses.activate
