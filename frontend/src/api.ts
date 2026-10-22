@@ -114,7 +114,6 @@ export type Evaluacion = {
 
 export type Meta = {
   tipos: Record<string, string>;
-  roles: Record<string, string>;
   demo: { password: string; users: { username: string; rol: string; label: string }[] } | null;
 };
 

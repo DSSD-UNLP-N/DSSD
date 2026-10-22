@@ -95,7 +95,7 @@ def meta(settings: Settings = Depends(get_settings)):
                 for u, _, rol, _ in DEMO_USERS
             ],
         }
-    return {"tipos": TIPO_LABEL, "roles": ROL_LABEL, "demo": demo}
+    return {"tipos": TIPO_LABEL, "demo": demo}
 
 
 @router.post("/auth/login", response_model=UsuarioOut)
