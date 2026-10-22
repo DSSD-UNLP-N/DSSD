@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
+from app.errores import errores
 from app.db import get_db
 from app.models import Cuenta, EstadoOng, Ong, RolCuenta
 from app.schemas import LoginIn, RegisterOngIn, TokenOut
@@ -23,12 +24,15 @@ def _token(cuenta: Cuenta, settings: Settings) -> TokenOut:
     )
 
 
-@router.post("/login", response_model=TokenOut, summary="Iniciar sesión y emitir JWT")
+@router.post("/login", response_model=TokenOut, summary="Iniciar sesión y emitir JWT",
+             responses=errores({401: "Usuario o contraseña incorrectos"}))
 def login(
     body: LoginIn,
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ):
+    """Devuelve un JWT para mandar en `Authorization: Bearer <token>` al resto de los endpoints. Sirve para las cuentas
+    de servicio (Bonita y la app local) y para las cuentas de ONG creadas con `POST /ongs`."""
     cuenta = db.scalar(select(Cuenta).where(Cuenta.username == body.username.strip()))
     if cuenta is None or not verify_password(body.password, cuenta.password_hash):
         raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
@@ -36,12 +40,15 @@ def login(
 
 
 @router.post("/ongs", response_model=TokenOut, status_code=status.HTTP_201_CREATED,
-             summary="Registrar una ONG y su cuenta")
+             summary="Registrar una ONG y su cuenta",
+             responses=errores({409: "El usuario, el nombre de la ONG o el CUIT ya están registrados"}))
 def registrar_ong(
     body: RegisterOngIn,
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ):
+    """Onboarding: crea la ONG (habilitada, sin certificaciones ni inventario) y su cuenta, y devuelve ya un token.
+    No requiere autenticación. Después la ONG declara su inventario con `PUT /ongs/{cuit}/inventario`."""
     if db.scalar(select(Cuenta.id).where(func.lower(Cuenta.username) == body.username.lower())):
         raise HTTPException(status_code=409, detail="El nombre de usuario ya está registrado")
     if db.scalar(select(Ong.id).where(func.lower(Ong.nombre) == body.ong_nombre.lower())):
