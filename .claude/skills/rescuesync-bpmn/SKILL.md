@@ -3,6 +3,10 @@ name: rescuesync-bpmn
 description: Read, understand, and edit the RescueSync BPMN process (entrega-1/RescueSync.bpmn) for this DSSD Bonita BPM university project. Use this whenever the user wants to develop, modify, extend, or discuss "el diagrama RescueSync", "el proceso", "el BPMN", RescueSync's tasks/gateways/lanes/variables, or anything about the emergency-management process model in this repo — even if they just say "agregá una tarea", "cambiá el flujo", "sacame un diagrama del proceso" without naming the file. Also use it before answering questions about what the process does, since the raw XML is not self-explanatory without this context.
 ---
 
+> **Ojo:** este skill describe el modelo de la Entrega 1 (el `.bpmn` de `entrega-1/`, solo lectura). El proceso vigente es el de `entrega-3/entrega42_local.bos` y `entrega42_nube.bos`
+> (con conectores REST, login a Nacional y «Confirmar Finalizacion» estándar): para editarlo seguí el skill `editar-bos`, y para inspeccionarlo `rescuesync-estado/scripts/inspect_bos.py`.
+
+
 # RescueSync BPMN skill
 
 ## What this file is (and isn't)

@@ -9,7 +9,7 @@ import sys
 import zipfile
 import xml.dom.minidom as minidom
 
-path = sys.argv[1] if len(sys.argv) > 1 else "entrega-2/RescueSync.bos"
+path = sys.argv[1] if len(sys.argv) > 1 else "entrega-3/entrega42_local.bos"
 z = zipfile.ZipFile(path)
 names = z.namelist()
 proc = next(n for n in names if n.endswith(".proc"))

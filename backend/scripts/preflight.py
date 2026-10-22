@@ -60,8 +60,10 @@ def nacional(cfg) -> None:
         return falla(f"login de {cfg.nacional_service_username} → {login.status_code}: revisar NACIONAL_SERVICE_PASSWORD del .env")
     ok(f"login de {cfg.nacional_service_username}")
     header = {"Authorization": f"Bearer {login.json()['access_token']}"}
-    comprometido = sum(r["cantidad_comprometida"] for r in
-                       requests.get(f"{cfg.nacional_base_url}/recursos/disponibilidad", headers=header, timeout=timeout).json())
+    disponibilidad = requests.get(f"{cfg.nacional_base_url}/recursos/disponibilidad", headers=header, timeout=timeout)
+    if disponibilidad.status_code != 200:
+        return falla(f"/recursos/disponibilidad → {disponibilidad.status_code}")
+    comprometido = sum(r["cantidad_comprometida"] for r in disponibilidad.json())
     if comprometido:
         aviso(f"hay {comprometido} unidades comprometidas en Nacional: los escenarios exigen «nada comprometido»")
     else:
@@ -73,7 +75,7 @@ def app() -> None:
     if responde("http://localhost:8001/openapi.json"):
         ok("app en :8001")
     else:
-        falla("la app no responde en :8001 (preview_start rescuesync-backend, o uvicorn)")
+        falla("la app no responde en :8001 (cd backend && python -m uvicorn app.main:app --port 8001)")
     if responde("http://localhost:5173"):
         ok("front en :5173")
     else:
@@ -93,7 +95,10 @@ def bonita(cfg) -> None:
         ok(f"proceso «{cfg.bonita_process_name}» v{cfg.bonita_process_version} desplegado")
     except Exception:  # noqa: BLE001
         falla("el proceso no está desplegado: importar el .bos (nube o local, según el modo) y ejecutar")
-    casos = admin._request("GET", "/API/bpm/case", params={"p": 0, "c": 200}).json()
+    respuesta = admin._request("GET", "/API/bpm/case", params={"p": 0, "c": 200})
+    if respuesta.status_code != 200:
+        return falla(f"no se pudieron listar los casos de Bonita (HTTP {respuesta.status_code})")
+    casos = respuesta.json()
     if casos:
         aviso(f"{len(casos)} caso(s) abiertos en Bonita: tienen timers que reservan stock y las variantes exigen ninguno "
               "(correr_escenarios los borra al empezar)")
@@ -104,9 +109,11 @@ def bonita(cfg) -> None:
 
 def base_de_la_app(cfg) -> None:
     print("\n== Base de la app")
-    ruta = cfg.database_url.removeprefix("sqlite:///")
-    if not cfg.database_url.startswith("sqlite:///") or not Path(ruta).exists():
+    if not cfg.database_url.startswith("sqlite:///"):
         return ok("no es un SQLite local: nada que revisar")
+    ruta = Path(__file__).resolve().parents[1] / cfg.database_url.removeprefix("sqlite:///")  # relativa a backend/, no al directorio actual
+    if not ruta.exists():
+        return aviso(f"no existe {ruta}: se crea al correr alembic upgrade head y el seed")
     con = sqlite3.connect(ruta, timeout=10)
     total, = con.execute("select count(*) from emergencia").fetchone()
     abiertas, = con.execute("select count(*) from emergencia where estado = 'CONVOCATORIA'").fetchone()

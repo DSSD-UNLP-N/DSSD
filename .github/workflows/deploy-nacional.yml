@@ -26,10 +26,11 @@ jobs:
     # El servicio de Render sigue la rama dev: un push a main no debe pisarlo con un commit más viejo.
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
-    # Dos pushes seguidos: solo importa el último (el primero nunca llega a estar en línea y fallaría la espera).
+    # Dos pushes seguidos: GitHub deja una sola corrida esperando y reemplaza a las anteriores, pero no mata la que está
+    # verificando (verificar_despliegue.py reserva stock real y lo libera al terminar).
     concurrency:
       group: deploy-render
-      cancel-in-progress: true
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - name: Desplegar en Render, esperar a que sirva este commit y verificarlo

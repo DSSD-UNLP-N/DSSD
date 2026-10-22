@@ -1,4 +1,5 @@
-def test_health(client):
+def test_health(client, monkeypatch):
+    monkeypatch.delenv("RENDER_GIT_COMMIT", raising=False)
     r = client.get("/health")
     assert r.status_code == 200
     assert r.json() == {"estado": "ok", "commit": "local"}

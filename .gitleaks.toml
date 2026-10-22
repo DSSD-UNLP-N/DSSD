@@ -9,8 +9,6 @@ paths = [
   '''nacional/\.env\.example''',
   '''(backend|nacional)/tests/.*''',
   '''entrega-3/swagger-api-nacional\.json''',
-  '''docs/.*\.md''',
-  '''README\.md''',
 ]
 regexes = [
   '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.eyJzdWIiOiJib25pdGEtc2VydmljZSIs''',  # token de ejemplo de la documentación de /login
