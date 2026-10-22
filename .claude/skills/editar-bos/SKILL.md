@@ -7,7 +7,7 @@ description: Cómo modificar el proceso de Bonita (el .bos) sin romperlo ni pisa
 
 - **Es un zip binario** (`.gitattributes`): nunca diff ni merge textual. Edita **una persona por vez**; avisar antes de empezar y después de subir.
 - **Preferir scripts** a Studio: `bonita/scripts/agregar_conector_cierre.py`, `agregar_login_nacional.py`, `preparar_entorno.py`, `ver_conectores.py`.
-  Dejan la edición repetible y revisable; la bitácora de cada cambio va en `entrega-3/CAMBIOS-BONITA.md` (local).
+  Dejan la edición repetible y revisable; la bitácora de cada cambio va en el archivo CAMBIOS-BONITA.md de la carpeta de la entrega (solo local).
 - **Solo dos `.bos` versionados**: `entrega-3/entrega42_local.bos` y `entrega42_nube.bos`. Son idénticos salvo las URLs de los conectores (`localhost:8002` ↔ Render) y la clave de
   `bonita-service` (la de la demo, pública a propósito). Un test lo verifica. Generar el de nube desde el local:
   `NACIONAL_BONITA_PASSWORD=<clave> python bonita/scripts/preparar_entorno.py entrega-3/entrega42_local.bos entrega-3/entrega42_nube.bos --nacional https://rescuesync-nacional.onrender.com`.

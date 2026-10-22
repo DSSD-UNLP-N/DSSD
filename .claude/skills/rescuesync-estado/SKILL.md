@@ -22,7 +22,7 @@ https://rescuesync-nacional.onrender.com o local `:8002`). Entrega 3 (API en la 
 | `docs/` | `instalacion-local.md`, `instalacion-nube.md` |
 | `.github/workflows/` | `ci.yml` (tests, Postgres, fuzz Schemathesis, gitleaks, "CI verde"), `deploy-nacional.yml` (redeploy a Render desde `dev` y verificación) |
 
-Documentos de trabajo (`ESTADO.md`, guías) viven solo en local (`.gitignore`); lo que importa para otros va en `docs/` o en este skill.
+Documentos de trabajo (ESTADO.md, guías) viven solo en local (`.gitignore`); lo que importa para otros va en `docs/` o en este skill.
 
 ## Cómo verificar (en este orden)
 

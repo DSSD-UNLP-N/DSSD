@@ -24,7 +24,7 @@ auto-sync with the `.bpmn`. So the workflow is always:
    the one step that's easy to forget and the two files silently drift apart
    if skipped.
 
-See the repo's `CLAUDE.md` for the full repo/Bonita context (versions, git
+See the repo's local CLAUDE.md for the full repo/Bonita context (versions, git
 conventions for `.bos`/`.bar` binaries, etc.) if you need it.
 
 ## What the process models
@@ -131,7 +131,7 @@ Earlier iterations of this process also had `"REABRIR"` (reopen the call) and
 `"CANCELAR"` (terminate with no coverage) branches plus a dedicated
 cancellation end event — those are **not present** in the current export.
 If the user asks to reintroduce cancellation/reopen logic, that's a
-reasonable ask (it matches the originally documented design in `CLAUDE.md`)
+reasonable ask (it matches the originally documented design in the local CLAUDE.md)
 but treat it as adding new branches, not restoring something that secretly
 still exists.
 
@@ -203,7 +203,7 @@ doesn't assume the two files are already in sync.
 ## Other notes
 
 - `entrega-1/*.md` (the assignment brief, working notes) and the root
-  `CLAUDE.md` are gitignored on purpose — they exist locally but aren't in
+  CLAUDE.md are gitignored on purpose — they exist locally but aren't in
   version control. If you need the assignment spec for context and don't
   have it in the conversation already, ask the user or look for it under
   `entrega-1/` rather than assuming it doesn't exist.
