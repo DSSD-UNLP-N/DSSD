@@ -22,7 +22,6 @@ entrada y escriben uno nuevo para importar en Studio. Cada uno explica su uso en
 
 | Script | Qué hace |
 |---|---|
-| `bonita_client.py` | Cliente REST de Bonita (login con el token CSRF, instanciar, tareas, variables) y una CLI mínima para instanciar un caso. La app tiene su propio cliente en `backend/app/integrations/bonita.py`. |
 | `agregar_conector_cierre.py` | Agrega los conectores de «Liberar Recursos y Notificar Cierre» y deja «Confirmar Finalizacion de Actividades» como tarea estándar. |
 | `agregar_login_nacional.py` | Agrega el conector `loginNacional` (JWT) antes de cada llamada a la API Nacional y la cabecera `Authorization: Bearer`. |
 | `preparar_entorno.py` | Cambia la URL de la API Nacional y la clave de `bonita-service` de un `.bos` (así se generó el de la nube a partir del local). |

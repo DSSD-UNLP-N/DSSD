@@ -2,8 +2,7 @@
 
 Probado el 20/09/2026 contra el Bonita embebido de Studio 10.4.0: login con
 token CSRF, resolver el proceso, instanciar con el contrato, leer tareas,
-setear variables y avanzar tareas. Ver bonita/scripts/bonita_client.py para la
-version de linea de comandos.
+setear variables y avanzar tareas.
 """
 import time
 

@@ -1,5 +1,5 @@
-"""T-14 (interfaz): recorre la SPA React en un navegador real con los 5 perfiles y verifica, en cada
-paso, lo que se ve en pantalla y lo que pasó en Bonita. Complementa a e2e.py, que habla HTTP.
+"""Recorre la SPA React en un navegador real con los 5 perfiles y verifica, en cada
+paso, lo que se ve en pantalla y lo que pasó en Bonita.
 
 Requisitos: Bonita Studio con el proceso desplegado, backend (`uvicorn app.main:app --port 8001`),
 API Nacional (`cd nacional; uvicorn app.main:app --port 8002`, migrada y con seed),
