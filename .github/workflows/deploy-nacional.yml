@@ -23,15 +23,19 @@ jobs:
 
   deploy:
     needs: image
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+    # El servicio de Render sigue la rama dev: un push a main no debe pisarlo con un commit más viejo.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
     steps:
       - name: Disparar el deploy en Render
         env:
-          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: srv-dbakn0m1egvs73b3cb00
         run: |
-          if [ -z "$HOOK" ]; then
-            echo "RENDER_DEPLOY_HOOK_URL no está en los secrets: la imagen se construyó y el deploy automático queda pendiente de ese hook."
+          if [ -z "$RENDER_API_KEY" ]; then
+            echo "RENDER_API_KEY no está en los secrets: la imagen se construyó pero Render no se redespliega."
             exit 0
           fi
-          curl -fsS -X POST "$HOOK"
+          curl -fsS -X POST "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+            -H "Authorization: Bearer $RENDER_API_KEY" -H "Content-Type: application/json" \
+            -d "{\"commitId\": \"$GITHUB_SHA\", \"clearCache\": \"do_not_clear\"}"
