@@ -4,11 +4,12 @@ No se pueden correr a la vez: comparten el Bonita, la app, la API Nacional y su 
 Lo que sí hace en paralelo es lo que no toca esos servidores: los tests unitarios y el chequeo de tipos del front corren mientras
 tanto (casi todo el tiempo de un escenario es esperar a que venza la ventana de ofertas).
 
-Entre escenario y escenario borra los casos que dejó abiertos en Bonita (las variantes exigen que no haya ninguno) y corta en el
+Antes de empezar retira las ofertas abiertas de las ONGs y libera las reservas que haya dejado una corrida anterior; entre escenario y
+escenario borra los casos que dejó abiertos en Bonita (las variantes exigen que no haya ninguno) y corta en el
 primero que falla. La duración de la ventana de ofertas es lo que más pesa: ESCENARIO_VENTANA_S (60 s por defecto; subirla si la
 PC está cargada y aparecen fallas de «ventana cerrada»).
 
-    python scripts/correr_escenarios.py                       # los seis, unos 25 min
+    python scripts/correr_escenarios.py                       # los seis, unos 17 min
     python scripts/correr_escenarios.py --solo cierre,jwt     # algunos
     python scripts/correr_escenarios.py --ventana 40          # ventana de ofertas más corta (PC holgada)
     python scripts/correr_escenarios.py --sin-unitarios
@@ -50,7 +51,19 @@ def borrar_casos_abiertos() -> int:
     casos = admin._request("GET", "/API/bpm/case", params={"p": 0, "c": 200}).json()
     for c in casos:
         admin.delete_case(c["id"])
+    for _ in range(30):  # Bonita borra en segundo plano: el escenario siguiente exige que no quede ninguno
+        if not admin._request("GET", "/API/bpm/case", params={"p": 0, "c": 1}).json():
+            break
+        time.sleep(1)
     return len(casos)
+
+
+def limpiar_previos() -> None:
+    """Lo que dejó una corrida anterior y los escenarios no limpian: ofertas abiertas y reservas en la API Nacional."""
+    from correr_ui import liberar_reservas, retirar_ofertas_abiertas
+
+    print(f"Limpieza previa: {retirar_ofertas_abiertas()} ofertas abiertas retiradas; reservas de la API Nacional liberadas.", flush=True)
+    liberar_reservas()
 
 
 def unitarios(resultado: dict) -> None:
@@ -75,6 +88,7 @@ def main() -> int:
         hilo.start()
 
     inicio, resumen, ok = time.monotonic(), [], True
+    limpiar_previos()
     for nombre in elegidos:
         borrados = borrar_casos_abiertos()
         t = time.monotonic()
