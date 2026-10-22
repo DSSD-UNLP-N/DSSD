@@ -16,11 +16,14 @@ import argparse
 import sys
 import time
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import requests
 
-from app.core.config import get_settings
-from app.integrations.bonita import BonitaClient
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from app.core.config import get_settings  # noqa: E402
+from app.integrations.bonita import BonitaClient  # noqa: E402
 
 ok = total = 0
 

@@ -148,6 +148,9 @@ def registrar_emergencia(
             "No se pudo iniciar el caso en Bonita. La emergencia no se registró; probá de nuevo."
         ) from exc
 
+    # Al importar el .bos como proyecto nuevo Bonita numera los casos desde 1: una emergencia vieja con este mismo número
+    # apunta a un caso que ya no existe, y chocaría con el UNIQUE de bonita_case_id.
+    db.execute(update(Emergencia).where(Emergencia.bonita_case_id == int(case_id)).values(bonita_case_id=None))
     emergencia.bonita_case_id = int(case_id)
     db.commit()
     db.refresh(emergencia)
