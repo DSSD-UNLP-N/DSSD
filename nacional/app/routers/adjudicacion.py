@@ -6,11 +6,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
+from app.errores import SERVICIO, errores
 from app.models import Adjudicacion, AdjudicacionItem, Inventario
 from app.schemas import AdjudicacionIn, AdjudicacionItemOut, AdjudicacionOut
 from app.security import require_servicio
 
-router = APIRouter(dependencies=[Depends(require_servicio)])
+router = APIRouter(dependencies=[Depends(require_servicio)], responses=errores(SERVICIO))
 
 
 def _obtener_adjudicacion(db: Session, referencia_id: str) -> Adjudicacion | None:
@@ -36,13 +37,22 @@ def _salida(adjudicacion: Adjudicacion) -> AdjudicacionOut:
     )
 
 
-@router.post("", response_model=AdjudicacionOut, status_code=201)
+@router.post(
+    "", response_model=AdjudicacionOut, status_code=201,
+    summary="Adjudicar: comprometer inventario de una ONG",
+    responses={
+        200: {"model": AdjudicacionOut, "description": "La referencia ya estaba adjudicada: devuelve la misma, sin comprometer de nuevo"},
+        **errores({400: "Inventario inexistente, repetido en el pedido o de otra ONG",
+                   409: "Stock insuficiente, o ya adjudicado por otra transacción"}),
+    },
+)
 def adjudicar(
     body: AdjudicacionIn,
     response: Response,
     db: Session = Depends(get_db),
 ) -> AdjudicacionOut:
-    """Compromete inventario bajo locks pesimistas e idempotencia por referencia."""
+    """Compromete inventario bajo locks pesimistas e idempotencia por `referencia_id`: dos pedidos a la vez sobre el mismo
+    stock no lo comprometen dos veces. A diferencia de `POST /evaluaciones`, no valida competencia: es el bloqueo directo."""
     db.rollback()
     cantidades: dict[int, int] = {}
     for item in body.items:
