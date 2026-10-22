@@ -63,6 +63,18 @@ def test_alta_crea_emergencia_instancia_y_completa_registrar(login, seeded):
 
 
 @responses.activate
+def test_una_base_vacia_numera_desde_los_minutos_desde_1970_y_sigue_de_a_uno(login, seeded):
+    """Render recuerda las emergencias por número: una base nueva no puede arrancar en 1 y chocar con las ya vistas."""
+    c = login("operador.municipal")
+    ids = []
+    for caso in ("501", "502"):
+        _mock_alta_ok(case_id=caso)
+        ids.append(c.post(ALTA, json=DATOS).json()["id"])
+        responses.reset()
+    assert ids[0] > 20_000_000 and ids[1] == ids[0] + 1
+
+
+@responses.activate
 def test_un_caso_nuevo_con_el_numero_de_uno_viejo_se_lo_queda_y_el_viejo_queda_sin_caso(login, seeded):
     """Proyecto de Bonita nuevo: la numeración vuelve a 1 y la base de la app ya tenía una emergencia con ese caso."""
     with seeded() as s:
