@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
 
 from app.models import EstadoEmergencia, EstadoOferta, Gravedad, Rol, TipoLote
 from app.schemas.evaluacion import Evaluacion
@@ -138,3 +138,37 @@ class OfertaOut(BaseModel):
     estado: EstadoOferta = EstadoOferta.PRESENTADA
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class RubroIn(BaseModel):
+    tipo_recurso: str = Field(min_length=1)
+    cantidad_total: int = Field(ge=0)
+
+
+class AltaOngIn(BaseModel):
+    ong_nombre: str = Field(min_length=2, max_length=120)
+    cuit: str = Field(pattern=r"^\d{2}-?\d{8}-?\d$")
+    nombre: str = Field(min_length=2, max_length=120)
+    username: str = Field(min_length=3, max_length=60, pattern=r"^[A-Za-z0-9._-]+$")  # lo mismo que exige la API Nacional
+    password: str = Field(min_length=8, max_length=128)
+    rubros: list[RubroIn] = Field(min_length=1)
+
+    @field_validator("ong_nombre", "cuit", "nombre", "username", mode="before")
+    @classmethod
+    def _recortar(cls, v):
+        return v.strip() if isinstance(v, str) else v
+
+    @field_validator("rubros")
+    @classmethod
+    def _sin_repetidos(cls, v):
+        tipos = [r.tipo_recurso for r in v]
+        if len(set(tipos)) != len(tipos):
+            raise ValueError("No repitas el mismo tipo de recurso")
+        return v
+
+
+class AltaOngOut(BaseModel):
+    ong_nombre: str
+    cuit: str
+    username: str
+    rubros: list[RubroIn]

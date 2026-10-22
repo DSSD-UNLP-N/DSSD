@@ -23,15 +23,37 @@ jobs:
 
   deploy:
     needs: image
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+    # El servicio de Render sigue la rama dev: un push a main no debe pisarlo con un commit más viejo.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
+    # Dos pushes seguidos: solo importa el último (el primero nunca llega a estar en línea y fallaría la espera).
+    concurrency:
+      group: deploy-render
+      cancel-in-progress: true
     steps:
-      - name: Disparar el deploy en Render
+      - uses: actions/checkout@v4
+      - name: Desplegar en Render, esperar a que sirva este commit y verificarlo
         env:
-          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: srv-dbakn0m1egvs73b3cb00
+          URL: https://rescuesync-nacional.onrender.com
         run: |
-          if [ -z "$HOOK" ]; then
-            echo "RENDER_DEPLOY_HOOK_URL no está en los secrets: la imagen se construyó y el deploy automático queda pendiente de ese hook."
+          if [ -z "$RENDER_API_KEY" ]; then
+            echo "RENDER_API_KEY no está en los secrets: la imagen se construyó pero Render no se redespliega."
             exit 0
           fi
-          curl -fsS -X POST "$HOOK"
+          curl -fsS -X POST "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+            -H "Authorization: Bearer $RENDER_API_KEY" -H "Content-Type: application/json" \
+            -d "{\"commitId\": \"$GITHUB_SHA\", \"clearCache\": \"do_not_clear\"}"
+          echo
+          # /health dice qué commit está sirviendo Render. El build del plan gratis tarda unos minutos.
+          for i in $(seq 1 60); do
+            COMMIT=$(curl -s -m 30 "$URL/health" | python3 -c "import json,sys; print(json.load(sys.stdin).get('commit',''))" 2>/dev/null || true)
+            [ "$COMMIT" = "$GITHUB_SHA" ] && break
+            echo "Render sirve '${COMMIT:-nada todavía}' (esperando ${GITHUB_SHA:0:7})"; sleep 15
+          done
+          [ "$COMMIT" = "$GITHUB_SHA" ] || { echo "Render no llegó a servir $GITHUB_SHA"; exit 1; }
+          CLAVE=$(curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars" \
+            | python3 -c "import json,sys; print(next(e['envVar']['value'] for e in json.load(sys.stdin) if e['envVar']['key']=='BONITA_SERVICE_PASSWORD'))")
+          echo "::add-mask::$CLAVE"
+          python3 nacional/scripts/verificar_despliegue.py "$URL" --clave "$CLAVE"

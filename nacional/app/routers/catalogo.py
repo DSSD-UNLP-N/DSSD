@@ -5,9 +5,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
+from app.errores import AUTH, errores
 from app.models import Certificacion, EstadoOng, Inventario, Ong, OngCertificacion, TipoRecurso
 from app.schemas import (
     CertificacionOut,
+    CuitPath,
     DisponibilidadOngOut,
     DisponibilidadOut,
     FichaOngOut,
@@ -19,7 +21,7 @@ from app.schemas import (
 from app.security import get_current_account
 from app.services.catalogo import riesgo_permitido
 
-router = APIRouter(tags=["catálogo"], dependencies=[Depends(get_current_account)])
+router = APIRouter(tags=["catálogo"], dependencies=[Depends(get_current_account)], responses=errores(AUTH))
 
 
 def _tipo_out(t: TipoRecurso) -> TipoRecursoOut:
@@ -39,6 +41,7 @@ def inventario_out(ong: Ong, i: Inventario, hoy: date) -> InventarioOut:
 
 @router.get("/tipos-recurso", response_model=list[TipoRecursoOut], summary="Catálogo de tipos de recurso")
 def listar_tipos_recurso(db: Session = Depends(get_db)):
+    """Los recursos que se pueden ofrecer y pedir. Su `codigo` es el `tipo_recurso` del resto de la API."""
     tipos = db.scalars(
         select(TipoRecurso).options(selectinload(TipoRecurso.certificacion)).order_by(TipoRecurso.codigo)
     ).all()
@@ -47,6 +50,7 @@ def listar_tipos_recurso(db: Session = Depends(get_db)):
 
 @router.get("/certificaciones", response_model=list[CertificacionOut], summary="Catálogo de certificaciones")
 def listar_certificaciones(db: Session = Depends(get_db)):
+    """Las certificaciones que habilitan recursos y, para cada una, los tipos de recurso que habilita."""
     tipos = db.scalars(select(TipoRecurso).order_by(TipoRecurso.codigo)).all()
     return [
         CertificacionOut(
@@ -59,17 +63,20 @@ def listar_certificaciones(db: Session = Depends(get_db)):
 
 @router.get("/ongs", response_model=list[OngOut], summary="ONGs del registro nacional")
 def listar_ongs(
-    estado: EstadoOng | None = Query(None, description="Filtra por estado; HABILITADA = ONGs habilitadas"),
+    estado: EstadoOng | None = Query(None, description="Filtra por estado; HABILITADA = ONGs habilitadas", examples=["HABILITADA"]),
     db: Session = Depends(get_db),
 ):
+    """Registro nacional de ONGs, ordenado por nombre. Sin `estado` devuelve todas."""
     query = select(Ong).order_by(Ong.nombre)
     if estado is not None:
         query = query.where(Ong.estado == estado)
     return db.scalars(query).all()
 
 
-@router.get("/ongs/{cuit}", response_model=FichaOngOut, summary="Ficha de una ONG")
-def ficha_ong(cuit: str, db: Session = Depends(get_db)):
+@router.get("/ongs/{cuit}", response_model=FichaOngOut, summary="Ficha de una ONG",
+            responses=errores({404: "ONG no registrada"}))
+def ficha_ong(cuit: CuitPath, db: Session = Depends(get_db)):
+    """Certificaciones (con su vencimiento y riesgo máximo) e inventario de la ONG, con lo que hoy puede operar."""
     ong = db.scalar(
         select(Ong).where(Ong.cuit == cuit).options(
             selectinload(Ong.certificaciones).selectinload(OngCertificacion.certificacion),
@@ -95,11 +102,13 @@ def ficha_ong(cuit: str, db: Session = Depends(get_db)):
 @router.get(
     "/recursos/disponibilidad", response_model=list[DisponibilidadOut],
     summary="Disponibilidad global de recursos (solo ONGs habilitadas)",
+    responses=errores({404: "El tipo de recurso no existe"}),
 )
 def disponibilidad(
-    tipo_recurso: str | None = Query(None, description="Código del tipo de recurso; sin él, todos"),
+    tipo_recurso: str | None = Query(None, description="Código del tipo de recurso; sin él, todos", examples=["PARAMEDICO"]),
     db: Session = Depends(get_db),
 ):
+    """Stock total, comprometido y disponible por tipo de recurso, sumando las ONGs habilitadas y desglosado por ONG."""
     query = select(TipoRecurso).order_by(TipoRecurso.codigo)
     if tipo_recurso is not None:
         query = query.where(TipoRecurso.codigo == tipo_recurso)

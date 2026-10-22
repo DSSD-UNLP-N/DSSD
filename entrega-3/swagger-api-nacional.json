@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Sistema Nacional de Gestión de Recursos y Riesgos",
-    "description": "API del Sistema Nacional: catálogo de recursos y certificaciones, inventario de las ONGs, validación de ofertas por niveles de competencia y cierre operativo (libera recursos bloqueados).",
-    "version": "0.1.0"
+    "description": "API del Sistema Nacional: catálogo de recursos y certificaciones, inventario de las ONGs, validación de ofertas por niveles de competencia y cierre operativo (libera recursos bloqueados).\n\n**Autenticación.** `POST /login` devuelve un JWT; en Swagger, botón *Authorize* y pegar el token. Todo menos `/health`, `/login` y `POST /ongs` lo exige. Los endpoints de reservas, adjudicaciones y cierres son solo de las cuentas de servicio (Bonita y la app local); el inventario lo modifica cada ONG con su cuenta.\n\n**Recorrido de una emergencia.** `POST /validaciones` (consulta, no guarda) → `POST /evaluaciones` (reserva el stock al vencer la ventana de ofertas) → `POST /adjudicaciones/resolucion` (confirma las elegidas y libera las demás) → `POST /cierres/lote` (cierra y devuelve lo comprometido).\n\n**Errores.** Siempre `{\"detail\": ...}`. Datos mal formados: 422 (nada se guarda). Sin token o vencido: 401. Cuenta sin permiso: 403. No existe: 404. Choca con el estado actual: 409. Las operaciones de reserva y cierre son idempotentes: repetirlas devuelve el mismo resultado sin volver a restar stock.",
+    "version": "1.0.0"
   },
   "paths": {
     "/login": {
@@ -12,6 +12,7 @@
           "autenticación"
         ],
         "summary": "Iniciar sesión y emitir JWT",
+        "description": "Devuelve un JWT para mandar en `Authorization: Bearer <token>` al resto de los endpoints. Sirve para las cuentas\nde servicio (Bonita y la app local) y para las cuentas de ONG creadas con `POST /ongs`.",
         "operationId": "login_login_post",
         "requestBody": {
           "content": {
@@ -30,6 +31,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TokenOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Usuario o contraseña incorrectos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
                 }
               }
             }
@@ -53,6 +64,7 @@
           "autenticación"
         ],
         "summary": "Registrar una ONG y su cuenta",
+        "description": "Onboarding: crea la ONG (habilitada, sin certificaciones ni inventario) y su cuenta, y devuelve ya un token.\nNo requiere autenticación. Después la ONG declara su inventario con `PUT /ongs/{cuit}/inventario`.",
         "operationId": "registrar_ong_ongs_post",
         "requestBody": {
           "required": true,
@@ -75,6 +87,16 @@
               }
             }
           },
+          "409": {
+            "description": "El usuario, el nombre de la ONG o el CUIT ya están registrados",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -92,6 +114,7 @@
           "catálogo"
         ],
         "summary": "ONGs del registro nacional",
+        "description": "Registro nacional de ONGs, ordenado por nombre. Sin `estado` devuelve todas.",
         "operationId": "listar_ongs_ongs_get",
         "security": [
           {
@@ -113,6 +136,9 @@
                 }
               ],
               "description": "Filtra por estado; HABILITADA = ONGs habilitadas",
+              "examples": [
+                "HABILITADA"
+              ],
               "title": "Estado"
             },
             "description": "Filtra por estado; HABILITADA = ONGs habilitadas"
@@ -129,6 +155,16 @@
                     "$ref": "#/components/schemas/OngOut"
                   },
                   "title": "Response Listar Ongs Ongs Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o vencido: iniciar sesión de nuevo con `POST /login`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
                 }
               }
             }
@@ -152,6 +188,7 @@
           "catálogo"
         ],
         "summary": "Catálogo de tipos de recurso",
+        "description": "Los recursos que se pueden ofrecer y pedir. Su `codigo` es el `tipo_recurso` del resto de la API.",
         "operationId": "listar_tipos_recurso_tipos_recurso_get",
         "responses": {
           "200": {
@@ -164,6 +201,16 @@
                   },
                   "type": "array",
                   "title": "Response Listar Tipos Recurso Tipos Recurso Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o vencido: iniciar sesión de nuevo con `POST /login`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
                 }
               }
             }
@@ -182,6 +229,7 @@
           "catálogo"
         ],
         "summary": "Catálogo de certificaciones",
+        "description": "Las certificaciones que habilitan recursos y, para cada una, los tipos de recurso que habilita.",
         "operationId": "listar_certificaciones_certificaciones_get",
         "responses": {
           "200": {
@@ -194,6 +242,16 @@
                   },
                   "type": "array",
                   "title": "Response Listar Certificaciones Certificaciones Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o vencido: iniciar sesión de nuevo con `POST /login`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
                 }
               }
             }
@@ -212,6 +270,7 @@
           "catálogo"
         ],
         "summary": "Ficha de una ONG",
+        "description": "Certificaciones (con su vencimiento y riesgo máximo) e inventario de la ONG, con lo que hoy puede operar.",
         "operationId": "ficha_ong_ongs__cuit__get",
         "security": [
           {
@@ -225,8 +284,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "CUIT de la ONG, 11 dígitos. Se acepta con o sin guiones y se guarda como `NN-NNNNNNNN-N`.",
+              "examples": [
+                "30-54666544-5"
+              ],
               "title": "Cuit"
-            }
+            },
+            "description": "CUIT de la ONG, 11 dígitos. Se acepta con o sin guiones y se guarda como `NN-NNNNNNNN-N`."
           }
         ],
         "responses": {
@@ -236,6 +300,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/FichaOngOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o vencido: iniciar sesión de nuevo con `POST /login`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ONG no registrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
                 }
               }
             }
@@ -259,6 +343,7 @@
           "catálogo"
         ],
         "summary": "Disponibilidad global de recursos (solo ONGs habilitadas)",
+        "description": "Stock total, comprometido y disponible por tipo de recurso, sumando las ONGs habilitadas y desglosado por ONG.",
         "operationId": "disponibilidad_recursos_disponibilidad_get",
         "security": [
           {
@@ -280,6 +365,9 @@
                 }
               ],
               "description": "Código del tipo de recurso; sin él, todos",
+              "examples": [
+                "PARAMEDICO"
+              ],
               "title": "Tipo Recurso"
             },
             "description": "Código del tipo de recurso; sin él, todos"
@@ -296,6 +384,26 @@
                     "$ref": "#/components/schemas/DisponibilidadOut"
                   },
                   "title": "Response Disponibilidad Recursos Disponibilidad Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o vencido: iniciar sesión de nuevo con `POST /login`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El tipo de recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
                 }
               }
             }
@@ -333,8 +441,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "CUIT de la ONG, 11 dígitos. Se acepta con o sin guiones y se guarda como `NN-NNNNNNNN-N`.",
+              "examples": [
+                "30-54666544-5"
+              ],
               "title": "Cuit"
-            }
+            },
+            "description": "CUIT de la ONG, 11 dígitos. Se acepta con o sin guiones y se guarda como `NN-NNNNNNNN-N`."
           }
         ],
         "requestBody": {
@@ -362,6 +475,46 @@
               }
             }
           },
+          "401": {
+            "description": "Token ausente, inválido o vencido: iniciar sesión de nuevo con `POST /login`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "La cuenta no es la de la ONG de la ruta (solo se modifica el inventario propio)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La ONG o algún tipo de recurso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Se declara menos de lo que ya está comprometido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -381,7 +534,7 @@
           "validación"
         ],
         "summary": "Validar ofertas por cantidad y competencia",
-        "description": "Evalúa lo ofrecido por cada ONG contra su inventario disponible y su competencia para la\ngravedad de la emergencia. **No guarda nada**: las ofertas viven en la app local.\n\nLos ítems con la misma ONG y tipo de recurso se suman. Siempre responde 200 con un resultado\nestructurado: `alcanza` dice si la cantidad entra; `nivel` (PLENA, PARCIAL, SUPERVISADA) y\n`asignacion_sugerida` (PRINCIPAL, APOYO) expresan la competencia sin rechazos binarios.",
+        "description": "Evalúa lo ofrecido por cada ONG contra su inventario disponible y su competencia para la\ngravedad de la emergencia. **No guarda nada**: las ofertas viven en la app local.\n\nLos ítems con la misma ONG y tipo de recurso se suman. Un pedido bien formado responde 200 con un resultado\nestructurado, también para un CUIT que no está registrado (`ong` es null y no alcanza); un CUIT mal formado o un\ntipo de recurso inexistente dan 422. `alcanza` dice si la cantidad entra; `nivel` (PLENA, PARCIAL, SUPERVISADA) y\n`asignacion_sugerida` (PRINCIPAL, APOYO) expresan la competencia sin rechazos binarios.",
         "operationId": "validar_ofertas_validaciones_post",
         "requestBody": {
           "content": {
@@ -400,6 +553,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidacionOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o vencido: iniciar sesión de nuevo con `POST /login`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
                 }
               }
             }
@@ -447,6 +610,56 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CierreOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o vencido: iniciar sesión de nuevo con `POST /login`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "La cuenta no es de servicio (`bonita-service` o `app-service`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "El cierre ya estaba informado: mismo cierre, sin restar de nuevo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CierreOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La ONG o la referencia no existe (o es de otra ONG)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "La referencia no está ADJUDICADA",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
                 }
               }
             }
@@ -502,6 +715,56 @@
               }
             }
           },
+          "401": {
+            "description": "Token ausente, inválido o vencido: iniciar sesión de nuevo con `POST /login`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "La cuenta no es de servicio (`bonita-service` o `app-service`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Se repite una referencia en el pedido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Alguna ONG o referencia no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Alguna referencia no está ADJUDICADA",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -526,6 +789,7 @@
           "cierre"
         ],
         "summary": "Ver un cierre ya informado",
+        "description": "El cierre con lo que liberó y cómo quedó el inventario de la ONG.",
         "operationId": "obtener_cierre_cierres__cierre_id__get",
         "security": [
           {
@@ -539,8 +803,15 @@
             "required": true,
             "schema": {
               "type": "integer",
+              "maximum": 2147483647,
+              "exclusiveMinimum": 0,
+              "description": "Id devuelto por `POST /cierres`",
+              "examples": [
+                7
+              ],
               "title": "Cierre Id"
-            }
+            },
+            "description": "Id devuelto por `POST /cierres`"
           }
         ],
         "responses": {
@@ -550,6 +821,36 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CierreOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o vencido: iniciar sesión de nuevo con `POST /login`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "La cuenta no es de servicio (`bonita-service` o `app-service`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Cierre no encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
                 }
               }
             }
@@ -573,6 +874,7 @@
           "cierre"
         ],
         "summary": "Cierres informados por una ONG",
+        "description": "Todos los cierres de la ONG, del más viejo al más nuevo.",
         "operationId": "cierres_de_la_ong_ongs__cuit__cierres_get",
         "security": [
           {
@@ -586,8 +888,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "CUIT de la ONG, 11 dígitos. Se acepta con o sin guiones y se guarda como `NN-NNNNNNNN-N`.",
+              "examples": [
+                "30-54666544-5"
+              ],
               "title": "Cuit"
-            }
+            },
+            "description": "CUIT de la ONG, 11 dígitos. Se acepta con o sin guiones y se guarda como `NN-NNNNNNNN-N`."
           }
         ],
         "responses": {
@@ -601,6 +908,36 @@
                     "$ref": "#/components/schemas/CierreOut"
                   },
                   "title": "Response Cierres De La Ong Ongs  Cuit  Cierres Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o vencido: iniciar sesión de nuevo con `POST /login`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "La cuenta no es de servicio (`bonita-service` o `app-service`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ONG no registrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
                 }
               }
             }
@@ -621,7 +958,7 @@
     "/evaluaciones": {
       "post": {
         "tags": [
-          "Reservas"
+          "reservas"
         ],
         "summary": "Evaluar las ofertas y reservar el stock",
         "description": "Al vencer la ventana de ofertas: valida a cada ONG (competencia contra la gravedad) y **reserva** lo que\nofreció, sumando por recurso, hasta que se decida. Devuelve la cobertura por lote (promedio simple) y, por ONG,\nsu referencia `emg-{emergencia}-r{ronda}-{cuit}`.\n\nIdempotente: repetir el pedido devuelve lo mismo sin reservar dos veces. La oferta de una ONG se reserva entera o\nno se reserva: si lo ofrecido supera lo disponible queda `NO_RESERVADA` y la ONG la rehace (nunca se recorta).\n`409` si la referencia ya fue liberada o cerrada.",
@@ -647,6 +984,56 @@
               }
             }
           },
+          "401": {
+            "description": "Token ausente, inválido o vencido: iniciar sesión de nuevo con `POST /login`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "La cuenta no es de servicio (`bonita-service` o `app-service`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "El pedido no se puede evaluar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Una referencia no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "La referencia ya fue liberada o cerrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -668,7 +1055,7 @@
     "/adjudicaciones/{referencia}/confirmar": {
       "post": {
         "tags": [
-          "Reservas"
+          "reservas"
         ],
         "summary": "Confirmar una reserva (compromiso nacional)",
         "description": "`RESERVADA` → `ADJUDICADA`. No toca el stock. Repetirlo responde 200; `409` si ya estaba liberada o cerrada.",
@@ -685,8 +1072,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "Referencia de la reserva: `emg-{emergencia}-r{ronda}-{cuit}`.",
+              "examples": [
+                "emg-12-r1-30-54666544-5"
+              ],
               "title": "Referencia"
-            }
+            },
+            "description": "Referencia de la reserva: `emg-{emergencia}-r{ronda}-{cuit}`."
           }
         ],
         "responses": {
@@ -696,6 +1088,46 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ReservaOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o vencido: iniciar sesión de nuevo con `POST /login`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "La cuenta no es de servicio (`bonita-service` o `app-service`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La referencia no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "La reserva ya fue liberada o cerrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
                 }
               }
             }
@@ -716,7 +1148,7 @@
     "/adjudicaciones/{referencia}/liberar": {
       "post": {
         "tags": [
-          "Reservas"
+          "reservas"
         ],
         "summary": "Liberar una reserva y devolver el stock",
         "description": "`RESERVADA` o `ADJUDICADA` → `LIBERADA` y resta lo bloqueado del inventario. Repetirlo responde 200 sin\nrestar de nuevo; `409` si ya estaba cerrada.",
@@ -733,8 +1165,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "Referencia de la reserva: `emg-{emergencia}-r{ronda}-{cuit}`.",
+              "examples": [
+                "emg-12-r1-30-54666544-5"
+              ],
               "title": "Referencia"
-            }
+            },
+            "description": "Referencia de la reserva: `emg-{emergencia}-r{ronda}-{cuit}`."
           }
         ],
         "responses": {
@@ -744,6 +1181,46 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/LiberacionOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o vencido: iniciar sesión de nuevo con `POST /login`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "La cuenta no es de servicio (`bonita-service` o `app-service`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La referencia no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "La reserva ya fue cerrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
                 }
               }
             }
@@ -764,7 +1241,7 @@
     "/adjudicaciones/resolucion": {
       "post": {
         "tags": [
-          "Reservas"
+          "reservas"
         ],
         "summary": "Confirmar las reservas elegidas y liberar las demás, en una sola llamada",
         "description": "Lo que Bonita manda cuando el Municipio adjudica: `confirmar` pasa cada referencia a `ADJUDICADA` y `liberar`\ndevuelve el stock de las demás. Valida todo antes de cambiar nada (`404` si una referencia no existe, `409` si\nalguna ya no admite la operación) y es idempotente: repetir la llamada completa no resta dos veces.",
@@ -790,6 +1267,46 @@
               }
             }
           },
+          "401": {
+            "description": "Token ausente, inválido o vencido: iniciar sesión de nuevo con `POST /login`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "La cuenta no es de servicio (`bonita-service` o `app-service`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Alguna referencia no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Alguna reserva ya no admite la operación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -811,10 +1328,10 @@
     "/adjudicaciones": {
       "post": {
         "tags": [
-          "Adjudicaciones"
+          "adjudicaciones"
         ],
-        "summary": "Adjudicar",
-        "description": "Compromete inventario bajo locks pesimistas e idempotencia por referencia.",
+        "summary": "Adjudicar: comprometer inventario de una ONG",
+        "description": "Compromete inventario bajo locks pesimistas e idempotencia por `referencia_id`: dos pedidos a la vez sobre el mismo\nstock no lo comprometen dos veces. A diferencia de `POST /evaluaciones`, no valida competencia: es el bloqueo directo.",
         "operationId": "adjudicar_adjudicaciones_post",
         "requestBody": {
           "content": {
@@ -833,6 +1350,56 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AdjudicacionOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o vencido: iniciar sesión de nuevo con `POST /login`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "La cuenta no es de servicio (`bonita-service` o `app-service`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "La referencia ya estaba adjudicada: devuelve la misma, sin comprometer de nuevo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdjudicacionOut"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Inventario inexistente, repetido en el pedido o de otra ONG",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Stock insuficiente, o ya adjudicado por otra transacción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
                 }
               }
             }
@@ -860,7 +1427,8 @@
         "tags": [
           "estado"
         ],
-        "summary": "Health",
+        "summary": "Estado del servicio",
+        "description": "Responde `{\"estado\": \"ok\", \"commit\": \"<sha>\"}` sin autenticación: `commit` es la versión desplegada (en Render la pone\nla plataforma; en local es `local`). En Render (plan gratis) la primera llamada tras un rato de inactividad tarda 30-60 s.",
         "operationId": "health_health_get",
         "responses": {
           "200": {
@@ -889,17 +1457,22 @@
             "type": "string",
             "maxLength": 80,
             "minLength": 1,
-            "title": "Referencia Id"
+            "title": "Referencia Id",
+            "description": "Clave de idempotencia: repetir la misma referencia devuelve la adjudicación ya creada"
           },
           "ong_id": {
             "type": "integer",
+            "maximum": 2147483647.0,
             "exclusiveMinimum": 0.0,
-            "title": "Ong Id"
+            "title": "Ong Id",
+            "description": "Id numérico de la ONG dueña de los inventarios"
           },
           "emergencia_id": {
             "type": "integer",
+            "maximum": 2147483647.0,
             "exclusiveMinimum": 0.0,
-            "title": "Emergencia Id"
+            "title": "Emergencia Id",
+            "description": "Id de la emergencia en la app local"
           },
           "items": {
             "items": {
@@ -917,19 +1490,36 @@
           "emergencia_id",
           "items"
         ],
-        "title": "AdjudicacionIn"
+        "title": "AdjudicacionIn",
+        "examples": [
+          {
+            "emergencia_id": 12,
+            "items": [
+              {
+                "cantidad": 3,
+                "inventario_id": 1
+              }
+            ],
+            "ong_id": 1,
+            "referencia_id": "emg-12-r1-30-54666544-5"
+          }
+        ]
       },
       "AdjudicacionItemIn": {
         "properties": {
           "inventario_id": {
             "type": "integer",
+            "maximum": 2147483647.0,
             "exclusiveMinimum": 0.0,
-            "title": "Inventario Id"
+            "title": "Inventario Id",
+            "description": "Id de la fila de inventario de la ONG (no el código del recurso)"
           },
           "cantidad": {
             "type": "integer",
+            "maximum": 2147483647.0,
             "exclusiveMinimum": 0.0,
-            "title": "Cantidad"
+            "title": "Cantidad",
+            "description": "Cantidad a bloquear; no puede superar lo disponible"
           }
         },
         "type": "object",
@@ -1001,7 +1591,23 @@
           "estado",
           "items"
         ],
-        "title": "AdjudicacionOut"
+        "title": "AdjudicacionOut",
+        "examples": [
+          {
+            "emergencia_id": 12,
+            "estado": "RESERVADA",
+            "fecha_creacion": "2026-10-22T14:00:00Z",
+            "id": 5,
+            "items": [
+              {
+                "cantidad": 3,
+                "inventario_id": 1
+              }
+            ],
+            "ong_id": 1,
+            "referencia_id": "emg-12-r1-30-54666544-5"
+          }
+        ]
       },
       "Asignacion": {
         "type": "string",
@@ -1057,21 +1663,38 @@
           "descripcion",
           "tipos_recurso"
         ],
-        "title": "CertificacionOut"
+        "title": "CertificacionOut",
+        "examples": [
+          {
+            "codigo": "SALUD_PREHOSP",
+            "descripcion": "Emergencias médicas en terreno y traslado",
+            "nombre": "Atención de salud prehospitalaria",
+            "tipos_recurso": [
+              "AMBULANCIA",
+              "PARAMEDICO"
+            ]
+          }
+        ]
       },
       "CierreIn": {
         "properties": {
           "cuit": {
             "type": "string",
-            "maxLength": 13,
-            "minLength": 1,
-            "title": "Cuit"
+            "title": "Cuit",
+            "description": "CUIT de la ONG, 11 dígitos. Se acepta con o sin guiones y se guarda como `NN-NNNNNNNN-N`.",
+            "examples": [
+              "30-54666544-5"
+            ]
           },
           "referencia": {
             "type": "string",
             "maxLength": 80,
             "minLength": 1,
-            "title": "Referencia"
+            "title": "Referencia",
+            "description": "Referencia de la reserva: `emg-{emergencia}-r{ronda}-{cuit}`.",
+            "examples": [
+              "emg-12-r1-30-54666544-5"
+            ]
           }
         },
         "type": "object",
@@ -1079,7 +1702,13 @@
           "cuit",
           "referencia"
         ],
-        "title": "CierreIn"
+        "title": "CierreIn",
+        "examples": [
+          {
+            "cuit": "30-54666544-5",
+            "referencia": "emg-12-r1-30-54666544-5"
+          }
+        ]
       },
       "CierreItemOut": {
         "properties": {
@@ -1097,7 +1726,8 @@
           },
           "cantidad_liberada": {
             "type": "integer",
-            "title": "Cantidad Liberada"
+            "title": "Cantidad Liberada",
+            "description": "Lo que la adjudicación tenía comprometido y vuelve al inventario"
           },
           "cantidad_total": {
             "type": "integer",
@@ -1140,7 +1770,21 @@
           "cierres"
         ],
         "title": "CierreLoteIn",
-        "description": "Los cierres de varias ONGs de una emergencia, para que un solo pedido de Bonita los resuelva."
+        "description": "Los cierres de varias ONGs de una emergencia, para que un solo pedido de Bonita los resuelva.",
+        "examples": [
+          {
+            "cierres": [
+              {
+                "cuit": "30-54666544-5",
+                "referencia": "emg-12-r1-30-54666544-5"
+              },
+              {
+                "cuit": "30-68522415-9",
+                "referencia": "emg-12-r1-30-68522415-9"
+              }
+            ]
+          }
+        ]
       },
       "CierreOut": {
         "properties": {
@@ -1182,7 +1826,27 @@
           "informado_en",
           "items"
         ],
-        "title": "CierreOut"
+        "title": "CierreOut",
+        "examples": [
+          {
+            "cuit": "30-54666544-5",
+            "id": 7,
+            "informado_en": "2026-10-22T14:30:00Z",
+            "items": [
+              {
+                "cantidad_comprometida": 0,
+                "cantidad_liberada": 3,
+                "cantidad_total": 4,
+                "disponible": 4,
+                "nombre": "Paramédico",
+                "tipo_recurso": "PARAMEDICO",
+                "unidad": "personas"
+              }
+            ],
+            "ong": "Cruz Roja Argentina",
+            "referencia": "emg-12-r1-30-54666544-5"
+          }
+        ]
       },
       "CuentaOut": {
         "properties": {
@@ -1203,7 +1867,8 @@
                 "type": "null"
               }
             ],
-            "title": "Cuit"
+            "title": "Cuit",
+            "description": "CUIT de la ONG de la cuenta; null para las cuentas de servicio"
           }
         },
         "type": "object",
@@ -1280,7 +1945,47 @@
           "disponible",
           "por_ong"
         ],
-        "title": "DisponibilidadOut"
+        "title": "DisponibilidadOut",
+        "examples": [
+          {
+            "cantidad_comprometida": 2,
+            "cantidad_total": 10,
+            "disponible": 8,
+            "nombre": "Paramédico",
+            "por_ong": [
+              {
+                "cuit": "30-54666544-5",
+                "disponible": 3,
+                "ong": "Cruz Roja Argentina"
+              },
+              {
+                "cuit": "30-68522415-9",
+                "disponible": 5,
+                "ong": "Bomberos Voluntarios"
+              }
+            ],
+            "tipo_recurso": "PARAMEDICO",
+            "unidad": "personas"
+          }
+        ]
+      },
+      "ErrorOut": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "ErrorOut",
+        "examples": [
+          {
+            "detail": "Token inválido o vencido"
+          }
+        ]
       },
       "EstadoAdjudicacion": {
         "type": "string",
@@ -1304,13 +2009,17 @@
         "properties": {
           "emergencia_id": {
             "type": "integer",
+            "maximum": 2147483647.0,
             "exclusiveMinimum": 0.0,
-            "title": "Emergencia Id"
+            "title": "Emergencia Id",
+            "description": "Id de la emergencia en la app local"
           },
           "ronda": {
             "type": "integer",
+            "maximum": 2147483647.0,
             "minimum": 1.0,
             "title": "Ronda",
+            "description": "Ronda de evaluación; forma parte de la referencia de la reserva",
             "default": 1
           },
           "gravedad": {
@@ -1321,14 +2030,16 @@
               "$ref": "#/components/schemas/LoteEvaluacionIn"
             },
             "type": "array",
-            "title": "Lotes"
+            "title": "Lotes",
+            "description": "Lo que la emergencia necesita; cada `lote_id` una sola vez"
           },
           "ofertas": {
             "items": {
               "$ref": "#/components/schemas/OfertaEvaluacionIn"
             },
             "type": "array",
-            "title": "Ofertas"
+            "title": "Ofertas",
+            "description": "Lo que ofreció cada ONG, apuntando a lotes del pedido"
           }
         },
         "type": "object",
@@ -1338,7 +2049,47 @@
           "lotes",
           "ofertas"
         ],
-        "title": "EvaluacionIn"
+        "title": "EvaluacionIn",
+        "examples": [
+          {
+            "emergencia_id": 12,
+            "gravedad": "MEDIO",
+            "lotes": [
+              {
+                "cantidad": 6,
+                "lote_id": 101,
+                "tipo": "PRINCIPAL",
+                "tipo_recurso": "PARAMEDICO"
+              },
+              {
+                "cantidad": 2,
+                "lote_id": 102,
+                "tipo": "APOYO",
+                "tipo_recurso": "AMBULANCIA"
+              }
+            ],
+            "ofertas": [
+              {
+                "cuit": "30-54666544-5",
+                "items": [
+                  {
+                    "cantidad": 3,
+                    "lote_id": 101,
+                    "tipo_recurso": "PARAMEDICO"
+                  },
+                  {
+                    "cantidad": 1,
+                    "lote_id": 102,
+                    "tipo_recurso": "AMBULANCIA"
+                  }
+                ],
+                "ong": "Cruz Roja Argentina",
+                "version": 1
+              }
+            ],
+            "ronda": 1
+          }
+        ]
       },
       "EvaluacionOut": {
         "properties": {
@@ -1356,7 +2107,8 @@
           },
           "porcentaje_cobertura": {
             "type": "number",
-            "title": "Porcentaje Cobertura"
+            "title": "Porcentaje Cobertura",
+            "description": "Promedio simple de la cobertura de los lotes, de 0 a 1"
           },
           "lotes": {
             "items": {
@@ -1382,7 +2134,45 @@
           "lotes",
           "ongs"
         ],
-        "title": "EvaluacionOut"
+        "title": "EvaluacionOut",
+        "examples": [
+          {
+            "cobertura_completa": false,
+            "emergencia_id": 12,
+            "lotes": [
+              {
+                "cubierto": false,
+                "lote_id": 101,
+                "pedido": 6,
+                "porcentaje": 0.5,
+                "reservado": 3,
+                "tipo_recurso": "PARAMEDICO"
+              }
+            ],
+            "ongs": [
+              {
+                "cuit": "30-54666544-5",
+                "estado": "RESERVADA",
+                "items": [
+                  {
+                    "asignacion_sugerida": "PRINCIPAL",
+                    "lote_id": 101,
+                    "nivel": "PLENA",
+                    "observaciones": [],
+                    "ofrecido": 3,
+                    "reservado": 3,
+                    "riesgo_permitido": "MEDIO",
+                    "tipo_recurso": "PARAMEDICO"
+                  }
+                ],
+                "ong": "Cruz Roja Argentina",
+                "referencia": "emg-12-r1-30-54666544-5"
+              }
+            ],
+            "porcentaje_cobertura": 0.5,
+            "ronda": 1
+          }
+        ]
       },
       "FichaOngOut": {
         "properties": {
@@ -1420,7 +2210,34 @@
           "certificaciones",
           "inventario"
         ],
-        "title": "FichaOngOut"
+        "title": "FichaOngOut",
+        "examples": [
+          {
+            "certificaciones": [
+              {
+                "codigo": "SALUD_PREHOSP",
+                "nombre": "Atención de salud prehospitalaria",
+                "riesgo_max": "MEDIO",
+                "vence_el": "2027-10-01",
+                "vigente": true
+              }
+            ],
+            "cuit": "30-54666544-5",
+            "estado": "HABILITADA",
+            "inventario": [
+              {
+                "cantidad_comprometida": 0,
+                "cantidad_total": 4,
+                "disponible": 4,
+                "nombre": "Paramédico",
+                "riesgo_permitido": "MEDIO",
+                "tipo_recurso": "PARAMEDICO",
+                "unidad": "personas"
+              }
+            ],
+            "nombre": "Cruz Roja Argentina"
+          }
+        ]
       },
       "HTTPValidationError": {
         "properties": {
@@ -1450,18 +2267,39 @@
         "required": [
           "items"
         ],
-        "title": "InventarioIn"
+        "title": "InventarioIn",
+        "examples": [
+          {
+            "items": [
+              {
+                "cantidad_total": 6,
+                "tipo_recurso": "PARAMEDICO"
+              },
+              {
+                "cantidad_total": 2,
+                "tipo_recurso": "AMBULANCIA"
+              }
+            ]
+          }
+        ]
       },
       "InventarioItemIn": {
         "properties": {
           "tipo_recurso": {
             "type": "string",
-            "title": "Tipo Recurso"
+            "minLength": 1,
+            "title": "Tipo Recurso",
+            "description": "Código de `GET /tipos-recurso`",
+            "examples": [
+              "PARAMEDICO"
+            ]
           },
           "cantidad_total": {
             "type": "integer",
+            "maximum": 2147483647.0,
             "minimum": 0.0,
-            "title": "Cantidad Total"
+            "title": "Cantidad Total",
+            "description": "Total que la ONG tiene; no puede ser menor a lo ya comprometido"
           }
         },
         "type": "object",
@@ -1487,15 +2325,18 @@
           },
           "cantidad_total": {
             "type": "integer",
-            "title": "Cantidad Total"
+            "title": "Cantidad Total",
+            "description": "Lo que la ONG declaró tener"
           },
           "cantidad_comprometida": {
             "type": "integer",
-            "title": "Cantidad Comprometida"
+            "title": "Cantidad Comprometida",
+            "description": "Bloqueado por reservas y adjudicaciones abiertas"
           },
           "disponible": {
             "type": "integer",
-            "title": "Disponible"
+            "title": "Disponible",
+            "description": "`cantidad_total - cantidad_comprometida`"
           },
           "riesgo_permitido": {
             "anyOf": [
@@ -1505,7 +2346,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "Hasta qué gravedad puede operar este recurso hoy; null si no tiene certificación vigente"
           }
         },
         "type": "object",
@@ -1518,7 +2360,18 @@
           "disponible",
           "riesgo_permitido"
         ],
-        "title": "InventarioOut"
+        "title": "InventarioOut",
+        "examples": [
+          {
+            "cantidad_comprometida": 1,
+            "cantidad_total": 4,
+            "disponible": 3,
+            "nombre": "Paramédico",
+            "riesgo_permitido": "MEDIO",
+            "tipo_recurso": "PARAMEDICO",
+            "unidad": "personas"
+          }
+        ]
       },
       "ItemEvaluadoOut": {
         "properties": {
@@ -1579,16 +2432,23 @@
         "properties": {
           "lote_id": {
             "type": "integer",
-            "title": "Lote Id"
+            "maximum": 2147483647.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Lote Id",
+            "description": "Lote del pedido al que responde; debe existir en `lotes`"
           },
           "tipo_recurso": {
             "type": "string",
-            "title": "Tipo Recurso"
+            "minLength": 1,
+            "title": "Tipo Recurso",
+            "description": "Debe ser el mismo recurso que pide el lote"
           },
           "cantidad": {
             "type": "integer",
+            "maximum": 2147483647.0,
             "exclusiveMinimum": 0.0,
-            "title": "Cantidad"
+            "title": "Cantidad",
+            "description": "Cantidad ofrecida"
           }
         },
         "type": "object",
@@ -1603,16 +2463,27 @@
         "properties": {
           "cuit": {
             "type": "string",
-            "title": "Cuit"
+            "title": "Cuit",
+            "description": "CUIT de la ONG, 11 dígitos. Se acepta con o sin guiones y se guarda como `NN-NNNNNNNN-N`.",
+            "examples": [
+              "30-54666544-5"
+            ]
           },
           "tipo_recurso": {
             "type": "string",
-            "title": "Tipo Recurso"
+            "minLength": 1,
+            "title": "Tipo Recurso",
+            "description": "Código de `GET /tipos-recurso`",
+            "examples": [
+              "PARAMEDICO"
+            ]
           },
           "cantidad": {
             "type": "integer",
+            "maximum": 2147483647.0,
             "exclusiveMinimum": 0.0,
-            "title": "Cantidad"
+            "title": "Cantidad",
+            "description": "Cantidad ofrecida por la ONG"
           }
         },
         "type": "object",
@@ -1646,14 +2517,27 @@
           "estado",
           "liberado"
         ],
-        "title": "LiberacionOut"
+        "title": "LiberacionOut",
+        "examples": [
+          {
+            "estado": "LIBERADA",
+            "liberado": [
+              {
+                "cantidad": 3,
+                "tipo_recurso": "PARAMEDICO"
+              }
+            ],
+            "referencia": "emg-12-r1-30-54666544-5"
+          }
+        ]
       },
       "LoginIn": {
         "properties": {
           "username": {
             "type": "string",
             "minLength": 1,
-            "title": "Username"
+            "title": "Username",
+            "description": "Cuenta de servicio (`bonita-service`, `app-service`) o de una ONG"
           },
           "password": {
             "type": "string",
@@ -1666,7 +2550,13 @@
           "username",
           "password"
         ],
-        "title": "LoginIn"
+        "title": "LoginIn",
+        "examples": [
+          {
+            "password": "su-clave",
+            "username": "bonita-service"
+          }
+        ]
       },
       "LoteCoberturaOut": {
         "properties": {
@@ -1695,7 +2585,8 @@
           },
           "porcentaje": {
             "type": "number",
-            "title": "Porcentaje"
+            "title": "Porcentaje",
+            "description": "`reservado / pedido`, de 0 a 1"
           },
           "cubierto": {
             "type": "boolean",
@@ -1717,7 +2608,10 @@
         "properties": {
           "lote_id": {
             "type": "integer",
-            "title": "Lote Id"
+            "maximum": 2147483647.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Lote Id",
+            "description": "Id del lote de necesidad en la app local"
           },
           "tipo_recurso": {
             "anyOf": [
@@ -1728,16 +2622,24 @@
                 "type": "null"
               }
             ],
-            "title": "Tipo Recurso"
+            "title": "Tipo Recurso",
+            "description": "Código del recurso pedido; null = lote anterior al catálogo, no se puede cubrir"
           },
           "cantidad": {
             "type": "integer",
+            "maximum": 2147483647.0,
             "exclusiveMinimum": 0.0,
-            "title": "Cantidad"
+            "title": "Cantidad",
+            "description": "Cantidad pedida"
           },
           "tipo": {
             "type": "string",
+            "enum": [
+              "PRINCIPAL",
+              "APOYO"
+            ],
             "title": "Tipo",
+            "description": "Si el lote es recurso principal o de apoyo",
             "default": "PRINCIPAL"
           }
         },
@@ -1761,9 +2663,11 @@
         "properties": {
           "cuit": {
             "type": "string",
-            "maxLength": 13,
-            "minLength": 1,
-            "title": "Cuit"
+            "title": "Cuit",
+            "description": "CUIT de la ONG, 11 dígitos. Se acepta con o sin guiones y se guarda como `NN-NNNNNNNN-N`.",
+            "examples": [
+              "30-54666544-5"
+            ]
           },
           "ong": {
             "anyOf": [
@@ -1774,7 +2678,8 @@
                 "type": "null"
               }
             ],
-            "title": "Ong"
+            "title": "Ong",
+            "description": "Nombre de la ONG, informativo"
           },
           "version": {
             "anyOf": [
@@ -1785,7 +2690,8 @@
                 "type": "null"
               }
             ],
-            "title": "Version"
+            "title": "Version",
+            "description": "Versión de la oferta en la app local, informativa"
           },
           "items": {
             "items": {
@@ -1814,7 +2720,8 @@
             "title": "Nombre"
           },
           "riesgo_max": {
-            "$ref": "#/components/schemas/Riesgo"
+            "$ref": "#/components/schemas/Riesgo",
+            "description": "Riesgo máximo que la certificación permite operar"
           },
           "vence_el": {
             "type": "string",
@@ -1823,7 +2730,8 @@
           },
           "vigente": {
             "type": "boolean",
-            "title": "Vigente"
+            "title": "Vigente",
+            "description": "false si ya venció: la ONG opera supervisada"
           }
         },
         "type": "object",
@@ -1862,11 +2770,13 @@
                 "type": "null"
               }
             ],
-            "title": "Referencia"
+            "title": "Referencia",
+            "description": "Referencia de la reserva; null = ONG no registrada, no hay nada reservado"
           },
           "estado": {
             "type": "string",
-            "title": "Estado"
+            "title": "Estado",
+            "description": "Estado de la reserva (RESERVADA, ADJUDICADA, ...) o NO_RESERVADA si lo ofrecido supera lo disponible"
           },
           "items": {
             "items": {
@@ -1906,7 +2816,14 @@
           "nombre",
           "estado"
         ],
-        "title": "OngOut"
+        "title": "OngOut",
+        "examples": [
+          {
+            "cuit": "30-54666544-5",
+            "estado": "HABILITADA",
+            "nombre": "Cruz Roja Argentina"
+          }
+        ]
       },
       "RecursoLiberadoOut": {
         "properties": {
@@ -1932,24 +2849,31 @@
             "type": "string",
             "maxLength": 120,
             "minLength": 2,
-            "title": "Ong Nombre"
+            "title": "Ong Nombre",
+            "description": "Nombre de la ONG (único en el registro)"
           },
           "cuit": {
             "type": "string",
-            "pattern": "^\\d{2}-?\\d{8}-?\\d$",
-            "title": "Cuit"
+            "title": "Cuit",
+            "description": "CUIT de la ONG, 11 dígitos. Se acepta con o sin guiones y se guarda como `NN-NNNNNNNN-N`.",
+            "examples": [
+              "30-54666544-5"
+            ]
           },
           "nombre": {
             "type": "string",
             "maxLength": 120,
             "minLength": 2,
-            "title": "Nombre"
+            "title": "Nombre",
+            "description": "Nombre de la persona que administra la cuenta"
           },
           "username": {
             "type": "string",
             "maxLength": 60,
             "minLength": 3,
-            "title": "Username"
+            "pattern": "^[A-Za-z0-9._-]+$",
+            "title": "Username",
+            "description": "Letras, números, punto, guion y guion bajo; único"
           },
           "password": {
             "type": "string",
@@ -1966,7 +2890,16 @@
           "username",
           "password"
         ],
-        "title": "RegisterOngIn"
+        "title": "RegisterOngIn",
+        "examples": [
+          {
+            "cuit": "30-71234567-8",
+            "nombre": "María Gómez",
+            "ong_nombre": "Asociación Vecinal Esperanza",
+            "password": "una-clave-de-8+",
+            "username": "esperanza.admin"
+          }
+        ]
       },
       "ReservaOut": {
         "properties": {
@@ -1983,7 +2916,13 @@
           "referencia",
           "estado"
         ],
-        "title": "ReservaOut"
+        "title": "ReservaOut",
+        "examples": [
+          {
+            "estado": "ADJUDICADA",
+            "referencia": "emg-12-r1-30-54666544-5"
+          }
+        ]
       },
       "ResolucionIn": {
         "properties": {
@@ -1992,19 +2931,31 @@
               "type": "string"
             },
             "type": "array",
-            "title": "Confirmar"
+            "title": "Confirmar",
+            "description": "Referencias que pasan a ADJUDICADA"
           },
           "liberar": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Liberar"
+            "title": "Liberar",
+            "description": "Referencias cuyo stock se devuelve"
           }
         },
         "type": "object",
         "title": "ResolucionIn",
-        "description": "La decisión del Municipio sobre las reservas de una emergencia: cuáles se confirman y cuáles se liberan."
+        "description": "La decisión del Municipio sobre las reservas de una emergencia: cuáles se confirman y cuáles se liberan.",
+        "examples": [
+          {
+            "confirmar": [
+              "emg-12-r1-30-54666544-5"
+            ],
+            "liberar": [
+              "emg-12-r1-30-68522415-9"
+            ]
+          }
+        ]
       },
       "ResolucionOut": {
         "properties": {
@@ -2028,7 +2979,29 @@
           "confirmadas",
           "liberadas"
         ],
-        "title": "ResolucionOut"
+        "title": "ResolucionOut",
+        "examples": [
+          {
+            "confirmadas": [
+              {
+                "estado": "ADJUDICADA",
+                "referencia": "emg-12-r1-30-54666544-5"
+              }
+            ],
+            "liberadas": [
+              {
+                "estado": "LIBERADA",
+                "liberado": [
+                  {
+                    "cantidad": 2,
+                    "tipo_recurso": "BOTE_RESCATE"
+                  }
+                ],
+                "referencia": "emg-12-r1-30-68522415-9"
+              }
+            ]
+          }
+        ]
       },
       "ResultadoValidacionOut": {
         "properties": {
@@ -2069,10 +3042,12 @@
           },
           "alcanza": {
             "type": "boolean",
-            "title": "Alcanza"
+            "title": "Alcanza",
+            "description": "true si lo solicitado entra en lo disponible"
           },
           "nivel": {
-            "$ref": "#/components/schemas/NivelCompetencia"
+            "$ref": "#/components/schemas/NivelCompetencia",
+            "description": "PLENA: certificación suficiente para la gravedad; PARCIAL: certificación de menor riesgo; SUPERVISADA: sin certificación vigente"
           },
           "riesgo_permitido": {
             "anyOf": [
@@ -2085,7 +3060,8 @@
             ]
           },
           "asignacion_sugerida": {
-            "$ref": "#/components/schemas/Asignacion"
+            "$ref": "#/components/schemas/Asignacion",
+            "description": "PRINCIPAL si la competencia es plena; APOYO si no"
           },
           "observaciones": {
             "items": {
@@ -2127,7 +3103,8 @@
         "properties": {
           "codigo": {
             "type": "string",
-            "title": "Codigo"
+            "title": "Codigo",
+            "description": "Código que se usa como `tipo_recurso` en el resto de la API"
           },
           "nombre": {
             "type": "string",
@@ -2149,7 +3126,8 @@
                 "type": "null"
               }
             ],
-            "title": "Certificacion Requerida"
+            "title": "Certificacion Requerida",
+            "description": "Certificación que habilita el recurso; null si no exige ninguna"
           }
         },
         "type": "object",
@@ -2160,13 +3138,23 @@
           "unidad",
           "certificacion_requerida"
         ],
-        "title": "TipoRecursoOut"
+        "title": "TipoRecursoOut",
+        "examples": [
+          {
+            "categoria": "PERSONAL",
+            "certificacion_requerida": "SALUD_PREHOSP",
+            "codigo": "PARAMEDICO",
+            "nombre": "Paramédico",
+            "unidad": "personas"
+          }
+        ]
       },
       "TokenOut": {
         "properties": {
           "access_token": {
             "type": "string",
-            "title": "Access Token"
+            "title": "Access Token",
+            "description": "JWT (HS256). Se envía como `Authorization: Bearer <token>`"
           },
           "token_type": {
             "type": "string",
@@ -2182,12 +3170,23 @@
           "access_token",
           "user"
         ],
-        "title": "TokenOut"
+        "title": "TokenOut",
+        "examples": [
+          {
+            "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJib25pdGEtc2VydmljZSIs...",
+            "token_type": "bearer",
+            "user": {
+              "rol": "BONITA",
+              "username": "bonita-service"
+            }
+          }
+        ]
       },
       "ValidacionIn": {
         "properties": {
           "gravedad": {
-            "$ref": "#/components/schemas/Riesgo"
+            "$ref": "#/components/schemas/Riesgo",
+            "description": "Gravedad de la emergencia; se compara con el riesgo que cada ONG puede operar"
           },
           "items": {
             "items": {
@@ -2203,7 +3202,24 @@
           "gravedad",
           "items"
         ],
-        "title": "ValidacionIn"
+        "title": "ValidacionIn",
+        "examples": [
+          {
+            "gravedad": "ALTO",
+            "items": [
+              {
+                "cantidad": 3,
+                "cuit": "30-54666544-5",
+                "tipo_recurso": "PARAMEDICO"
+              },
+              {
+                "cantidad": 2,
+                "cuit": "30-68522415-9",
+                "tipo_recurso": "BOTE_RESCATE"
+              }
+            ]
+          }
+        ]
       },
       "ValidacionOut": {
         "properties": {
@@ -2224,7 +3240,30 @@
           "alcanza_todo",
           "resultados"
         ],
-        "title": "ValidacionOut"
+        "title": "ValidacionOut",
+        "examples": [
+          {
+            "alcanza_todo": true,
+            "resultados": [
+              {
+                "alcanza": true,
+                "asignacion_sugerida": "APOYO",
+                "cuit": "30-54666544-5",
+                "disponible": 4,
+                "nivel": "PARCIAL",
+                "nombre_recurso": "Paramédico",
+                "observaciones": [
+                  "Certificación vigente hasta riesgo MEDIO; la emergencia es ALTO"
+                ],
+                "ong": "Cruz Roja Argentina",
+                "riesgo_permitido": "MEDIO",
+                "solicitado": 3,
+                "tipo_recurso": "PARAMEDICO",
+                "unidad": "personas"
+              }
+            ]
+          }
+        ]
       },
       "ValidationError": {
         "properties": {
@@ -2273,5 +3312,45 @@
         "scheme": "bearer"
       }
     }
-  }
+  },
+  "tags": [
+    {
+      "name": "autenticación",
+      "description": "Login con JWT y alta de ONGs (servicio 1)."
+    },
+    {
+      "name": "catálogo",
+      "description": "Tipos de recurso, certificaciones, ONGs y disponibilidad (servicio 2)."
+    },
+    {
+      "name": "inventario",
+      "description": "Cada ONG declara lo que tiene (servicio 2)."
+    },
+    {
+      "name": "validación",
+      "description": "Competencia y cantidad de lo ofrecido, sin rechazos binarios (servicio 3)."
+    },
+    {
+      "name": "reservas",
+      "description": "Evaluación con reserva de stock y su confirmación o liberación (servicio 4)."
+    },
+    {
+      "name": "adjudicaciones",
+      "description": "Compromiso de inventario con bloqueo pesimista (servicio 4)."
+    },
+    {
+      "name": "cierre",
+      "description": "Fin de la actividad: libera lo comprometido (servicio 5)."
+    },
+    {
+      "name": "estado",
+      "description": "Salud del servicio."
+    }
+  ],
+  "servers": [
+    {
+      "url": "https://rescuesync-nacional.onrender.com",
+      "description": "API en la nube (Render)"
+    }
+  ]
 }

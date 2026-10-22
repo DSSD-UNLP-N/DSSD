@@ -1,7 +1,7 @@
 """T-05/T-06/T-07/T-08: alta de emergencia, de punta a punta.
 
 El formulario propio de la app reemplaza el formulario nativo de Bonita para la
-tarea "Registrar Emergencia" (ver CLAUDE.md, stack elegido), así que además de
+tarea "Registrar Emergencia" (la interfaz es la SPA, no los formularios de Bonita), así que además de
 instanciar el caso, esta capa completa esa primera tarea en nombre del
 Municipio: si no lo hiciéramos, el caso quedaría esperando para siempre a que
 alguien la complete desde la UI nativa de Bonita, que la app no usa.
@@ -9,10 +9,12 @@ alguien la complete desde la UI nativa de Bonita, que la app no usa.
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 
 import requests
-from sqlalchemy import select
+from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -46,15 +48,19 @@ def cerrar_ventanas_vencidas(db: Session) -> None:
     """
     ahora = datetime.now(timezone.utc)
     vencidas = [
-        e for e in db.scalars(select(Emergencia).where(
+        e.id for e in db.scalars(select(Emergencia).where(
             Emergencia.estado == EstadoEmergencia.CONVOCATORIA,
             Emergencia.ventana_ofertas_fin.is_not(None),
         ))
         if e.ventana_ofertas_fin.replace(tzinfo=e.ventana_ofertas_fin.tzinfo or timezone.utc) <= ahora
     ]
-    for e in vencidas:
-        e.estado = EstadoEmergencia.CERRADA
     if vencidas:
+        # Condicional en la BD: justo al vencer la ventana llegan a la vez el pedido de Bonita (que la pasa a EN_EVALUACION)
+        # y las pantallas que consultan. Con `e.estado = CERRADA` desde el objeto leído, la consulta que había leído
+        # CONVOCATORIA antes pisaba el EN_EVALUACION de Bonita y la evaluación quedaba rechazada con 409.
+        db.execute(update(Emergencia).where(
+            Emergencia.id.in_(vencidas), Emergencia.estado == EstadoEmergencia.CONVOCATORIA,
+        ).values(estado=EstadoEmergencia.CERRADA))
         db.commit()
 
 
@@ -75,8 +81,8 @@ class AltaEmergenciaError(RuntimeError):
 
 
 def _ventana_provisoria(settings: Settings) -> str:
-    # Ver CLAUDE.md, "Decisión: ventana de ofertas" (opción A): valor provisorio válido
-    # al alta; T-10 lo sobrescribe con la ventana real antes de publicar la convocatoria.
+    # Ver backend/README.md, "Ventana de ofertas": valor provisorio válido al alta; la publicación
+    # de lotes lo sobrescribe con la ventana real antes de completar «Publicar Convocatoria».
     vencimiento = datetime.now().astimezone() + timedelta(hours=settings.ventana_provisoria_horas)
     return vencimiento.isoformat(timespec="seconds")
 
@@ -99,6 +105,13 @@ def _borrar_caso_huerfano(settings: Settings, case_id) -> None:
         log.warning("No se pudo borrar el caso huérfano %s de Bonita", case_id, exc_info=True)
 
 
+def _numero_nuevo(db: Session) -> int:
+    """Número de la próxima emergencia. Una base vacía no arranca en 1 sino en los minutos desde 1970: la API Nacional recuerda
+    cada emergencia por su número (`emg-<n>-r<ronda>-<cuit>`) y una base nueva, de otra PC, chocaría con las que ya vio."""
+    ultimo = db.scalar(select(func.max(Emergencia.id)))
+    return ultimo + 1 if ultimo else int(time.time() // 60) + 1
+
+
 def registrar_emergencia(
     db: Session,
     settings: Settings,
@@ -112,15 +125,23 @@ def registrar_emergencia(
     if operador.municipio_id is None:
         raise AltaEmergenciaError("Tu usuario no tiene un municipio asignado; no se puede registrar.")
 
-    emergencia = Emergencia(
-        municipio_id=operador.municipio_id,
-        tipo=tipo,
-        nivel_gravedad=nivel_gravedad,
-        zona_afectada=zona_afectada,
-        descripcion=descripcion,
-    )
-    db.add(emergencia)
-    db.flush()  # asigna emergencia.id (para el contrato) sin comitear todavía
+    for _ in range(3):  # dos altas a la vez pueden calcular el mismo número: la segunda lo recalcula
+        emergencia = Emergencia(
+            id=_numero_nuevo(db),
+            municipio_id=operador.municipio_id,
+            tipo=tipo,
+            nivel_gravedad=nivel_gravedad,
+            zona_afectada=zona_afectada,
+            descripcion=descripcion,
+        )
+        db.add(emergencia)
+        try:
+            db.flush()  # fija el número (para el contrato) sin comitear todavía
+            break
+        except IntegrityError:
+            db.rollback()
+    else:
+        raise AltaEmergenciaError("No se pudo registrar la emergencia; probá de nuevo.")
 
     case_id = None
     try:
@@ -144,6 +165,9 @@ def registrar_emergencia(
             "No se pudo iniciar el caso en Bonita. La emergencia no se registró; probá de nuevo."
         ) from exc
 
+    # Al importar el .bos como proyecto nuevo Bonita numera los casos desde 1: una emergencia vieja con este mismo número
+    # apunta a un caso que ya no existe, y chocaría con el UNIQUE de bonita_case_id.
+    db.execute(update(Emergencia).where(Emergencia.bonita_case_id == int(case_id)).values(bonita_case_id=None))
     emergencia.bonita_case_id = int(case_id)
     db.commit()
     db.refresh(emergencia)
@@ -154,7 +178,7 @@ def tarea_ong_en_bonita(settings: Settings, emergencia: Emergencia, user: Usuari
     """Nombre de la tarea que Bonita tiene pendiente para ESTE representante en este caso, o
     None si no hay ninguna: la convocatoria no está abierta, la ventana ya venció (el timer la
     cerró) o Bonita no respondió. Puramente informativo: la app nunca completa esta tarea (ver
-    "Reglas para la app web" en CLAUDE.md), así que un fallo acá no debe romper la página."""
+    "Reglas" en la sección Bonita de backend/README.md), así que un fallo acá no debe romper la página."""
     if user.rol is not Rol.ONG or emergencia.bonita_case_id is None:
         return None
     try:

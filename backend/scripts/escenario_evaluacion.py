@@ -77,8 +77,9 @@ def main() -> int:
     print(f"\n== Esperando que venza la ventana ({fin:%H:%M:%S}) y que Bonita evalúe, sin tocar nada")
     limite = fin + timedelta(seconds=180)
     evaluadas: dict[int, dict] = {}
+    time.sleep(max(0.0, (fin - datetime.now().astimezone()).total_seconds()))  # antes del cierre no hay nada que ver
     while datetime.now().astimezone() < limite and len(evaluadas) < 2:
-        time.sleep(7)
+        time.sleep(1.5)
         for emergencia in (ea, eb):
             try:
                 d = e.get("coordinador.regional", f"/emergencias/{emergencia}").json()

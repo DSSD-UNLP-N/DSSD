@@ -1,17 +1,18 @@
 """Cierre operativo: terminó la actividad de una adjudicación y se libera exactamente lo que tenía comprometido."""
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Path, Response
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
+from app.errores import SERVICIO, errores
 from app.models import CierreItem, CierreOperativo, Ong
 from app.routers.reservas import _ERRORES, _http
-from app.schemas import CierreIn, CierreItemOut, CierreLoteIn, CierreOut
+from app.schemas import MAX_ENTERO, CierreIn, CierreItemOut, CierreLoteIn, CierreOut, CuitPath
 from app.security import require_servicio
 from app.services import reservas
 
-router = APIRouter(tags=["cierre"], dependencies=[Depends(require_servicio)])
+router = APIRouter(tags=["cierre"], dependencies=[Depends(require_servicio)], responses=errores(SERVICIO))
 
 
 def _out(cierre: CierreOperativo) -> CierreOut:
@@ -52,7 +53,12 @@ def _cargar_cierre(db: Session, cierre_id: int) -> CierreOperativo | None:
 
 
 @router.post("/cierres", response_model=CierreOut, status_code=201,
-             summary="Cerrar una adjudicación y liberar lo que tenía comprometido")
+             summary="Cerrar una adjudicación y liberar lo que tenía comprometido",
+             responses={
+                 200: {"model": CierreOut, "description": "El cierre ya estaba informado: mismo cierre, sin restar de nuevo"},
+                 **errores({404: "La ONG o la referencia no existe (o es de otra ONG)",
+                            409: "La referencia no está ADJUDICADA"}),
+             })
 def informar_cierre(body: CierreIn, response: Response, db: Session = Depends(get_db)):
     """Fin de la actividad (servicio 5). Exige que la `referencia` esté `ADJUDICADA`: resta del inventario
     exactamente lo que esa referencia tenía comprometido y la pasa a `CERRADA`. No se indican ítems.
@@ -74,7 +80,10 @@ def informar_cierre(body: CierreIn, response: Response, db: Session = Depends(ge
 
 
 @router.post("/cierres/lote", response_model=list[CierreOut],
-             summary="Cerrar varias adjudicaciones de una emergencia en una sola llamada")
+             summary="Cerrar varias adjudicaciones de una emergencia en una sola llamada",
+             responses=errores({400: "Se repite una referencia en el pedido",
+                                404: "Alguna ONG o referencia no existe",
+                                409: "Alguna referencia no está ADJUDICADA"}))
 def informar_cierres(body: CierreLoteIn, db: Session = Depends(get_db)):
     """Lo que Bonita manda al validarse el cierre bilateral: un `{cuit, referencia}` por cada ONG adjudicada, y un
     solo pedido en vez de uno por ONG. Valida todo antes de cambiar nada (`404` si una ONG o referencia no existe,
@@ -92,16 +101,23 @@ def informar_cierres(body: CierreLoteIn, db: Session = Depends(get_db)):
     return [_out(_cargar_cierre(db, cierre.id)) for cierre, _ in cerrados]
 
 
-@router.get("/cierres/{cierre_id}", response_model=CierreOut, summary="Ver un cierre ya informado")
-def obtener_cierre(cierre_id: int, db: Session = Depends(get_db)):
+@router.get("/cierres/{cierre_id}", response_model=CierreOut, summary="Ver un cierre ya informado",
+            responses=errores({404: "Cierre no encontrado"}))
+def obtener_cierre(
+    cierre_id: int = Path(gt=0, le=MAX_ENTERO, description="Id devuelto por `POST /cierres`", examples=[7]),
+    db: Session = Depends(get_db),
+):
+    """El cierre con lo que liberó y cómo quedó el inventario de la ONG."""
     cierre = _cargar_cierre(db, cierre_id)
     if cierre is None:
         raise HTTPException(status_code=404, detail="Cierre no encontrado")
     return _out(cierre)
 
 
-@router.get("/ongs/{cuit}/cierres", response_model=list[CierreOut], summary="Cierres informados por una ONG")
-def cierres_de_la_ong(cuit: str, db: Session = Depends(get_db)):
+@router.get("/ongs/{cuit}/cierres", response_model=list[CierreOut], summary="Cierres informados por una ONG",
+            responses=errores({404: "ONG no registrada"}))
+def cierres_de_la_ong(cuit: CuitPath, db: Session = Depends(get_db)):
+    """Todos los cierres de la ONG, del más viejo al más nuevo."""
     ong = db.scalar(select(Ong).where(Ong.cuit == cuit))
     if ong is None:
         raise HTTPException(status_code=404, detail="ONG no registrada")

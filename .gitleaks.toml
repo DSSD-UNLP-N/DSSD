@@ -1,0 +1,17 @@
+# Reglas por defecto de gitleaks, menos lo que es público a propósito (proyecto de facultad).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Claves de demo documentadas, contraseñas de prueba y ejemplos de la API"
+paths = [
+  '''backend/\.env\.(example|local|nube)''',
+  '''nacional/\.env\.example''',
+  '''(backend|nacional)/tests/.*''',
+  '''entrega-3/swagger-api-nacional\.json''',
+  '''docs/.*\.md''',
+  '''README\.md''',
+]
+regexes = [
+  '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.eyJzdWIiOiJib25pdGEtc2VydmljZSIs''',  # token de ejemplo de la documentación de /login
+]

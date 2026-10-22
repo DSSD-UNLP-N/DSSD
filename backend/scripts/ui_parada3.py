@@ -17,30 +17,30 @@ El cierre libera lo reservado en la API Nacional (4 y 2 paramédicos): el stock 
 no puede tener un número ya cerrado en Render (ver docs/instalacion-nube.md).
 
 Requisitos: Bonita con el `.bos` de JWT desplegado, app en :8001, front en :5173 y API Nacional en :8002 con el seed y nada
-comprometido; Chrome o Chromium. Tarda unos 6 minutos con la ventana de 2.
+comprometido de paramédicos; Chrome o Chromium. Tarda unos 2 a 3 minutos. Puede correr a la vez que e2e_ui.py y
+ui_parada2.py (usan otros recursos): ver correr_ui.py.
 
     python scripts/ui_parada3.py
-    python scripts/ui_parada3.py --ventana 3      # minutos hasta que vence la ventana (por defecto 2)
+    python scripts/ui_parada3.py --ventana 1      # minutos de margen para cargar las ofertas antes del cierre (por defecto 0.5)
+    python scripts/ui_parada3.py --sin-capturas
 """
 from __future__ import annotations
 
 import argparse
 import sys
-import time
-from datetime import datetime, timedelta
 from pathlib import Path
 
-from playwright.sync_api import Page, sync_playwright
+from playwright.sync_api import Page, expect, sync_playwright
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE))
 
 import e2e_ui  # noqa: E402
-from e2e_ui import PLAZO, Reporte, Ui, ejecutada_por, tarea_activa  # noqa: E402
+from e2e_ui import PLAZO, Reporte, Ui, cierre_de_ventana, ejecutada_por, esperar_hasta, tarea_activa  # noqa: E402
 
 from nacional_auth import nacional_get  # noqa: E402
-from ui_ejecucion import contador, esperar_resuelta, esperar_tarea_activa, sin_tareas  # noqa: E402
+from ui_ejecucion import esperar_resuelta, esperar_tarea_activa, sin_tareas  # noqa: E402
 from ui_parada2 import (  # noqa: E402
     BOMBEROS, CRUZ_ROJA, agregar_lote, comprometido, esperar_estado, esperar_evaluacion, ofrecer, publicar, registrar,
 )
@@ -61,13 +61,16 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--app", default="http://localhost:5173")
     ap.add_argument("--api", default="http://localhost:8001")
-    ap.add_argument("--ventana", type=int, default=2, help="minutos hasta el cierre de la ventana")
+    ap.add_argument("--ventana", type=float, default=0.5, help="minutos de margen para cargar las ofertas antes del cierre")
     ap.add_argument("--visible", action="store_true", help="navegador visible")
+    ap.add_argument("--sin-capturas", action="store_true", help="no guardar las fotos de cada paso")
     args = ap.parse_args()
 
-    IMG.mkdir(parents=True, exist_ok=True)
-    for vieja in IMG.glob("*.png"):
-        vieja.unlink()
+    e2e_ui.SIN_CAPTURAS = args.sin_capturas
+    if not args.sin_capturas:
+        IMG.mkdir(parents=True, exist_ok=True)
+        for vieja in IMG.glob("*.png"):
+            vieja.unlink()
     cfg = get_settings()
     nacional = cfg.nacional_base_url.rstrip("/")
     admin = BonitaClient(cfg.bonita_base_url, cfg.bonita_timeout_seconds)
@@ -99,7 +102,7 @@ def main() -> int:
 
             r.fase("2. Coordinador: lote y publicación de la convocatoria")
             u.entrar(app, "coordinador.regional")
-            fin = (datetime.now().astimezone() + timedelta(minutes=args.ventana)).replace(second=0, microsecond=0)
+            fin = cierre_de_ventana(args.ventana * 60)
             u.abrir(app, emg)
             agregar_lote(u, "PARAMEDICO", "10", "Paramédico")
             u.foto("coordinador-lote")
@@ -117,16 +120,22 @@ def main() -> int:
 
             r.fase(f"4. Espera: la ventana vence a las {fin:%H:%M}, Bonita evalúa y el Coordinador sigue con la cobertura parcial")
             u.entrar(app, "coordinador.regional")
-            espera = max(0, int((fin - datetime.now().astimezone()).total_seconds())) + 240
-            ok = esperar_evaluacion(u, app, emg, espera)
+            esperar_hasta(fin)
+            ok = esperar_evaluacion(u, app, emg, 240)
             r.check("Bonita evaluó y el Coordinador ve la cobertura", ok, u.page.url)
             if not ok:
                 u.foto("error-sin-evaluacion")
                 raise RuntimeError("la evaluación no llegó")
             cob = page.locator("[data-testid=cobertura-total]").inner_text()
             r.check("Cobertura 60 %, no alcanza", cob.startswith("60") and "no alcanza" in cob, cob)
+            for _, cuit, nombre in ONGS:
+                r.check(f"{nombre} figura como reservada",
+                        "Reservada" in page.locator(f'[data-testid="evaluacion-ong-{cuit}"]').inner_text())
             r.check("Nacional tiene 4 + 2 paramédicos reservados",
                     (comprometido(nacional, CRUZ_ROJA, "PARAMEDICO"), comprometido(nacional, BOMBEROS, "PARAMEDICO")) == (4, 2))
+            r.check("El Coordinador ve los botones de decisión",
+                    page.locator("[data-testid=decidir-parcial]").count() == 1
+                    and page.locator("[data-testid=decidir-reformular]").count() == 1)
             u.foto("coordinador-evaluacion")
             page.locator("[data-testid=decidir-parcial]").click()
             u.ve("Seguís con la cobertura parcial", "El Coordinador eligió la cobertura parcial")
@@ -213,20 +222,29 @@ def main() -> int:
             r.fase("10. ONGs y Municipio: lo que ven al final")
             for usuario, _, nombre in ONGS:
                 u.entrar(app, usuario)
+                texto = f"emergencia #{emg} se cerró"
                 page.get_by_test_id("campana-contador").wait_for(timeout=PLAZO)
-                antes = contador(page)
                 page.get_by_test_id("campana").click()
                 lista = page.get_by_test_id("campana-lista")
                 lista.wait_for(timeout=PLAZO)
-                r.check(f"{nombre}: la campana lista el aviso del cierre",
-                        lista.get_by_text(f"emergencia #{emg} se cerró").count() == 1,
-                        lista.get_by_text(f"emergencia #{emg} se cerró").count())
+                r.check(f"{nombre}: la campana lista el aviso del cierre, sin leer",
+                        lista.locator("button.aviso.nuevo", has_text=texto).count() == 1,
+                        lista.get_by_text(texto).count())
                 u.foto(f"ong-{usuario.split('.')[1]}-campana")
-                lista.get_by_text(f"emergencia #{emg} se cerró").first.click()
+                lista.get_by_text(texto).first.click()
                 page.wait_for_url(f"**/emergencias/{emg}", timeout=PLAZO)
                 u.ve("Emergencia resuelta", f"{nombre}: al tocar el aviso abre la emergencia resuelta")
-                page.wait_for_timeout(1500)
-                r.check(f"{nombre}: el aviso se marcó como leído", contador(page) == max(antes - 1, 0), (antes, contador(page)))
+                # El aviso de esta emergencia, no el contador global: otras corridas pueden estar avisando a la misma ONG.
+                page.get_by_test_id("campana").click()
+                lista = page.get_by_test_id("campana-lista")
+                lista.wait_for(timeout=PLAZO)
+                try:
+                    expect(lista.locator("button.aviso.nuevo", has_text=texto)).to_have_count(0, timeout=PLAZO)
+                    leido = lista.locator("button.aviso", has_text=texto).count() == 1
+                except AssertionError:
+                    leido = False
+                r.check(f"{nombre}: el aviso se marcó como leído", leido)
+                page.get_by_test_id("campana").click()
                 u.foto(f"ong-{usuario.split('.')[1]}-resuelta")
                 u.salir()
             u.entrar(app, "operador.municipal")

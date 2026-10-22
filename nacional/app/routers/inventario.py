@@ -5,9 +5,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
+from app.errores import AUTH, errores
 from app.models import Cuenta, Inventario, Ong, OngCertificacion, TipoRecurso
 from app.routers.catalogo import inventario_out
-from app.schemas import InventarioIn, InventarioOut
+from app.schemas import CuitPath, InventarioIn, InventarioOut
 from app.security import require_ong_account
 
 router = APIRouter(tags=["inventario"])
@@ -16,9 +17,15 @@ router = APIRouter(tags=["inventario"])
 @router.put(
     "/ongs/{cuit}/inventario", response_model=list[InventarioOut],
     summary="Declarar el inventario de una ONG (upsert por tipo de recurso)",
+    responses=errores({
+        **AUTH,
+        403: "La cuenta no es la de la ONG de la ruta (solo se modifica el inventario propio)",
+        404: "La ONG o algún tipo de recurso no existe",
+        409: "Se declara menos de lo que ya está comprometido",
+    }),
 )
 def declarar_inventario(
-    cuit: str,
+    cuit: CuitPath,
     body: InventarioIn,
     db: Session = Depends(get_db),
     _cuenta: Cuenta = Depends(require_ong_account),
