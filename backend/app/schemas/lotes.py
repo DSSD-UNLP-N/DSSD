@@ -4,14 +4,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models import TipoLote
 
-ETIQUETAS = {
-    "tipo_recurso": "Tipo de recurso",
-    "detalle": "Detalle",
-    "cantidad": "Cantidad",
-    "tipo": "Tipo de lote",
-    "ventana_fin": "Cierre de la ventana de ofertas",
-}
-
 
 class LoteIn(BaseModel):
     """El recurso se elige del catálogo del Sistema Nacional; el nombre y la unidad salen de ahí."""

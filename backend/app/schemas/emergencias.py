@@ -2,13 +2,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.models import Gravedad
 
-ETIQUETAS = {
-    "tipo": "Tipo",
-    "nivel_gravedad": "Nivel de gravedad",
-    "zona_afectada": "Zona afectada",
-    "descripcion": "Descripción",
-}
-
 
 class EmergenciaIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
