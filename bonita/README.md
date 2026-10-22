@@ -28,9 +28,9 @@ entrada y escriben uno nuevo para importar en Studio. Cada uno explica su uso en
 | `preparar_entorno.py` | Cambia la URL de la API Nacional y la clave de `bonita-service` de un `.bos` (así se generó el de la nube a partir del local). |
 | `ver_conectores.py` | Muestra a qué URLs llama cada tarea de servicio de un `.bos`. |
 
-## `organizations/`
+## Organización
 
-`RescueSyncOrg.xml` es una organización de referencia. **La que se usa es `entrega-2/ACME.xml`** (ACME editada de forma aditiva, con los
+La organización es `entrega-2/ACME.xml` (ACME editada de forma aditiva, con los
 grupos `/rescuesync/{municipio,coordinador,ong,auditoria}` y un usuario por perfil). Importarla y **Desplegarla** desde el editor de la
 organización; Bonita solo tiene una organización activa a la vez. Los cambios hechos a mano en Studio están en
 [`entrega-2/CAMBIOS-BONITA.md`](../entrega-2/CAMBIOS-BONITA.md).
