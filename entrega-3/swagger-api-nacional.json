@@ -1432,7 +1432,7 @@
         "operationId": "health_health_get",
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "El servicio está en pie",
             "content": {
               "application/json": {
                 "schema": {
@@ -1441,6 +1441,10 @@
                   },
                   "type": "object",
                   "title": "Response Health Health Get"
+                },
+                "example": {
+                  "estado": "ok",
+                  "commit": "aff993cda27a377fc693c84fe9804abee9ff536e"
                 }
               }
             }
