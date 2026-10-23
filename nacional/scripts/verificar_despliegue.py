@@ -66,6 +66,19 @@ class Verificador:
         assert status == 200, (status, r)
         return r
 
+    def liberar_restos(self) -> None:
+        """Si la corrida se corta a mitad (excepción, cancelación), libera lo que alcanzó a reservar: una reserva abierta deja
+        «comprometido» en la base y rompe la corrida siguiente. Las referencias de la corrida son emg-<emergencia>…<emergencia+7>."""
+        base = getattr(self, "emergencia", None)
+        if self.token is None or base is None:
+            return
+        for n in range(base, base + 8):
+            for cuit in (CRUZ_ROJA, BOMBEROS):
+                try:
+                    self.pedir("POST", f"/adjudicaciones/emg-{n}-r1-{cuit}/liberar")
+                except Exception:  # noqa: BLE001  (limpieza a ciegas: 404 y 409 son esperables)
+                    pass
+
     def uno(self, gravedad: str, cuit: str, tipo: str, cantidad: int) -> dict:
         (res,) = self.validar(gravedad, (cuit, tipo, cantidad))["resultados"]
         return res
@@ -79,6 +92,13 @@ def main() -> int:
     ap.add_argument("--crear-ong", action="store_true", help="registra una ONG de verificación (queda en la base)")
     args = ap.parse_args()
     v = Verificador(args.url, args.usuario, args.clave)
+    try:
+        return _correr(v, args)
+    finally:
+        v.liberar_restos()
+
+
+def _correr(v: Verificador, args: argparse.Namespace) -> int:
     print(f"API Nacional en {v.base}")
 
     print("\n== A1. Estado y Swagger")
@@ -108,6 +128,12 @@ def main() -> int:
         return 1
     ong = v.entrar(ONG_DEMO, CLAVE_DEMO)
     v.check(f"Hay una cuenta de ONG de demo ({ONG_DEMO}) con clave {CLAVE_DEMO}", ong is not None)
+    if ong is not None:  # el inventario de demo es el del seed: otras pruebas (interfaz, ONGs de práctica) pueden haberlo cambiado
+        _, ficha = v.pedir("GET", f"/ongs/{CRUZ_ROJA}")
+        paramedicos = next((i for i in ficha.get("inventario", []) if i["tipo_recurso"] == "PARAMEDICO"), None)
+        if paramedicos and paramedicos["cantidad_total"] != 4 and paramedicos["cantidad_comprometida"] == 0:
+            v.pedir("PUT", f"/ongs/{CRUZ_ROJA}/inventario", {"items": [{"tipo_recurso": "PARAMEDICO", "cantidad_total": 4}]}, token=ong)
+            print("     (se restauró el inventario de demo: Cruz Roja con 4 paramédicos)")
     v.check("Una ONG no puede liberar reservas → 403",
             v.pedir("POST", "/adjudicaciones/no-existe/liberar", token=ong)[0] == 403)
     v.check("La cuenta de servicio sí pasa (404: la reserva no existe)",
@@ -236,7 +262,7 @@ def main() -> int:
         v.check(f"V15 Evaluar una oferta {nombre} → 422 (no reserva nada)", status == 422)
 
     print("\n== R. Reserva: evaluar, confirmar y liberar (deja el inventario como estaba)")
-    emergencia = int(time.time())  # única por corrida: una referencia liberada no se puede evaluar de nuevo
+    emergencia = v.emergencia = int(time.time())  # única por corrida: una referencia liberada no se puede evaluar de nuevo
     ref = f"emg-{emergencia}-r1-{CRUZ_ROJA}"
     ref_b = f"emg-{emergencia}-r1-{BOMBEROS}"
     pedido = {"emergencia_id": emergencia, "ronda": 1, "gravedad": "ALTO",
