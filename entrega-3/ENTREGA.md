@@ -16,6 +16,16 @@ gestión de ONGs y el compromiso/liberación de recursos. URLs de servicios, doc
 
 ## Cómo probarla (Swagger)
 1. Abrir `/docs` → `POST /login` con una cuenta de servicio o de ONG → copiar `access_token`.
+
+**Cuentas de prueba** (de la demo; la base es de práctica):
+
+| Usuario | Clave | Para qué sirve |
+|---|---|---|
+| `bonita-service` | `1gom_DfYwiGTjWmBkks4MvHT` | Cuenta de servicio: puede llamar a **todos** los endpoints (evaluaciones, adjudicaciones, cierres, catálogo, inventario ajeno). Es la que usan los conectores de Bonita |
+| `ong.cruzroja` · `ong.bomberos` | `demo1234` | Cuentas de ONG: catálogo, validaciones y declarar el inventario **propio**. Los endpoints de reservas, adjudicaciones y cierres les dan 403 |
+| (sin cuenta) | — | `POST /ongs` está abierto: registra una ONG nueva y devuelve su token |
+
+`app-service` es la otra cuenta de servicio (la usa la app web). Estas claves son las mismas que ya están en `backend/.env.nube` y en `entrega-3/entrega42_nube.bos`.
 2. Botón **Authorize** → pegar el token. Todos los endpoints (salvo `/health` y `/login`) exigen JWT.
 3. Probar `GET /tipos-recurso`, `GET /ongs`, `POST /validaciones`, `POST /evaluaciones`, etc.
 
