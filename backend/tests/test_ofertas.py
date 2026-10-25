@@ -1,13 +1,12 @@
-"""La ONG no puede ofrecer más de lo que tiene: lo que ofrece de cada recurso se suma con sus otras
-ofertas abiertas y se valida contra el inventario del Sistema Nacional (que va mockeado)."""
+"""Ofertas de las ONGs por la API de la SPA (T-11/T-12): versionadas, y sin pasarse del inventario. Lo que la ONG
+ofrece de cada recurso se suma con sus otras ofertas abiertas y se valida contra el inventario del Sistema Nacional
+(que va mockeado)."""
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.models import Emergencia, EstadoEmergencia, Gravedad, Lote, Municipio, Oferta, Ong
-from tests.conftest import PASSWORD
-
-CRUZ_ROJA = "30-54666544-5"  # 4 paramédicos en el FakeNacional
+from app.models import Emergencia, EstadoEmergencia, Gravedad, Oferta, OfertaItem, Ong
+from tests.conftest import CRUZ_ROJA, PASSWORD, crear_emergencia
 
 
 def _sin_zona(delta):
@@ -15,17 +14,24 @@ def _sin_zona(delta):
     return datetime.now(timezone.utc).replace(tzinfo=None) + delta
 
 
+def _con_agua_y_frazadas(seeded, *, ventana_fin):
+    return crear_emergencia(seeded, EstadoEmergencia.CONVOCATORIA, descripcion="Río desbordado", bonita_case_id=4242,
+                            ventana_ofertas_fin=ventana_fin, ofertas=(),
+                            lotes=({"recurso": "Agua", "cantidad": 100, "unidad": "litros"},
+                                   {"recurso": "Frazadas", "cantidad": 50, "unidad": "unidades"}))
+
+
 def _emergencia(seeded, *lotes, horas=2, gravedad=Gravedad.ALTO):
     """Convocatoria abierta con un lote por cada (tipo_recurso, cantidad)."""
-    with seeded() as s:
-        e = Emergencia(municipio_id=s.query(Municipio).one().id, tipo="inundacion", nivel_gravedad=gravedad,
-                       zona_afectada="Centro", descripcion="d", bonita_case_id=None,
-                       estado=EstadoEmergencia.CONVOCATORIA, ventana_ofertas_fin=_sin_zona(timedelta(hours=horas)))
-        e.lotes = [Lote(recurso=tipo or "Libre", tipo_recurso=tipo, cantidad=cantidad, unidad="u")
-                   for tipo, cantidad in lotes]
-        s.add(e)
-        s.commit()
-        return e.id, [l.id for l in e.lotes]
+    return crear_emergencia(seeded, EstadoEmergencia.CONVOCATORIA, nivel_gravedad=gravedad, bonita_case_id=None,
+                            ventana_ofertas_fin=_sin_zona(timedelta(hours=horas)), ofertas=(),
+                            lotes=[{"recurso": tipo or "Libre", "tipo_recurso": tipo, "cantidad": cantidad, "unidad": "u"}
+                                   for tipo, cantidad in lotes])
+
+
+@pytest.fixture
+def abierta(seeded):
+    return _con_agua_y_frazadas(seeded, ventana_fin=_sin_zona(timedelta(hours=2)))
 
 
 @pytest.fixture
@@ -39,6 +45,10 @@ def api_login(client):
     return _login
 
 
+def _items(lotes, *cantidades):
+    return {"items": [{"lote_id": l, "recurso": "x", "cantidad": c} for l, c in zip(lotes, cantidades)]}
+
+
 def _ofrecer(c, emergencia, *pares):
     """pares: (lote_id, cantidad)."""
     return c.post(f"/api/emergencias/{emergencia}/ofertas",
@@ -49,6 +59,60 @@ def _ofertas(seeded):
     with seeded() as s:
         return s.query(Oferta).count()
 
+
+def _items_guardados(seeded, emergencia):
+    with seeded() as s:
+        oferta = s.query(Oferta).filter_by(emergencia_id=emergencia).one()
+        return sorted((i.version, i.lote_id, i.cantidad) for i in s.query(OfertaItem).filter_by(oferta_id=oferta.id))
+
+
+# --- versiones ---------------------------------------------------------------
+
+def test_una_oferta_cubre_varios_lotes_y_cada_envio_es_una_version(api_login, abierta):
+    eid, lotes = abierta
+    c = api_login("ong.cruzroja")
+
+    v1 = c.post(f"/api/emergencias/{eid}/ofertas", json=_items(lotes, 60, 20)).json()
+    assert v1["version_actual"] == 1 and len(v1["items"]) == 2
+    assert v1["ong_nombre"] == "Cruz Roja Argentina"
+
+    v2 = c.post(f"/api/emergencias/{eid}/ofertas", json=_items(lotes[:1], 80)).json()
+    assert v2["version_actual"] == 2
+    assert [(i["lote_id"], i["cantidad"]) for i in v2["items"]] == [(lotes[0], 80)]
+
+
+def test_ventana_vencida_rechaza_ofertas(api_login, seeded):
+    eid, lotes = _con_agua_y_frazadas(seeded, ventana_fin=_sin_zona(-timedelta(minutes=1)))
+    r = api_login("ong.cruzroja").post(f"/api/emergencias/{eid}/ofertas", json=_items(lotes, 5))
+    assert r.status_code == 400 and "cerró" in r.json()["detail"]
+
+
+def test_lotes_repetidos_o_ajenos_se_rechazan(api_login, abierta):
+    eid, lotes = abierta
+    c = api_login("ong.cruzroja")
+    assert c.post(f"/api/emergencias/{eid}/ofertas", json=_items([lotes[0], lotes[0]], 1, 2)).status_code == 400
+    assert c.post(f"/api/emergencias/{eid}/ofertas", json=_items([9999], 1)).status_code == 400
+
+
+def test_cada_ong_ve_solo_su_oferta_y_el_coordinador_todas(api_login, abierta):
+    eid, lotes = abierta
+    api_login("ong.cruzroja").post(f"/api/emergencias/{eid}/ofertas", json=_items(lotes, 1, 1))
+    api_login("ong.bomberos").post(f"/api/emergencias/{eid}/ofertas", json=_items(lotes, 2, 2))
+
+    propias = api_login("ong.bomberos").get(f"/api/emergencias/{eid}/ofertas").json()
+    assert [o["ong_nombre"] for o in propias] == ["Bomberos Voluntarios"]
+    todas = api_login("coordinador.regional").get(f"/api/emergencias/{eid}/ofertas").json()
+    assert len(todas) == 2
+
+
+def test_fechas_salen_con_zona_utc(api_login, abierta):
+    eid, _ = abierta
+    e = api_login("coordinador.regional").get(f"/api/emergencias/{eid}").json()
+    assert e["ventana_ofertas_fin"].endswith("Z") or e["ventana_ofertas_fin"].endswith("+00:00")
+    assert datetime.fromisoformat(e["creada_en"]).tzinfo is not None
+
+
+# --- tope de inventario ------------------------------------------------------
 
 def test_ofrecer_mas_de_lo_que_tiene_se_rechaza_y_no_guarda_nada(api_login, seeded):
     em, (lote,) = _emergencia(seeded, ("PARAMEDICO", 20))
@@ -160,14 +224,6 @@ def test_sin_cuit_no_se_puede_validar_el_inventario(api_login, seeded):
 # --- retirar ---------------------------------------------------------------
 # Retirar un lote = reenviar la oferta sin él (versión nueva); retirarla toda = reenviarla vacía.
 
-def _items(seeded, emergencia):
-    from app.models import OfertaItem
-
-    with seeded() as s:
-        oferta = s.query(Oferta).filter_by(emergencia_id=emergencia).one()
-        return sorted((i.version, i.lote_id, i.cantidad) for i in s.query(OfertaItem).filter_by(oferta_id=oferta.id))
-
-
 def test_retirar_un_lote_deja_una_version_sin_ese_item_y_conserva_el_historial(api_login, seeded):
     em, (a, b) = _emergencia(seeded, ("PARAMEDICO", 5), ("RACION_ALIMENTO", 100))
     c = api_login("ong.cruzroja")
@@ -175,7 +231,7 @@ def test_retirar_un_lote_deja_una_version_sin_ese_item_y_conserva_el_historial(a
     r = _ofrecer(c, em, (a, 2))  # retira el lote b
     assert r.status_code == 201
     assert (r.json()["version_actual"], [i["lote_id"] for i in r.json()["items"]], r.json()["retirada"]) == (2, [a], False)
-    assert _items(seeded, em) == [(1, a, 2), (1, b, 50), (2, a, 2)]  # la v1 sigue intacta
+    assert _items_guardados(seeded, em) == [(1, a, 2), (1, b, 50), (2, a, 2)]  # la v1 sigue intacta
 
 
 def test_retirar_toda_la_oferta(api_login, seeded):
@@ -185,7 +241,7 @@ def test_retirar_toda_la_oferta(api_login, seeded):
     r = _ofrecer(c, em)
     assert r.status_code == 201
     assert (r.json()["version_actual"], r.json()["items"], r.json()["retirada"]) == (2, [], True)
-    assert _items(seeded, em) == [(1, lote, 3)]  # el historial no se pierde
+    assert _items_guardados(seeded, em) == [(1, lote, 3)]  # el historial no se pierde
     # el Coordinador la ve marcada como retirada
     (oferta,) = api_login("coordinador.regional").get(f"/api/emergencias/{em}/ofertas").json()
     assert oferta["retirada"] is True
