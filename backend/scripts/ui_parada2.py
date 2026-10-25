@@ -27,31 +27,21 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-import time
 from datetime import datetime
 from pathlib import Path
 
 from playwright.sync_api import Page, sync_playwright
 
+from comun import BOMBEROS, CRUZ_ROJA, comprometido, esperar
+import e2e_ui
+from e2e_ui import POLL_S, PLAZO, PLAZO_LENTO, Reporte, Ui, cierre_de_ventana, dato, esperar_hasta, tarea_activa
+from nacional_auth import nacional_post
+from app.core.config import get_settings
+from app.integrations.bonita import BonitaClient
+
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent))
-sys.path.insert(0, str(HERE))
-
-import e2e_ui  # noqa: E402
-from e2e_ui import POLL_S, PLAZO, PLAZO_LENTO, Reporte, Ui, cierre_de_ventana, dato, esperar_hasta, tarea_activa  # noqa: E402
-
-from nacional_auth import nacional_get, nacional_post  # noqa: E402
-from app.core.config import get_settings  # noqa: E402
-from app.integrations.bonita import BonitaClient  # noqa: E402
-
-CRUZ_ROJA, BOMBEROS = "30-54666544-5", "30-68522415-9"
 IMG = HERE.parents[1] / "entrega-3" / "img" / "parada-2"
 e2e_ui.CAPTURAS = IMG
-
-
-def comprometido(nacional: str, cuit: str, tipo: str) -> int:
-    ficha = nacional_get(f"{nacional}/ongs/{cuit}", timeout=60).json()
-    return next(i["cantidad_comprometida"] for i in ficha["inventario"] if i["tipo_recurso"] == tipo)
 
 
 def registrar(u: Ui, app: str, gravedad: str, zona: str, descripcion: str, foto: str) -> tuple[int, str]:
@@ -97,23 +87,17 @@ def ofrecer(u: Ui, app: str, emergencia: int, cantidad: str, foto: str | None = 
 def esperar_evaluacion(u: Ui, app: str, emergencia: int, segundos: int) -> bool:
     """El Coordinador recarga el detalle hasta que aparece la cobertura que calculó Bonita. Llamar cuando la ventana ya
     venció (`esperar_hasta`): antes no hay nada que ver."""
-    limite = time.monotonic() + segundos
-    while time.monotonic() < limite:
+    def aparece():
         u.abrir(app, emergencia)
-        if u.page.locator("[data-testid=cobertura-total]").count():
-            return True
-        time.sleep(POLL_S)
-    return False
+        return u.page.locator("[data-testid=cobertura-total]").count()
+    return bool(esperar(aparece, segundos, cada=POLL_S))
 
 
 def esperar_estado(u: Ui, app: str, emergencia: int, etiqueta: str, segundos: int) -> bool:
-    limite = time.monotonic() + segundos
-    while time.monotonic() < limite:
+    def aparece():
         u.abrir(app, emergencia)
-        if u.page.locator(".badge", has_text=etiqueta).count():
-            return True
-        time.sleep(POLL_S)
-    return False
+        return u.page.locator(".badge", has_text=etiqueta).count()
+    return bool(esperar(aparece, segundos, cada=POLL_S))
 
 
 def adjudicar(u: Ui, app: str, emergencia: int, cuit: str, foto_antes: str, foto_despues: str) -> None:

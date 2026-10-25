@@ -40,7 +40,7 @@ import e2e_ui  # noqa: E402
 from e2e_ui import PLAZO, Reporte, Ui, cierre_de_ventana, ejecutada_por, esperar_hasta, tarea_activa  # noqa: E402
 
 from nacional_auth import nacional_get  # noqa: E402
-from ui_ejecucion import esperar_resuelta, esperar_tarea_activa, sin_tareas  # noqa: E402
+from comun import esperar_resuelta, esperar_tarea_activa, sin_tareas  # noqa: E402
 from ui_parada2 import (  # noqa: E402
     BOMBEROS, CRUZ_ROJA, agregar_lote, comprometido, esperar_estado, esperar_evaluacion, ofrecer, publicar, registrar,
 )
@@ -205,7 +205,7 @@ def main() -> int:
             u.ve("Cierre validado", "Aparece «Cierre validado»", timeout=15000)
             r.check("«Validar Cierre» la completó coordinador.regional",
                     ejecutada_por(admin, caso, "Validar Cierre") == "coordinador.regional", ejecutada_por(admin, caso, "Validar Cierre"))
-            r.check("El caso de Bonita ya no tiene tareas pendientes", sin_tareas(admin, caso), tarea_activa(admin, caso))
+            r.check("El caso de Bonita ya no tiene tareas pendientes", sin_tareas(admin, caso, 40), tarea_activa(admin, caso))
             r.check("Bonita liberó y avisó: la app marca la emergencia RESUELTA", esperar_resuelta(args.api, emg))
             page.reload()
             u.ve("Emergencia resuelta", "La emergencia queda «Resuelta»", timeout=30000)

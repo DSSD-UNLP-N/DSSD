@@ -21,31 +21,13 @@ from __future__ import annotations
 
 import argparse
 import sys
-import time
 from datetime import datetime, timedelta
-from pathlib import Path
 
-import requests
-
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent))
-sys.path.insert(0, str(HERE))
-
-from escenario_adjudicacion import BOMBEROS, CRUZ_ROJA, VENTANA_S, comprometido, esperar  # noqa: E402
-from escenario_tope import Escenario, crear_y_publicar  # noqa: E402
-
-from nacional_auth import nacional_get  # noqa: E402
-from app.core.config import get_settings  # noqa: E402
-from app.integrations.bonita import BonitaClient  # noqa: E402
-
-
-def sin_tareas(admin: BonitaClient, caso: int, segundos: int = 60) -> bool:
-    limite = time.monotonic() + segundos
-    while time.monotonic() < limite:
-        if not admin.get_human_tasks(caso):
-            return True
-        time.sleep(1)
-    return False
+from comun import (BOMBEROS, CRUZ_ROJA, VENTANA_S, Escenario, comprometido, crear_y_publicar, esperar_detalle,
+                   sin_tareas)
+from nacional_auth import nacional_get
+from app.core.config import get_settings
+from app.integrations.bonita import BonitaClient
 
 
 def main() -> int:
@@ -69,7 +51,7 @@ def main() -> int:
     e.esperar("Bomberos ofrece 2", e.ofrecer("ong.bomberos", emg, (lotes["PARAMEDICO"], 2)), 201)
 
     print(f"\n== Evaluación y adjudicación (la ventana vence {fin:%H:%M:%S})")
-    d = esperar(e, emg, lambda d: d["evaluacion"] is not None, 200, desde=fin)
+    d = esperar_detalle(e, emg, lambda d: d["evaluacion"] is not None, 200, desde=fin)
     e.check("Bonita evaluó: EN_EVALUACION con 60 %", d is not None and d["estado"] == "EN_EVALUACION", d and d["estado"])
     if d is None:
         print(f"\n{e.ok}/{e.total} verificaciones OK")
@@ -79,7 +61,7 @@ def main() -> int:
     admin.wait_for_task(caso, "Adjudicar Ofertas", retries=20)
     r = e.post("operador.municipal", f"/emergencias/{emg}/adjudicar", {"cuits": [CRUZ_ROJA, BOMBEROS]})
     e.check("El Municipio adjudica a las dos ONGs", r.status_code == 200, r.text)
-    d = esperar(e, emg, lambda d: d["estado"] == "EN_EJECUCION", 90)
+    d = esperar_detalle(e, emg, lambda d: d["estado"] == "EN_EJECUCION", 90)
     e.check("La emergencia pasa a EN_EJECUCION", d is not None, d and d["estado"])
     e.check("Nacional: 4 y 2 paramédicos comprometidos", tuple(comprometido(nacional, *k) for k in claves) == (4, 2))
     e.check("Bonita espera «Monitorear Ejecucion»", admin.wait_for_task(caso, "Monitorear Ejecucion", retries=20) is not None)
@@ -104,7 +86,7 @@ def main() -> int:
     print("\n== Cierre")
     e.esperar("C1 El Municipio no valida el cierre → 403", e.post("operador.municipal", f"/emergencias/{emg}/validar-cierre", {}), 403)
     e.esperar("C2 El Coordinador valida el cierre bilateral", e.post("coordinador.regional", f"/emergencias/{emg}/validar-cierre", {}), 200)
-    d = esperar(e, emg, lambda d: d["estado"] == "RESUELTA", 120)
+    d = esperar_detalle(e, emg, lambda d: d["estado"] == "RESUELTA", 120)
     e.check("C3 Bonita liberó y avisó: la emergencia queda RESUELTA", d is not None, d and d["estado"])
     e.check("C4 Nacional: el inventario volvió a como estaba", {k: comprometido(nacional, *k) for k in claves} == previos,
             {k: comprometido(nacional, *k) for k in claves})

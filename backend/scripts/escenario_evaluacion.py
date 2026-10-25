@@ -13,32 +13,17 @@ seed y sin nada comprometido. Tarda unos 3 minutos.
 """
 from __future__ import annotations
 
-import os
 import argparse
 import sys
 import time
 from datetime import datetime, timedelta
-from pathlib import Path
 
 import requests
 
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent))
-sys.path.insert(0, str(HERE))
-
-from escenario_tope import Escenario, crear_y_publicar, retirar_previas  # noqa: E402
-
-from nacional_auth import nacional_get, nacional_post  # noqa: E402
-from app.core.config import get_settings  # noqa: E402
-from app.integrations.bonita import BonitaClient  # noqa: E402
-
-CRUZ_ROJA, BOMBEROS = "30-54666544-5", "30-68522415-9"
-VENTANA_S = int(os.environ.get("ESCENARIO_VENTANA_S", 60))  # alcanza para crear las dos emergencias y cargar las ofertas
-
-
-def comprometido(nacional: str, cuit: str, tipo: str) -> int:
-    ficha = nacional_get(f"{nacional}/ongs/{cuit}", timeout=60).json()
-    return next(i["cantidad_comprometida"] for i in ficha["inventario"] if i["tipo_recurso"] == tipo)
+from comun import BOMBEROS, CRUZ_ROJA, VENTANA_S, Escenario, comprometido, crear_y_publicar, retirar_previas
+from nacional_auth import nacional_post
+from app.core.config import get_settings
+from app.integrations.bonita import BonitaClient
 
 
 def variable(admin: BonitaClient, caso: int, nombre: str):

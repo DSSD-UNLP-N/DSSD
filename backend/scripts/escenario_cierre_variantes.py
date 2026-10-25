@@ -37,20 +37,14 @@ from pathlib import Path
 
 import requests
 
-HERE = Path(__file__).resolve().parent
-REPO = HERE.parents[1]
-sys.path.insert(0, str(HERE.parent))
-sys.path.insert(0, str(HERE))
+from comun import BOMBEROS, CRUZ_ROJA, Escenario, comprometido, crear, esperar_detalle, publicar, sin_tareas
+from recuperar_cierre import recuperar
+from nacional_auth import nacional_get
+from app.core.config import get_settings
+from app.integrations.bonita import BonitaClient
+from app.seed import DEMO_PASSWORD
 
-from escenario_adjudicacion import BOMBEROS, CRUZ_ROJA, comprometido, esperar  # noqa: E402
-from escenario_cierre import sin_tareas  # noqa: E402
-from escenario_tope import Escenario, crear, publicar  # noqa: E402
-from recuperar_cierre import recuperar  # noqa: E402
-
-from nacional_auth import nacional_get  # noqa: E402
-from app.core.config import get_settings  # noqa: E402
-from app.integrations.bonita import BonitaClient  # noqa: E402
-from app.seed import DEMO_PASSWORD  # noqa: E402
+REPO = Path(__file__).resolve().parents[2]
 
 # La primera ventana vence VENTANA_S después de haber creado todas las emergencias: crear (instanciar el caso en Bonita) es lo
 # lento y no puede comerse la ventana, porque entonces la primera se evalúa y reserva stock antes de que se ofrezca en las demás.
@@ -116,7 +110,7 @@ class Ctx:
 
     # --- pasos comunes -----------------------------------------------------------------------------------------
     def evaluada(self, emg: int, segundos: int = 400) -> dict | None:
-        return esperar(self.e, emg, lambda d: d["evaluacion"] is not None, segundos)
+        return esperar_detalle(self.e, emg, lambda d: d["evaluacion"] is not None, segundos)
 
     def adjudicar(self, nombre: str, emg: int, caso: int, cuits: list[str], decidir: bool = True) -> bool:
         e = self.e
@@ -126,7 +120,7 @@ class Ctx:
         e.check(f"{nombre}: Bonita espera «Adjudicar Ofertas»", self.espera_tarea(caso, "Adjudicar Ofertas"), self.tareas(caso))
         r = e.post("operador.municipal", f"/emergencias/{emg}/adjudicar", {"cuits": cuits})
         e.check(f"{nombre}: el Municipio adjudica a {len(cuits)} ONG", r.status_code == 200, r.text)
-        d = esperar(e, emg, lambda d: d["estado"] == "EN_EJECUCION", 90)
+        d = esperar_detalle(e, emg, lambda d: d["estado"] == "EN_EJECUCION", 90)
         e.check(f"{nombre}: pasa a EN_EJECUCION", d is not None, d and d["estado"])
         ok = self.espera_tarea(caso, "Monitorear Ejecucion")
         e.check(f"{nombre}: Bonita espera «Monitorear Ejecucion»", ok, self.tareas(caso))
@@ -145,7 +139,7 @@ class Ctx:
                   liberadas: list[tuple[str, str, str]] = ()) -> None:
         """cerradas / liberadas: (usuario, cuit, ref). Todo lo que debe haber pasado después del cierre."""
         e = self.e
-        d = esperar(e, emg, lambda d: d["estado"] == "RESUELTA", 120)
+        d = esperar_detalle(e, emg, lambda d: d["estado"] == "RESUELTA", 120)
         e.check(f"{nombre}: la emergencia queda RESUELTA", d is not None, d and d["estado"])
         for usuario, cuit, ref in cerradas:
             e.check(f"{nombre}: {ref} CERRADA, con un solo cierre", self.estado_ref(ref) == "CERRADA" and len(self.cierres(cuit, emg)) == 1,
@@ -347,7 +341,7 @@ def variante_c_parte2(ctx: Ctx) -> None:
     if not v.get("ok1"):
         return
     print(f"\n== C (2/2): ronda 2 (vence {v['fin2']:%H:%M:%S}) y cierre de la referencia r2")
-    d = esperar(e, emg, lambda d: d["evaluacion"] is not None and d["evaluacion"]["ronda"] == 2, 240, desde=v["fin2"])
+    d = esperar_detalle(e, emg, lambda d: d["evaluacion"] is not None and d["evaluacion"]["ronda"] == 2, 240, desde=v["fin2"])
     e.check("C: la ronda 2 cubre todo y va a ADJUDICACION", d is not None and d["estado"] == "ADJUDICACION", d and d["estado"])
     if d is None or not ctx.adjudicar("C", emg, caso, [CRUZ_ROJA], decidir=False):
         return

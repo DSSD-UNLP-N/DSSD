@@ -25,13 +25,8 @@ from pathlib import Path
 
 import requests
 
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent))
-sys.path.insert(0, str(HERE))
-
-from escenario_adjudicacion import BOMBEROS, CRUZ_ROJA, VENTANA_S, comprometido, esperar  # noqa: E402
-from escenario_cierre_variantes import CLAVES, REPO, Ctx, apagar, levantar, recuperar_ok  # noqa: E402
-from escenario_tope import crear_y_publicar  # noqa: E402
+from comun import BOMBEROS, CRUZ_ROJA, VENTANA_S, comprometido, crear_y_publicar
+from escenario_cierre_variantes import CLAVES, REPO, Ctx, apagar, levantar, recuperar_ok
 
 COORDINADOR = "coordinador.regional"
 CLAVE_ROTADA = "clave-rotada-de-prueba"

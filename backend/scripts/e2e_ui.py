@@ -29,11 +29,10 @@ from pathlib import Path
 import requests
 from playwright.sync_api import Page, sync_playwright
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from app.core.config import get_settings  # noqa: E402
-from app.integrations.bonita import BonitaClient  # noqa: E402
-from app.seed import DEMO_PASSWORD  # noqa: E402
+from comun import esperar, tarea_activa
+from app.core.config import get_settings
+from app.integrations.bonita import BonitaClient
+from app.seed import DEMO_PASSWORD
 
 TAREA_TRAS_ALTA = "Revisar Informacion"
 TAREA_TRAS_PUBLICAR = "Cargar Ofertas de Ayuda"
@@ -73,11 +72,6 @@ class Reporte:
         return 1 if self.fallas else 0
 
 
-def tarea_activa(admin: BonitaClient, case_id) -> str:
-    tareas = admin.get_human_tasks(case_id)
-    return tareas[0]["displayName"] if tareas else "(ninguna)"
-
-
 def actor_de(admin: BonitaClient, case_id, prefijo: str) -> str:
     """A qué actor del proceso pertenece la tarea (pendiente o ya hecha). Es lo que decide quién la ve como
     suya en el portal de Bonita; el motor deja ejecutarla aunque el usuario no sea del actor, así que
@@ -90,12 +84,7 @@ def actor_de(admin: BonitaClient, case_id, prefijo: str) -> str:
 
 
 def esperar_tarea(admin: BonitaClient, case_id, prefijo: str, segundos: int) -> bool:
-    limite = time.monotonic() + segundos
-    while time.monotonic() < limite:
-        if admin.find_task(case_id, prefijo) is not None:
-            return True
-        time.sleep(POLL_S)
-    return False
+    return bool(esperar(lambda: admin.find_task(case_id, prefijo) is not None, segundos, cada=POLL_S))
 
 
 def esperar_hasta(momento: datetime, holgura_s: float = 0) -> None:

@@ -18,50 +18,15 @@ from __future__ import annotations
 import os
 import argparse
 import sys
-import time
 from datetime import datetime, timedelta
-from pathlib import Path
 
-import requests
+from comun import BOMBEROS, CRUZ_ROJA, VENTANA_S, Escenario, comprometido, crear_y_publicar, esperar_detalle
+from nacional_auth import nacional_post
+from app.core.config import get_settings
+from app.integrations.bonita import BonitaClient
 
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent))
-sys.path.insert(0, str(HERE))
-
-from escenario_tope import Escenario, crear_y_publicar  # noqa: E402
-
-from nacional_auth import nacional_get, nacional_post  # noqa: E402
-from app.core.config import get_settings  # noqa: E402
-from app.integrations.bonita import BonitaClient  # noqa: E402
-
-CRUZ_ROJA, BOMBEROS = "30-54666544-5", "30-68522415-9"
-# Segundos de la ventana de ofertas. Tiene que alcanzar para crear las emergencias y cargar las ofertas (unos 20 s en una PC
-# cargada); es casi todo lo que tarda cada escenario, así que se puede achicar o agrandar con ESCENARIO_VENTANA_S.
-VENTANA_S = int(os.environ.get("ESCENARIO_VENTANA_S", 60))
 # Ronda 2: la ventana solo tiene que alcanzar para publicar y que Cruz Roja ofrezca (una sola oferta).
 RONDA2_S = int(os.environ.get("ESCENARIO_VENTANA_S", 60)) * 3 // 4
-
-
-def comprometido(nacional: str, cuit: str, tipo: str) -> int:
-    ficha = nacional_get(f"{nacional}/ongs/{cuit}", timeout=60).json()
-    return next(i["cantidad_comprometida"] for i in ficha["inventario"] if i["tipo_recurso"] == tipo)
-
-
-def esperar(e: Escenario, emergencia: int, condicion, segundos: int, desde: datetime | None = None) -> dict | None:
-    """Mira el detalle del Coordinador cada 1,5 s hasta que `condicion(detalle)` sea cierta. Con `desde` (el cierre de la
-    ventana) primero duerme hasta ese momento, sin consultar: antes no hay nada que ver; `segundos` cuenta desde ahí."""
-    if desde is not None:
-        time.sleep(max(0.0, (desde - datetime.now().astimezone()).total_seconds()))
-    limite = time.monotonic() + segundos
-    while time.monotonic() < limite:
-        try:
-            d = e.get("coordinador.regional", f"/emergencias/{emergencia}").json()
-        except requests.ConnectionError:  # el servidor cerró la conexión inactiva
-            d = None
-        if d is not None and condicion(d):
-            return d
-        time.sleep(1.5)
-    return None
 
 
 def main() -> int:
@@ -87,8 +52,8 @@ def main() -> int:
     e.esperar("B1 Cruz Roja ofrece 2000 L de agua", e.ofrecer("ong.cruzroja", eb, (lb["AGUA_POTABLE"], 2000)), 201)
 
     print(f"\n== Esperando la evaluación de Bonita ({fin:%H:%M:%S})")
-    da = esperar(e, ea, lambda d: d["evaluacion"] is not None, 200, desde=fin)
-    db = esperar(e, eb, lambda d: d["evaluacion"] is not None, 60)
+    da = esperar_detalle(e, ea, lambda d: d["evaluacion"] is not None, 200, desde=fin)
+    db = esperar_detalle(e, eb, lambda d: d["evaluacion"] is not None, 60)
     e.check("A y B quedaron evaluadas (en EN_EVALUACION: la cobertura no alcanza)",
             da is not None and db is not None and da["estado"] == db["estado"] == "EN_EVALUACION",
             (da and da["estado"], db and db["estado"]))
@@ -111,7 +76,7 @@ def main() -> int:
               e.post("operador.municipal", f"/emergencias/{ea}/adjudicar", {"cuits": ["30-99999999-9"]}), 400)
     r = e.post("operador.municipal", f"/emergencias/{ea}/adjudicar", {"cuits": [CRUZ_ROJA]})
     e.check("A7 El Municipio adjudica a Cruz Roja", r.status_code == 200, r.text)
-    d = esperar(e, ea, lambda d: d["estado"] == "EN_EJECUCION", 90)
+    d = esperar_detalle(e, ea, lambda d: d["estado"] == "EN_EJECUCION", 90)
     e.check("A8 Bonita avisó y la emergencia pasó a EN_EJECUCION", d is not None, d and d["estado"])
     ofertas = {o["ong_nombre"]: o["estado"] for o in e.get("coordinador.regional", f"/emergencias/{ea}/ofertas").json()}
     e.check("A9 Cruz Roja ADJUDICADA, Bomberos NO_ADJUDICADA",
@@ -145,7 +110,7 @@ def main() -> int:
     e.check("B8 El Coordinador publica de nuevo", r.status_code == 200 and r.json()["estado"] == "CONVOCATORIA", r.text)
     e.esperar("B9 Cruz Roja ofrece los 3000 L completos", e.ofrecer("ong.cruzroja", eb, (lb["AGUA_POTABLE"], 3000)), 201)
     print(f"     la ronda 2 vence {fin2:%H:%M:%S}")
-    d = esperar(e, eb, lambda d: d["evaluacion"] is not None, 200, desde=fin2)
+    d = esperar_detalle(e, eb, lambda d: d["evaluacion"] is not None, 200, desde=fin2)
     e.check("B10 La evaluación de la ronda 2 cubre todo y va directo a ADJUDICACION",
             d is not None and d["estado"] == "ADJUDICACION" and d["evaluacion"]["cobertura_completa"] is True
             and d["evaluacion"]["ronda"] == 2, d and (d["estado"], d["evaluacion"]["ronda"]))
@@ -157,7 +122,7 @@ def main() -> int:
                 [t["displayName"] for t in admin.get_human_tasks(caso_b)])
         r = e.post("operador.municipal", f"/emergencias/{eb}/adjudicar", {"cuits": [CRUZ_ROJA]})
         e.check("B13 El Municipio adjudica", r.status_code == 200, r.text)
-        d = esperar(e, eb, lambda d: d["estado"] == "EN_EJECUCION", 90)
+        d = esperar_detalle(e, eb, lambda d: d["estado"] == "EN_EJECUCION", 90)
         e.check("B14 La emergencia pasa a EN_EJECUCION", d is not None, d and d["estado"])
         e.check("B15 Nacional: 3000 L de agua adjudicados", comprometido(nacional, CRUZ_ROJA, "AGUA_POTABLE") == 3000)
 

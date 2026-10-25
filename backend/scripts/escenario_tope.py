@@ -15,106 +15,15 @@ from __future__ import annotations
 import os
 import argparse
 import sys
-import threading
 import time
 from datetime import datetime, timedelta
-from pathlib import Path
 
-import requests
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from nacional_auth import nacional_post  # noqa: E402
-from app.core.config import get_settings  # noqa: E402
-from app.integrations.bonita import BonitaClient  # noqa: E402
-from app.seed import DEMO_PASSWORD  # noqa: E402
+from comun import Escenario, crear_y_publicar, retirar_previas
+from nacional_auth import nacional_post
+from app.core.config import get_settings
+from app.integrations.bonita import BonitaClient
 
 VENTANA_CORTA_S = int(os.environ.get("ESCENARIO_VENTANA_S", 60)) + 20  # la tercera convocatoria vence durante la corrida
-
-
-class Escenario:
-    def __init__(self, app: str) -> None:
-        self.app = app.rstrip("/")
-        self.ok = self.total = 0
-        self.sesiones: dict[str, requests.Session] = {}
-        self._lock = threading.Lock()  # las variantes del cierre corren en hilos: contadores, líneas y logins no se pisan
-
-    def check(self, nombre: str, condicion: bool, detalle: object = "") -> None:
-        with self._lock:
-            self.total += 1
-            self.ok += bool(condicion)
-            print(f"  [{'OK   ' if condicion else 'FALLA'}] {nombre}" + ("" if condicion else f"  -> {detalle}"), flush=True)
-
-    def como(self, usuario: str) -> requests.Session:
-        with self._lock:
-            if usuario not in self.sesiones:
-                s = requests.Session()
-                r = s.post(f"{self.app}/api/auth/login", json={"username": usuario, "password": DEMO_PASSWORD})
-                r.raise_for_status()
-                self.sesiones[usuario] = s
-            return self.sesiones[usuario]
-
-    def get(self, usuario: str, ruta: str) -> requests.Response:
-        return self.como(usuario).get(f"{self.app}/api{ruta}", timeout=120)
-
-    def post(self, usuario: str, ruta: str, cuerpo: dict) -> requests.Response:
-        return self.como(usuario).post(f"{self.app}/api{ruta}", json=cuerpo, timeout=120)
-
-    def ofrecer(self, ong: str, emergencia: int, *pares: tuple[int, int]) -> requests.Response:
-        """pares: (lote_id, cantidad). Sin pares = retirar toda la oferta."""
-        return self.post(ong, f"/emergencias/{emergencia}/ofertas",
-                         {"items": [{"lote_id": l, "recurso": "x", "cantidad": n} for l, n in pares]})
-
-    def esperar(self, nombre: str, r: requests.Response, status: int, *textos: str) -> dict:
-        cuerpo = r.json() if r.content else {}
-        detalle = cuerpo.get("detail", "") if isinstance(cuerpo, dict) else ""
-        ok = r.status_code == status and all(t in detalle for t in textos)
-        self.check(nombre, ok, f"{r.status_code} {detalle or cuerpo}")
-        return cuerpo
-
-
-def _ok(r: requests.Response) -> requests.Response:
-    if not r.ok:
-        raise RuntimeError(f"{r.request.method} {r.url} → {r.status_code}: {r.text[:300]}")
-    return r
-
-
-def crear(e: Escenario, zona: str, gravedad: str, lotes: list[tuple[str, int, str]]) -> tuple[int, int, dict[str, int]]:
-    """Registra la emergencia (instancia el caso en Bonita, lo lento) y le carga los lotes, sin publicarla."""
-    r = e.post("operador.municipal", "/emergencias", {
-        "tipo": "inundacion", "nivel_gravedad": gravedad, "zona_afectada": zona,
-        "descripcion": "Escenario de prueba del tope de ofertas (E3)"})
-    emergencia = _ok(r).json()
-    ids = {}
-    for tipo_recurso, cantidad, tipo in lotes:
-        r = e.post("coordinador.regional", f"/emergencias/{emergencia['id']}/lotes",
-                   {"tipo_recurso": tipo_recurso, "cantidad": cantidad, "tipo": tipo})
-        ids[tipo_recurso] = _ok(r).json()["id"]
-    return emergencia["id"], emergencia["bonita_case_id"], ids
-
-
-def publicar(e: Escenario, emergencia: int, ventana: datetime) -> None:
-    _ok(e.post("coordinador.regional", f"/emergencias/{emergencia}/publicar", {"ventana_fin": ventana.isoformat(timespec="seconds")}))
-
-
-def crear_y_publicar(e: Escenario, zona: str, gravedad: str, lotes: list[tuple[str, int, str]],
-                     ventana: datetime) -> tuple[int, int, dict[str, int]]:
-    emergencia, caso, ids = crear(e, zona, gravedad, lotes)
-    publicar(e, emergencia, ventana)
-    return emergencia, caso, ids
-
-
-def retirar_previas(e: Escenario, propias: set[int]) -> int:
-    """Corridas anteriores dejan convocatorias abiertas con ofertas que descuentan inventario."""
-    retiradas = 0
-    for ong in ("ong.cruzroja", "ong.bomberos"):
-        for em in e.get(ong, "/emergencias").json():
-            if em["id"] in propias or em["estado"] != "CONVOCATORIA":
-                continue
-            for o in e.get(ong, f"/emergencias/{em['id']}/ofertas").json():
-                if not o["retirada"] and e.ofrecer(ong, em["id"]).status_code == 201:
-                    retiradas += 1
-    return retiradas
 
 
 def main() -> int:
