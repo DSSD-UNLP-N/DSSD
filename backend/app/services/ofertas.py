@@ -16,9 +16,10 @@ from sqlalchemy.orm import Session, selectinload
 from app.integrations.nacional import NacionalClient
 from app.models import Emergencia, EstadoEmergencia, Oferta, OfertaItem, Ong
 from app.schemas.api import OfertaItemIn
+from app.services import ServicioError
 
 
-class OfertaError(RuntimeError):
+class OfertaError(ServicioError):
     """La oferta no se puede guardar (ventana cerrada, lotes inválidos, no alcanza el inventario…)."""
 
 

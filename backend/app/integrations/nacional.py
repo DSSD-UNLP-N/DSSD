@@ -25,6 +25,9 @@ def olvidar_tokens() -> None:
         _TOKENS.clear()
 
 
+NACIONAL_CAIDO = "El Sistema Nacional no responde; probá de nuevo en un momento."
+
+
 class NacionalError(RuntimeError):
     def __init__(self, mensaje: str, status: int | None = None):
         super().__init__(mensaje)

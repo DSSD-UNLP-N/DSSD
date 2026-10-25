@@ -16,22 +16,18 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.core.security import hash_password
 from app.integrations.bonita import BonitaClient, BonitaError
-from app.integrations.nacional import NacionalClient, NacionalError
+from app.integrations.nacional import NACIONAL_CAIDO, NacionalClient, NacionalError
 from app.models import Ong, Rol, Usuario
+from app.services import ServicioError
 
 BONITA_GRUPO_ONG = "/rescuesync/ong"
 BONITA_ROL_ONG = "representante_ong"
 
 BONITA_CAIDO = "Bonita no responde; probá de nuevo en un momento."
-NACIONAL_CAIDO = "El Sistema Nacional no responde; probá de nuevo en un momento."
 
 
-class AltaOngError(Exception):
-    """El alta no se pudo completar; `status` es el código HTTP que corresponde."""
-
-    def __init__(self, mensaje: str, status: int = 409):
-        super().__init__(mensaje)
-        self.status = status
+class AltaOngError(ServicioError):
+    status = 409
 
 
 @dataclass

@@ -8,7 +8,7 @@ from app.core.deps import require_role
 from app.core.security import verify_password
 from app.core.labels import ROL_LABEL, TIPO_LABEL
 from app.db import get_db
-from app.integrations.nacional import NacionalClient, NacionalError, get_nacional
+from app.integrations.nacional import NacionalClient, get_nacional
 from app.models import Emergencia, Notificacion, Oferta, Rol, Usuario
 from app.schemas.api import (
     AdjudicarIn,
@@ -31,23 +31,16 @@ from app.schemas.evaluacion import Evaluacion
 from app.schemas.lotes import LoteIn, PublicacionIn
 from app.seed import DEMO_PASSWORD, DEMO_USERS
 from app.services.emergencias import (
-    AltaEmergenciaError,
     emergencia_visible,
     emergencias_visibles,
     registrar_emergencia,
     tarea_ong_en_bonita,
 )
-from app.services.alta_ong import AltaOngError, DatosAlta, alta_ong
-from app.services.ciclo import CicloError, adjudicar, decidir
+from app.services.alta_ong import DatosAlta, alta_ong
+from app.services.ciclo import adjudicar, decidir
 from app.services.ejecucion import finalizar, monitorear, resumen, validar_cierre
-from app.services.ofertas import OfertaError, publicar_oferta
-from app.services.lotes import (
-    LoteError,
-    PublicacionError,
-    agregar_lote,
-    borrar_lote,
-    publicar_convocatoria,
-)
+from app.services.ofertas import publicar_oferta
+from app.services.lotes import agregar_lote, borrar_lote, publicar_convocatoria
 
 router = APIRouter(prefix="/api")
 
@@ -139,10 +132,7 @@ def api_crear(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ):
-    try:
-        emergencia = registrar_emergencia(db, settings, operador=user, **body.model_dump())
-    except AltaEmergenciaError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    emergencia = registrar_emergencia(db, settings, operador=user, **body.model_dump())
     full = _load_emergencia(db, emergencia.id)
     return _emergencia_out(full or emergencia)
 
@@ -177,14 +167,7 @@ def api_decidir(
 ):
     """Con la cobertura incompleta: PARCIAL sigue con lo reservado; REFORMULAR libera todo y empieza otra ronda."""
     emergencia = _require_visible(db, user, emergencia_id)
-    try:
-        decidir(db, settings, nacional, emergencia=emergencia, coordinador=user, decision=body.decision)
-    except CicloError as exc:
-        db.rollback()
-        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
-    except NacionalError as exc:
-        db.rollback()
-        raise HTTPException(status_code=503, detail=NACIONAL_CAIDO) from exc
+    decidir(db, settings, nacional, emergencia=emergencia, coordinador=user, decision=body.decision)
     return _detalle_out(db, _load_emergencia(db, emergencia_id), user, settings)
 
 
@@ -198,21 +181,14 @@ def api_adjudicar(
 ):
     """El Municipio elige entre las ofertas validadas. Bonita confirma lo elegido y libera lo demás."""
     emergencia = _require_visible(db, user, emergencia_id)
-    try:
-        adjudicar(settings, emergencia=emergencia, municipal=user, cuits=body.cuits)
-    except CicloError as exc:
-        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    adjudicar(settings, emergencia=emergencia, municipal=user, cuits=body.cuits)
     return _detalle_out(db, _load_emergencia(db, emergencia_id), user, settings)
 
 
 def _avanzar(db: Session, emergencia_id: int, user: Usuario, settings: Settings, paso) -> EmergenciaOut:
     """Un paso de la ejecución: lo hace `paso(emergencia)`; si algo falla no queda nada a medias."""
     emergencia = _require_visible(db, user, emergencia_id)
-    try:
-        paso(emergencia)
-    except CicloError as exc:
-        db.rollback()
-        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    paso(emergencia)
     return _detalle_out(db, _load_emergencia(db, emergencia_id), user, settings)
 
 
@@ -277,28 +253,19 @@ def api_marcar_leida(
     return aviso
 
 
-NACIONAL_CAIDO = "El Sistema Nacional no responde; probá de nuevo en un momento."
-
-
 @router.get("/tipos-recurso", response_model=list[TipoRecursoOut])
 def api_tipos_recurso(
     user: Usuario = Depends(require_role()),
     nacional: NacionalClient = Depends(get_nacional),
 ):
     """Catálogo de recursos del Sistema Nacional, para elegir el tipo de cada lote."""
-    try:
-        return nacional.tipos_recurso()
-    except NacionalError as exc:
-        raise HTTPException(status_code=503, detail=NACIONAL_CAIDO) from exc
+    return nacional.tipos_recurso()
 
 
 @router.get("/ongs/alta/tipos-recurso", response_model=list[TipoRecursoOut])
 def api_alta_tipos_recurso(nacional: NacionalClient = Depends(get_nacional)):
     """Catálogo para la pantalla pública de alta de ONG (sin sesión)."""
-    try:
-        return nacional.tipos_recurso()
-    except NacionalError as exc:
-        raise HTTPException(status_code=503, detail=NACIONAL_CAIDO) from exc
+    return nacional.tipos_recurso()
 
 
 @router.post("/ongs/alta", response_model=AltaOngOut, status_code=201)
@@ -313,10 +280,7 @@ def api_alta_ong(
         ong_nombre=body.ong_nombre, cuit=body.cuit, nombre=body.nombre, username=body.username,
         password=body.password, rubros=[r.model_dump() for r in body.rubros],
     )
-    try:
-        usuario = alta_ong(db, settings, nacional, datos)
-    except AltaOngError as exc:
-        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    usuario = alta_ong(db, settings, nacional, datos)
     return AltaOngOut(ong_nombre=usuario.ong.nombre, cuit=usuario.ong.cuit, username=usuario.username,
                       rubros=body.rubros)
 
@@ -330,13 +294,7 @@ def api_crear_lote(
     nacional: NacionalClient = Depends(get_nacional),
 ):
     emergencia = _require_visible(db, user, emergencia_id)
-    try:
-        lote = agregar_lote(db, emergencia, body, nacional)
-    except LoteError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except NacionalError as exc:
-        raise HTTPException(status_code=503, detail=NACIONAL_CAIDO) from exc
-    return lote
+    return agregar_lote(db, emergencia, body, nacional)
 
 
 @router.delete("/emergencias/{emergencia_id}/lotes/{lote_id}", status_code=204)
@@ -347,10 +305,7 @@ def api_borrar_lote(
     db: Session = Depends(get_db),
 ):
     emergencia = _require_visible(db, user, emergencia_id)
-    try:
-        borrar_lote(db, emergencia, lote_id)
-    except LoteError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    borrar_lote(db, emergencia, lote_id)
 
 
 @router.post("/emergencias/{emergencia_id}/publicar", response_model=EmergenciaOut)
@@ -362,16 +317,13 @@ def api_publicar(
     settings: Settings = Depends(get_settings),
 ):
     emergencia = _require_visible(db, user, emergencia_id)
-    try:
-        publicada = publicar_convocatoria(
-            db,
-            settings,
-            emergencia=emergencia,
-            coordinador=user,
-            ventana_fin=PublicacionIn(ventana_fin=body.ventana_fin).ventana_fin,
-        )
-    except PublicacionError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    publicada = publicar_convocatoria(
+        db,
+        settings,
+        emergencia=emergencia,
+        coordinador=user,
+        ventana_fin=PublicacionIn(ventana_fin=body.ventana_fin).ventana_fin,
+    )
     full = _load_emergencia(db, publicada.id)
     return _emergencia_out(full or publicada)
 
@@ -414,11 +366,5 @@ def api_crear_oferta(
 ):
     """Cada envío es la oferta completa: una versión nueva con todos sus ítems (T-12)."""
     emergencia = _require_visible(db, user, emergencia_id)
-    try:
-        oferta = publicar_oferta(db, nacional, emergencia=emergencia, ong=user.ong, items=body.items)
-    except OfertaError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except NacionalError as exc:
-        db.rollback()
-        raise HTTPException(status_code=503, detail=NACIONAL_CAIDO) from exc
+    oferta = publicar_oferta(db, nacional, emergencia=emergencia, ong=user.ong, items=body.items)
     return _oferta_out(oferta)

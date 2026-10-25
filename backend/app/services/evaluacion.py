@@ -10,11 +10,12 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models import Emergencia, EstadoEmergencia, EstadoOferta, Notificacion, Oferta, OfertaItem
 from app.schemas.evaluacion import Evaluacion
+from app.services import ServicioError
 from app.services.emergencias import cerrar_ventanas_vencidas
 
 
-class ConsolidadoError(RuntimeError):
-    """La emergencia no está en un estado desde el que se pueda entregar el consolidado."""
+class ConsolidadoError(ServicioError):
+    status = 409  # la emergencia no está en un estado desde el que se pueda entregar el consolidado
 
 
 def consolidar_ofertas(db: Session, emergencia_id: int) -> dict | None:

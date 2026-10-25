@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.integrations.bonita import BonitaClient, BonitaError
 from app.models import Emergencia, EstadoEmergencia, Gravedad, Rol, Usuario
+from app.services import ServicioError
 
 TAREA_CARGAR_OFERTAS = "Cargar Ofertas de Ayuda"
 # Con Bonita ocupado (p. ej. justo después de publicar otra convocatoria) la tarea tardó más de 5 s en aparecer.
@@ -76,8 +77,8 @@ def emergencia_visible(db: Session, user: Usuario, emergencia_id: int) -> Emerge
     return db.scalar(select(Emergencia).where(Emergencia.id == emergencia_id, _filtro_visibilidad(user)))
 
 
-class AltaEmergenciaError(RuntimeError):
-    """La emergencia no pudo registrarse contra Bonita; no debe quedar nada a medias en la BD."""
+class AltaEmergenciaError(ServicioError):
+    status = 502  # no pudo registrarse contra Bonita; no debe quedar nada a medias en la BD
 
 
 def _ventana_provisoria(settings: Settings) -> str:

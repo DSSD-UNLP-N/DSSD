@@ -17,17 +17,14 @@ from app.integrations.bonita import BonitaClient, BonitaError
 from app.integrations.nacional import NacionalClient
 from app.models import Emergencia, EstadoEmergencia, Oferta, Usuario
 from app.schemas.evaluacion import Evaluacion
+from app.services import ServicioError
 
 TAREA_EVALUAR = "Evaluar Cobertura"
 TAREA_ADJUDICAR = "Adjudicar Ofertas"
 
 
-class CicloError(RuntimeError):
-    """La operación no corresponde (estado equivocado, datos inválidos) o Bonita no pudo avanzar el caso."""
-
-    def __init__(self, mensaje: str, status: int = 409):
-        super().__init__(mensaje)
-        self.status = status
+class CicloError(ServicioError):
+    status = 409  # la operación no corresponde al estado; Bonita caída: 502
 
 
 def _evaluacion(e: Emergencia) -> Evaluacion | None:

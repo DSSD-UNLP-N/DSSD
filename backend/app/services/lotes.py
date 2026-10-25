@@ -18,16 +18,17 @@ from app.integrations.bonita import BonitaClient, BonitaError
 from app.integrations.nacional import NacionalClient
 from app.models import Emergencia, EstadoEmergencia, Lote, OfertaItem, Usuario
 from app.schemas.lotes import LoteIn
+from app.services import ServicioError
 
 TAREA_REVISAR = "Revisar Informacion"
 TAREA_PUBLICAR = "Publicar Convocatoria"
 
 
-class LoteError(RuntimeError):
+class LoteError(ServicioError):
     """Operación inválida sobre los lotes (estado equivocado, lote inexistente…)."""
 
 
-class PublicacionError(RuntimeError):
+class PublicacionError(ServicioError):
     """La convocatoria no pudo publicarse; la emergencia queda como estaba."""
 
 
@@ -37,7 +38,7 @@ def _editable(emergencia: Emergencia) -> None:
 
 
 def agregar_lote(db: Session, emergencia: Emergencia, datos: LoteIn, nacional: NacionalClient) -> Lote:
-    """Lanza NacionalError si el catálogo no responde (el router lo traduce a 503)."""
+    """Lanza NacionalError si el catálogo no responde (main.py lo traduce a 503)."""
     _editable(emergencia)
     tipo = next((t for t in nacional.tipos_recurso() if t["codigo"] == datos.tipo_recurso), None)
     if tipo is None:
