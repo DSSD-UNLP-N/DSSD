@@ -8,14 +8,14 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from app.integrations.nacional import NacionalError
-from app.models import Emergencia, EstadoEmergencia, Gravedad, Municipio
+from app.models import EstadoEmergencia
 from app.routers import api
 from app.services.alta_ong import AltaOngError
 from app.services.ciclo import CicloError
 from app.services.emergencias import AltaEmergenciaError
 from app.services.lotes import LoteError, PublicacionError
 from app.services.ofertas import OfertaError
-from tests.test_api_alta_ong import _body as _alta_ong
+from tests.conftest import body_alta_ong as _alta_ong, crear_emergencia
 
 MENSAJE = "mensaje del servicio"
 NACIONAL_CAIDO = "El Sistema Nacional no responde; probá de nuevo en un momento."
@@ -25,14 +25,8 @@ EMERGENCIA = {"tipo": "inundacion", "nivel_gravedad": "ALTO", "zona_afectada": "
 
 @pytest.fixture
 def emergencia(seeded):
-    with seeded() as s:
-        e = Emergencia(municipio_id=s.query(Municipio).one().id, tipo="inundacion", nivel_gravedad=Gravedad.ALTO,
-                       zona_afectada="Centro", descripcion="d", bonita_case_id=4242,
-                       estado=EstadoEmergencia.CONVOCATORIA,
-                       ventana_ofertas_fin=datetime.now(timezone.utc) + timedelta(days=1))
-        s.add(e)
-        s.commit()
-        return e.id
+    return crear_emergencia(seeded, EstadoEmergencia.CONVOCATORIA, lotes=(), ofertas=(), bonita_case_id=4242,
+                            ventana_ofertas_fin=datetime.now(timezone.utc) + timedelta(days=1))[0]
 
 
 # (servicio en routers/api.py, usuario, método, ruta, cuerpo, error que lanza, código y mensaje esperados)

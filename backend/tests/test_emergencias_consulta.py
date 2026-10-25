@@ -4,30 +4,25 @@ from datetime import datetime, timezone
 import pytest
 import responses
 
-from app.core.config import get_settings
-from app.models import Emergencia, EstadoEmergencia, Gravedad, Lote, Municipio, TipoLote
-
-BASE = get_settings().bonita_base_url
+from app.models import EstadoEmergencia, Gravedad, Municipio, TipoLote
+from tests.conftest import BASE, crear_emergencia
 
 
 @pytest.fixture
 def emergencias(seeded):
     """Una emergencia del municipio del seed (registrada) y otra de otro municipio (en convocatoria)."""
+    propia, _ = crear_emergencia(seeded, EstadoEmergencia.REGISTRADA, lotes=(), ofertas=(),
+                                 descripcion="Río desbordado", bonita_case_id=11,
+                                 creada_en=datetime(2026, 9, 22, 13, 0, tzinfo=timezone.utc))
     with seeded() as s:
-        propio = s.query(Municipio).one()
         otro = Municipio(nombre="Tres Arroyos", provincia="Buenos Aires")
         s.add(otro)
-        s.flush()
-        propia = Emergencia(municipio_id=propio.id, tipo="inundacion", nivel_gravedad=Gravedad.ALTO,
-                            zona_afectada="Centro", descripcion="Río desbordado", bonita_case_id=11,
-                            creada_en=datetime(2026, 9, 22, 13, 0, tzinfo=timezone.utc))
-        ajena = Emergencia(municipio_id=otro.id, tipo="incendio", nivel_gravedad=Gravedad.CRITICO,
-                           zona_afectada="Sierra", descripcion="Foco activo", bonita_case_id=12,
-                           estado=EstadoEmergencia.CONVOCATORIA)
-        ajena.lotes = [Lote(recurso="Brigadistas", cantidad=20, unidad="personas", tipo=TipoLote.APOYO)]
-        s.add_all([propia, ajena])
         s.commit()
-        return propia.id, ajena.id
+    ajena, _ = crear_emergencia(
+        seeded, EstadoEmergencia.CONVOCATORIA, municipio_id=otro.id, tipo="incendio", nivel_gravedad=Gravedad.CRITICO,
+        zona_afectada="Sierra", descripcion="Foco activo", bonita_case_id=12, ofertas=(),
+        lotes=({"recurso": "Brigadistas", "cantidad": 20, "unidad": "personas", "tipo": TipoLote.APOYO},))
+    return propia, ajena
 
 
 def _ids(c):

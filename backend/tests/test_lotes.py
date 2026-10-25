@@ -8,10 +8,9 @@ from urllib.parse import urlparse
 import pytest
 import responses
 
-from app.core.config import get_settings
-from app.models import Emergencia, EstadoEmergencia, Gravedad, Lote, Municipio, TipoLote
+from app.models import Emergencia, EstadoEmergencia, Lote, TipoLote
+from tests.conftest import BASE, crear_emergencia
 
-BASE = get_settings().bonita_base_url
 BASE_PATH = urlparse(BASE).path
 CASE = 4242
 LOTE = {"tipo_recurso": "PARAMEDICO", "cantidad": 5, "tipo": "PRINCIPAL"}
@@ -23,13 +22,8 @@ def _futuro(horas=48):
 
 @pytest.fixture
 def emergencia(seeded):
-    with seeded() as s:
-        municipio = s.query(Municipio).one()
-        e = Emergencia(municipio_id=municipio.id, tipo="inundacion", nivel_gravedad=Gravedad.ALTO,
-                       zona_afectada="Centro", descripcion="Río desbordado", bonita_case_id=CASE)
-        s.add(e)
-        s.commit()
-        return e.id
+    return crear_emergencia(seeded, EstadoEmergencia.REGISTRADA, lotes=(), ofertas=(), descripcion="Río desbordado",
+                            bonita_case_id=CASE)[0]
 
 
 def _con_lote(seeded, emergencia_id, **kwargs):
