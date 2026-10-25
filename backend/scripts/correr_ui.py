@@ -7,7 +7,6 @@ navegadores pueden esperar al mismo tiempo. Los tres guiones usan recursos disti
   ui_parada2.py   raciones de Cruz Roja (caso B: reformular y segunda ronda)
   ui_parada3.py   paramédicos de las dos ONGs (alta → cierre bilateral)
 
-`ui_ejecucion.py` no entra: es el tramo final de ui_parada3.py para una emergencia que ya está adjudicada.
 `--completo` suma después, en serie, el caso A de ui_parada2.py (cobertura parcial con adjudicación a una sola ONG): usa los
 mismos paramédicos que ui_parada3.py y por eso no puede ir a la vez.
 

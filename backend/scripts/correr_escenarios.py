@@ -15,7 +15,7 @@ PC está cargada y aparecen fallas de «ventana cerrada»).
     python scripts/correr_escenarios.py --sin-unitarios
 
 Requisitos: los de cada escenario (Bonita con el `.bos` de JWT, app en :8001 y API Nacional en :8002 con seed y nada comprometido).
-Los de la interfaz (e2e_ui.py, ui_parada2.py, ui_ejecucion.py) necesitan además el front en :5173 y se corren aparte.
+Los de la interfaz (e2e_ui.py, ui_parada2.py, ui_parada3.py) necesitan además el front en :5173 y se corren aparte.
 """
 from __future__ import annotations
 
