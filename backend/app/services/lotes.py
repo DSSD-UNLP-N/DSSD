@@ -17,7 +17,7 @@ from app.core.config import Settings
 from app.integrations.bonita import BonitaClient, BonitaError
 from app.integrations.nacional import NacionalClient
 from app.models import Emergencia, EstadoEmergencia, Lote, OfertaItem, Usuario
-from app.schemas.lotes import LoteIn
+from app.schemas.api import LoteIn
 from app.services import ServicioError
 
 TAREA_REVISAR = "Revisar Informacion"
