@@ -1,6 +1,6 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import Settings, get_settings
@@ -9,7 +9,7 @@ from app.core.security import verify_password
 from app.core.labels import ROL_LABEL, TIPO_LABEL
 from app.db import get_db
 from app.integrations.nacional import NacionalClient, NacionalError, get_nacional
-from app.models import Emergencia, Notificacion, Oferta, Rol, Usuario
+from app.models import Emergencia, EstadoEmergencia, Lote, Notificacion, Oferta, Rol, Usuario
 from app.schemas.api import (
     AdjudicarIn,
     AltaOngIn,
@@ -29,6 +29,7 @@ from app.schemas.api import (
 from app.schemas.emergencias import EmergenciaIn
 from app.schemas.evaluacion import Evaluacion
 from app.schemas.lotes import LoteIn, PublicacionIn
+from app.schemas.metricas import MetricasLocalesOut
 from app.seed import DEMO_PASSWORD, DEMO_USERS
 from app.services.emergencias import (
     AltaEmergenciaError,
@@ -96,6 +97,40 @@ def meta(settings: Settings = Depends(get_settings)):
             ],
         }
     return {"tipos": TIPO_LABEL, "roles": ROL_LABEL, "demo": demo}
+
+
+@router.get("/metricas/locales", response_model=MetricasLocalesOut)
+def metricas_locales(db: Session = Depends(get_db)) -> MetricasLocalesOut:
+    proyectos_finalizados = db.scalar(
+        select(func.count(Emergencia.id)).where(
+            Emergencia.estado.in_(
+                (EstadoEmergencia.RESUELTA, EstadoEmergencia.CERRADA)
+            )
+        )
+    ) or 0
+
+    suministros_movilizados = db.scalar(
+        select(func.coalesce(func.sum(Lote.cantidad), 0))
+        .join(Emergencia, Lote.emergencia_id == Emergencia.id)
+        .where(
+            Emergencia.estado.in_(
+                (
+                    EstadoEmergencia.EN_EJECUCION,
+                    EstadoEmergencia.RESUELTA,
+                    EstadoEmergencia.CERRADA,
+                )
+            )
+        )
+    ) or 0
+
+    # El modelo actual no soporta consorcios: requiere una actualización para medirlos.
+    porcentaje_consorcios = 0.0
+
+    return MetricasLocalesOut(
+        proyectos_finalizados=proyectos_finalizados,
+        suministros_movilizados=suministros_movilizados,
+        porcentaje_consorcios=porcentaje_consorcios,
+    )
 
 
 @router.post("/auth/login", response_model=UsuarioOut)
