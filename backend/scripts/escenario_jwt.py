@@ -18,15 +18,11 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-import tempfile
 import time
 from datetime import datetime, timedelta
-from pathlib import Path
-
-import requests
 
 from comun import BOMBEROS, CRUZ_ROJA, VENTANA_S, comprometido, crear_y_publicar
-from escenario_cierre_variantes import CLAVES, REPO, Ctx, apagar, levantar, recuperar_ok
+from ctx import CLAVES, REPO, Ctx, apagar, levantar, recuperar_ok
 
 COORDINADOR = "coordinador.regional"
 CLAVE_ROTADA = "clave-rotada-de-prueba"
@@ -40,25 +36,6 @@ def fijar_clave_de_bonita(clave: str | None) -> None:
     else:
         env.pop("BONITA_SERVICE_PASSWORD", None)
     subprocess.run([sys.executable, "-m", "app.seed"], cwd=str(REPO / "nacional"), env=env, check=True, capture_output=True)
-
-
-def levantar_nacional_con(env_extra: dict[str, str]) -> bool:
-    """Como `levantar`, pero con variables de entorno propias (otro secreto, otro vencimiento)."""
-    log = open(Path(tempfile.gettempdir()) / "uvicorn-jwt-8002.log", "ab")
-    subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "app.main:app", "--app-dir", str(REPO / "nacional"), "--port", "8002"],
-        stdout=log, stderr=log, cwd=str(REPO / "nacional"), close_fds=True, env={**os.environ, **env_extra},
-        creationflags=0x00000008 | 0x00000200,  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
-    )
-    limite = time.monotonic() + 40
-    while time.monotonic() < limite:
-        try:
-            if requests.get("http://localhost:8002/health", timeout=3).status_code < 500:
-                return True
-        except requests.RequestException:
-            pass
-        time.sleep(1)
-    return False
 
 
 def escenario_g(ctx: Ctx) -> None:
@@ -109,7 +86,7 @@ def escenario_h(ctx: Ctx) -> None:
     e.check("H: el catálogo responde (la app inicia sesión en Nacional)", e.get(COORDINADOR, "/tipos-recurso").status_code == 200)
     e.check("H: se apagó la API Nacional", apagar(8002))
     e.check("H: se levantó con otro JWT_SECRET y tokens de 15 segundos",
-            levantar_nacional_con({"JWT_SECRET": "otro-secreto-de-prueba", "JWT_EXPIRATION_MINUTES": "0.25"}))
+            levantar("nacional", 8002, "/health", {"JWT_SECRET": "otro-secreto-de-prueba", "JWT_EXPIRATION_MINUTES": "0.25"}))
     e.check("H: el token que la app tenía ya no vale, vuelve a entrar sola y responde 200",
             e.get(COORDINADOR, "/tipos-recurso").status_code == 200)
     print("     esperando 20 s a que venza el token de 15 segundos…")
