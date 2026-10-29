@@ -24,7 +24,6 @@ from app.schemas.api import (
     OfertaIn,
     OfertaItemOut,
     OfertaOut,
-    PublicacionIn,
     PublicarIn,
     TipoRecursoOut,
     UsuarioOut,
@@ -323,7 +322,7 @@ def api_publicar(
         settings,
         emergencia=emergencia,
         coordinador=user,
-        ventana_fin=PublicacionIn(ventana_fin=body.ventana_fin).ventana_fin,
+        ventana_fin=body.ventana_fin,
     )
     full = _load_emergencia(db, publicada.id)
     return _emergencia_out(full or publicada)

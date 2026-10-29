@@ -5,7 +5,7 @@ import pytest
 import responses
 
 from app.models import EstadoEmergencia, Gravedad, Municipio, TipoLote
-from tests.conftest import BASE, crear_emergencia
+from tests.conftest import BASE, crear_emergencia, mock_login
 
 
 @pytest.fixture
@@ -80,8 +80,7 @@ def test_emergencia_inexistente_da_404(login):
 
 
 def _mock_login_y_tarea(tarea: dict | None):
-    responses.add(responses.POST, f"{BASE}/loginservice", status=204,
-                  headers={"Set-Cookie": "X-Bonita-API-Token=tok; Path=/"})
+    mock_login()
     responses.add(responses.GET, f"{BASE}/API/bpm/humanTask", json=[tarea] if tarea else [])
 
 
@@ -109,7 +108,7 @@ def test_sin_tarea_pendiente_no_hay_nada_que_mostrar(login, emergencias):
 @responses.activate
 def test_si_bonita_no_responde_el_detalle_igual_se_devuelve(login, emergencias):
     _, ajena = emergencias
-    responses.add(responses.POST, f"{BASE}/loginservice", status=500)
+    mock_login(status=500)
 
     r = login("ong.bomberos").get(f"/api/emergencias/{ajena}")
 

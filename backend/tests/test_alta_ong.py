@@ -8,7 +8,7 @@ from app.core.security import verify_password
 from app.integrations.nacional import NacionalError
 from app.models import Ong, Rol
 from app.services.alta_ong import AltaOngError, DatosAlta, alta_ong, normalizar_cuit
-from tests.conftest import BASE, mock_bonita_alta_ong
+from tests.conftest import mock_bonita_alta_ong, mock_login
 
 RUBROS = [{"tipo_recurso": "PARAMEDICO", "cantidad_total": 4}, {"tipo_recurso": "RACION_ALIMENTO", "cantidad_total": 0}]
 
@@ -80,7 +80,7 @@ def test_usuario_ya_existe_en_bonita(seeded, nacional):
 
 @responses.activate
 def test_bonita_login_falla_no_crea_nada(seeded, nacional):
-    responses.add(responses.POST, f"{BASE}/loginservice", status=401)
+    mock_login(status=401)
     with seeded() as s:
         with pytest.raises(AltaOngError) as e:
             alta_ong(s, get_settings(), nacional, _datos())

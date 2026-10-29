@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 # Antes de importar la app: que ningún test toque dev.db ni un Postgres real.
@@ -209,17 +210,33 @@ def estado_de(seeded, emergencia_id):
         return s.get(Emergencia, emergencia_id).estado
 
 
-def mock_tarea(nombre, tarea_id="9"):
-    """Bonita con `nombre` como única tarea pendiente del caso CASE, lista para asignarla, setear variables y completarla."""
-    for token in ("tok-admin", "tok-usuario"):
-        responses.add(responses.POST, f"{BASE}/loginservice", status=204,
-                      headers={"Set-Cookie": f"X-Bonita-API-Token={token}; Path=/"})
-    responses.add(responses.GET, f"{BASE}/API/bpm/humanTask", json=[{"id": tarea_id, "displayName": nombre}])
+def sin_zona(delta):
+    """Ahora + delta en UTC sin zona, como guarda publicar_convocatoria la ventana (SQLite descarta la zona)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None) + delta
+
+
+def mock_login(token="tok", status=204, **kw):
+    """Un POST /loginservice de Bonita. Con 204 deja la cookie del token CSRF (token=None: sin cookie); otro status falla."""
+    if status == 204 and token:
+        kw["headers"] = {"Set-Cookie": f"X-Bonita-API-Token={token}; Path=/"}
+    responses.add(responses.POST, f"{BASE}/loginservice", status=status, **kw)
+
+
+def mock_ejecutar(tarea_id):
+    """complete_task_as_self: el id del usuario de la sesión, asignarle la tarea y ejecutarla."""
     responses.add(responses.GET, f"{BASE}/API/system/session/unusedid", json={"user_id": "77"})
-    responses.add(responses.PUT, f"{BASE}/API/bpm/caseVariable/{CASE}/decisionCoordinador", status=200)
-    responses.add(responses.PUT, f"{BASE}/API/bpm/caseVariable/{CASE}/ongsAdjudicadas", status=200)
     responses.add(responses.PUT, f"{BASE}/API/bpm/userTask/{tarea_id}", status=200)
     responses.add(responses.POST, f"{BASE}/API/bpm/userTask/{tarea_id}/execution", status=200)
+
+
+def mock_tarea(nombre, tarea_id="9"):
+    """Bonita con `nombre` como única tarea pendiente del caso CASE, lista para asignarla, setear variables y completarla."""
+    mock_login("tok-admin")
+    mock_login("tok-usuario")
+    responses.add(responses.GET, f"{BASE}/API/bpm/humanTask", json=[{"id": tarea_id, "displayName": nombre}])
+    responses.add(responses.PUT, f"{BASE}/API/bpm/caseVariable/{CASE}/decisionCoordinador", status=200)
+    responses.add(responses.PUT, f"{BASE}/API/bpm/caseVariable/{CASE}/ongsAdjudicadas", status=200)
+    mock_ejecutar(tarea_id)
 
 
 def tarea_completada(tarea_id="9"):
@@ -228,8 +245,7 @@ def tarea_completada(tarea_id="9"):
 
 def mock_bonita_alta_ong(usuario_existente=None):
     """Lo que el alta de una ONG le pide a Bonita: buscar/crear el usuario, el grupo, el rol y la membresía."""
-    responses.add(responses.POST, f"{BASE}/loginservice", status=204,
-                  headers={"Set-Cookie": "X-Bonita-API-Token=tok; Path=/"})
+    mock_login()
     responses.add(responses.GET, f"{BASE}/API/identity/user", json=usuario_existente or [])
     responses.add(responses.POST, f"{BASE}/API/identity/user", json={"id": "77"})
     responses.add(responses.GET, f"{BASE}/API/identity/group", json=[{"id": "5"}])

@@ -1,17 +1,12 @@
 """Ofertas de las ONGs por la API de la SPA (T-11/T-12): versionadas, y sin pasarse del inventario. Lo que la ONG
 ofrece de cada recurso se suma con sus otras ofertas abiertas y se valida contra el inventario del Sistema Nacional
 (que va mockeado)."""
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 import pytest
 
 from app.models import Emergencia, EstadoEmergencia, Gravedad, Oferta, OfertaItem, Ong
-from tests.conftest import CRUZ_ROJA, PASSWORD, crear_emergencia
-
-
-def _sin_zona(delta):
-    # Como la guarda publicar_convocatoria: UTC sin zona (SQLite la descarta).
-    return datetime.now(timezone.utc).replace(tzinfo=None) + delta
+from tests.conftest import CRUZ_ROJA, PASSWORD, crear_emergencia, sin_zona
 
 
 def _con_agua_y_frazadas(seeded, *, ventana_fin):
@@ -24,14 +19,14 @@ def _con_agua_y_frazadas(seeded, *, ventana_fin):
 def _emergencia(seeded, *lotes, horas=2, gravedad=Gravedad.ALTO):
     """Convocatoria abierta con un lote por cada (tipo_recurso, cantidad)."""
     return crear_emergencia(seeded, EstadoEmergencia.CONVOCATORIA, nivel_gravedad=gravedad, bonita_case_id=None,
-                            ventana_ofertas_fin=_sin_zona(timedelta(hours=horas)), ofertas=(),
+                            ventana_ofertas_fin=sin_zona(timedelta(hours=horas)), ofertas=(),
                             lotes=[{"recurso": tipo or "Libre", "tipo_recurso": tipo, "cantidad": cantidad, "unidad": "u"}
                                    for tipo, cantidad in lotes])
 
 
 @pytest.fixture
 def abierta(seeded):
-    return _con_agua_y_frazadas(seeded, ventana_fin=_sin_zona(timedelta(hours=2)))
+    return _con_agua_y_frazadas(seeded, ventana_fin=sin_zona(timedelta(hours=2)))
 
 
 @pytest.fixture
@@ -82,7 +77,7 @@ def test_una_oferta_cubre_varios_lotes_y_cada_envio_es_una_version(api_login, ab
 
 
 def test_ventana_vencida_rechaza_ofertas(api_login, seeded):
-    eid, lotes = _con_agua_y_frazadas(seeded, ventana_fin=_sin_zona(-timedelta(minutes=1)))
+    eid, lotes = _con_agua_y_frazadas(seeded, ventana_fin=sin_zona(-timedelta(minutes=1)))
     r = api_login("ong.cruzroja").post(f"/api/emergencias/{eid}/ofertas", json=_items(lotes, 5))
     assert r.status_code == 400 and "cerró" in r.json()["detail"]
 
@@ -162,7 +157,7 @@ def test_una_convocatoria_vencida_sin_evaluar_sigue_comprometiendo_el_stock(api_
     em, (lote,) = _emergencia(seeded, ("PARAMEDICO", 10))
     assert _ofrecer(api_login("ong.cruzroja"), vencida, (lv, 4)).status_code == 201
     with seeded() as s:  # la ventana vence después de haber ofertado; Bonita todavía no pidió el consolidado
-        s.get(Emergencia, vencida).ventana_ofertas_fin = _sin_zona(-timedelta(minutes=1))
+        s.get(Emergencia, vencida).ventana_ofertas_fin = sin_zona(-timedelta(minutes=1))
         s.commit()
     assert _ofrecer(api_login("ong.cruzroja"), em, (lote, 1)).status_code == 400
 
@@ -173,7 +168,7 @@ def test_en_evaluacion_la_reserva_ya_esta_en_la_api_nacional_y_no_cuenta_dos_vec
     assert _ofrecer(api_login("ong.cruzroja"), evaluada, (lv, 4)).status_code == 201
     with seeded() as s:
         e = s.get(Emergencia, evaluada)
-        e.ventana_ofertas_fin = _sin_zona(-timedelta(minutes=1))
+        e.ventana_ofertas_fin = sin_zona(-timedelta(minutes=1))
         e.estado = EstadoEmergencia.EN_EVALUACION
         s.commit()
     assert _ofrecer(api_login("ong.cruzroja"), em, (lote, 4)).status_code == 201
@@ -293,7 +288,7 @@ def test_con_la_ventana_vencida_no_se_puede_retirar(api_login, seeded):
     c = api_login("ong.cruzroja")
     _ofrecer(c, em, (lote, 2))
     with seeded() as s:
-        s.get(Emergencia, em).ventana_ofertas_fin = _sin_zona(-timedelta(minutes=1))
+        s.get(Emergencia, em).ventana_ofertas_fin = sin_zona(-timedelta(minutes=1))
         s.commit()
     r = _ofrecer(c, em)
     assert r.status_code == 400 and "cerró" in r.json()["detail"]

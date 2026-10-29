@@ -9,7 +9,7 @@ import pytest
 import responses
 
 from app.models import Emergencia, EstadoEmergencia, Lote, TipoLote
-from tests.conftest import BASE, crear_emergencia
+from tests.conftest import BASE, crear_emergencia, mock_ejecutar, mock_login
 
 BASE_PATH = urlparse(BASE).path
 CASE = 4242
@@ -34,19 +34,15 @@ def _con_lote(seeded, emergencia_id, **kwargs):
 
 def _mock_publicacion(revisar_pendiente=True):
     """Dos logins (admin y coordinador), las tareas del caso y el seteo de la ventana."""
-    for token in ("tok-admin", "tok-coord"):
-        responses.add(responses.POST, f"{BASE}/loginservice", status=204,
-                      headers={"Set-Cookie": f"X-Bonita-API-Token={token}; Path=/"})
+    mock_login("tok-admin")
+    mock_login("tok-coord")
     url_tareas = f"{BASE}/API/bpm/humanTask"
     if revisar_pendiente:
         responses.add(responses.GET, url_tareas, json=[{"id": "1", "displayName": "Revisar Informacion y Generar Lotes de Necesidades"}])
     responses.add(responses.GET, url_tareas, json=[{"id": "2", "displayName": "Publicar Convocatoria y Notificar a la Red de ONGs"}])
-    responses.add(responses.GET, f"{BASE}/API/system/session/unusedid", json={"user_id": "77"})
-    responses.add(responses.PUT, f"{BASE}/API/bpm/userTask/1", status=200)
-    responses.add(responses.POST, f"{BASE}/API/bpm/userTask/1/execution", status=200)
+    mock_ejecutar("1")
     responses.add(responses.PUT, f"{BASE}/API/bpm/caseVariable/{CASE}/ventanaOfertasISO", status=200)
-    responses.add(responses.PUT, f"{BASE}/API/bpm/userTask/2", status=200)
-    responses.add(responses.POST, f"{BASE}/API/bpm/userTask/2/execution", status=200)
+    mock_ejecutar("2")
 
 
 def _paths():
@@ -238,7 +234,7 @@ def test_ventana_invalida_o_pasada_no_publica(login, emergencia, seeded, ventana
 @responses.activate
 def test_si_bonita_falla_la_emergencia_queda_sin_publicar(login, emergencia, seeded):
     _con_lote(seeded, emergencia)
-    responses.add(responses.POST, f"{BASE}/loginservice", status=500)
+    mock_login(status=500)
     r = login("coordinador.regional").post(_publicar(emergencia), json={"ventana_fin": _futuro()})
     assert r.status_code == 400 and "No se pudo publicar" in r.json()["detail"]
     with seeded() as s:

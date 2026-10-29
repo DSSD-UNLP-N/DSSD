@@ -4,10 +4,8 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 import responses
 
-from app.core.config import get_settings
 from app.integrations.bonita import BonitaClient, BonitaError
-
-BASE = get_settings().bonita_base_url
+from tests.conftest import BASE
 
 
 def _client() -> BonitaClient:

@@ -104,6 +104,8 @@ class AdjudicarIn(BaseModel):
 
 
 class PublicarIn(BaseModel):
+    # La ventana la elige el Coordinador al publicar; el timer de Bonita la lee al activarse
+    # `Cargar Ofertas de Ayuda`, así que una fecha pasada cerraría la convocatoria al instante.
     ventana_fin: datetime
 
 
@@ -198,10 +200,3 @@ class LoteIn(BaseModel):
     @classmethod
     def _detalle_vacio_es_none(cls, v: str | None) -> str | None:
         return v or None
-
-
-class PublicacionIn(BaseModel):
-    """La ventana la elige el Coordinador al publicar; el timer de Bonita la lee al activarse
-    `Cargar Ofertas de Ayuda`, así que una fecha pasada cerraría la convocatoria al instante."""
-
-    ventana_fin: datetime

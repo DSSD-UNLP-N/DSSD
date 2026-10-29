@@ -4,8 +4,8 @@ import requests
 import responses
 
 from app.integrations.bonita import BonitaClient, BonitaError, CONTRACT_INPUTS
+from tests.conftest import BASE, mock_ejecutar, mock_login
 
-BASE = "http://bonita.test/bonita"
 CONTRATO = {"emergenciaId": 1, "municipioId": 2, "nivelGravedad": "ALTO",
             "ventanaOfertasISO": "2026-10-01T10:00:00-03:00"}
 
@@ -15,14 +15,9 @@ def client():
     return BonitaClient(BASE + "/")  # con barra final: debe normalizarse
 
 
-def _login_ok(rsps):
-    rsps.add(responses.POST, f"{BASE}/loginservice", status=204,
-             headers={"Set-Cookie": "X-Bonita-API-Token=tok123; Path=/"})
-
-
 @responses.activate
 def test_login_guarda_el_token_csrf_como_header(client):
-    _login_ok(responses)
+    mock_login("tok123")
     client.login("walter.bates", "bpm")
     assert client.session.headers["X-Bonita-API-Token"] == "tok123"
     body = responses.calls[0].request.body
@@ -31,14 +26,14 @@ def test_login_guarda_el_token_csrf_como_header(client):
 
 @responses.activate
 def test_login_sin_cookie_de_token_falla(client):
-    responses.add(responses.POST, f"{BASE}/loginservice", status=204)
+    mock_login(token=None)
     with pytest.raises(BonitaError):
         client.login("u", "p")
 
 
 @responses.activate
 def test_login_rechazado_propaga_error_http(client):
-    responses.add(responses.POST, f"{BASE}/loginservice", status=401)
+    mock_login(status=401)
     with pytest.raises(Exception):
         client.login("u", "mal")
 
@@ -164,9 +159,7 @@ def test_find_task_devuelve_none_si_no_esta(client):
 def test_complete_task_as_self_asigna_y_ejecuta(client):
     import json
 
-    responses.add(responses.GET, f"{BASE}/API/system/session/unusedid", json={"user_id": "77"})
-    responses.add(responses.PUT, f"{BASE}/API/bpm/userTask/9001", status=200)
-    responses.add(responses.POST, f"{BASE}/API/bpm/userTask/9001/execution", status=200)
+    mock_ejecutar("9001")
 
     client.complete_task_as_self("9001")
 

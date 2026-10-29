@@ -1,14 +1,10 @@
 """GET /api/bonita/emergencias/{id}/ofertas: lo que Bonita le pide a la app al vencer la ventana."""
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 import pytest
 
 from app.models import Emergencia, EstadoEmergencia, Oferta, OfertaItem, Ong
-from tests.conftest import CLAVE, CRUZ_ROJA, PASSWORD, crear_emergencia, estado_de
-
-
-def _sin_zona(delta):
-    return datetime.now(timezone.utc).replace(tzinfo=None) + delta
+from tests.conftest import CLAVE, CRUZ_ROJA, PASSWORD, crear_emergencia, estado_de, sin_zona
 
 
 @pytest.fixture
@@ -16,7 +12,7 @@ def vencida(seeded):
     """Emergencia con ventana vencida, 2 lotes (uno sin tipo) y la oferta de Cruz Roja en la versión 2."""
     emergencia_id, (pm, libre) = crear_emergencia(
         seeded, EstadoEmergencia.CONVOCATORIA, nivel_gravedad="ALTO", bonita_case_id=None,
-        ventana_ofertas_fin=_sin_zona(-timedelta(minutes=1)), ofertas=(),
+        ventana_ofertas_fin=sin_zona(-timedelta(minutes=1)), ofertas=(),
         lotes=({"recurso": "Paramédicos", "tipo_recurso": "PARAMEDICO", "cantidad": 10, "unidad": "personas"},
                {"recurso": "Libre", "tipo_recurso": None, "cantidad": 3, "unidad": "u"}))
     with seeded() as s:
@@ -73,7 +69,7 @@ def test_una_oferta_retirada_no_figura(client, seeded, vencida):
 
 def test_con_la_ventana_abierta_es_409_y_no_cambia_el_estado(client, seeded, vencida):
     with seeded() as s:
-        s.get(Emergencia, vencida[0]).ventana_ofertas_fin = _sin_zona(timedelta(hours=1))
+        s.get(Emergencia, vencida[0]).ventana_ofertas_fin = sin_zona(timedelta(hours=1))
         s.commit()
     r = client.get(f"/api/bonita/emergencias/{vencida[0]}/ofertas", headers=CLAVE)
     assert r.status_code == 409
