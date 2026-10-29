@@ -145,9 +145,7 @@ export function FlowBubbles() {
 
   return (
     <div className="flow-scene" aria-label="Flujo RescueSync">
-      <div
-        className={`flow-art ${phase !== "panorama" ? "is-journey" : ""}`}
-      >
+      <div className="flow-art">
         <div className="flow-stage">
           {/* Panorama base */}
           <motion.div

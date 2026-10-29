@@ -200,8 +200,6 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
-  deleteLote: (id: number, loteId: number) =>
-    request<void>(`/api/emergencias/${id}/lotes/${loteId}`, { method: "DELETE" }),
   publicar: (id: number, ventana_fin: string) =>
     request<Emergencia>(`/api/emergencias/${id}/publicar`, {
       method: "POST",

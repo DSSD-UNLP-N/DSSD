@@ -4,7 +4,6 @@
   --paper: #f2efe8;
   --field: #0d3831;
   --field-mid: #1a5c52;
-  --field-deep: #071f1b;
   --signal: #e08912;
   --signal-deep: #a35f08;
   --line: rgba(14, 34, 30, 0.12);
@@ -622,38 +621,6 @@ button, input, select, textarea { font: inherit; }
 .flow-hotspot:hover .flow-hotspot-dot {
   transform: scale(1.25);
 }
-.flow-focus-card {
-  position: absolute;
-  left: 1rem;
-  bottom: 1rem;
-  z-index: 5;
-  display: grid;
-  gap: 0.15rem;
-  max-width: min(16rem, 70%);
-  padding: 0.85rem 1rem;
-  border-radius: 14px;
-  background: rgba(7, 31, 27, 0.82);
-  border: 1px solid rgba(246, 243, 236, 0.16);
-  backdrop-filter: blur(12px);
-  color: #f6f3ec;
-  pointer-events: none;
-}
-.flow-focus-kicker {
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #e08912;
-  font-weight: 700;
-}
-.flow-focus-card strong {
-  font-family: var(--font-display);
-  font-size: 1.05rem;
-  letter-spacing: -0.03em;
-}
-.flow-focus-card span:last-child {
-  font-size: 0.8rem;
-  color: rgba(246, 243, 236, 0.72);
-}
 .flow-reset {
   position: absolute;
   top: 0.85rem;
@@ -672,13 +639,6 @@ button, input, select, textarea { font: inherit; }
 .flow-reset:hover {
   border-color: rgba(224, 137, 18, 0.5);
   color: #f0b14a;
-}
-.flow-hint {
-  margin: 0;
-  font-size: 0.75rem;
-  color: rgba(246, 243, 236, 0.5);
-  letter-spacing: 0.01em;
-  text-align: center;
 }
 
 @keyframes hotspot-pulse {
@@ -770,27 +730,6 @@ button, input, select, textarea { font: inherit; }
 .flow-step:hover .flow-step-text strong {
   opacity: 1;
 }
-.flow-tooltip {
-  display: grid;
-  gap: 0.15rem;
-  padding: 0.7rem 0.9rem;
-  border-radius: 12px;
-  background: rgba(7, 31, 27, 0.72);
-  border: 1px solid rgba(246, 243, 236, 0.14);
-  backdrop-filter: blur(10px);
-  color: #f6f3ec;
-  max-width: 28rem;
-}
-.flow-tooltip strong {
-  font-family: var(--font-display);
-  font-size: 0.9rem;
-  letter-spacing: -0.02em;
-}
-.flow-tooltip span {
-  font-size: 0.8rem;
-  color: rgba(246, 243, 236, 0.75);
-  line-height: 1.4;
-}
 
 /* Page header / back */
 .page-header { margin-bottom: 0.25rem; }
@@ -854,15 +793,6 @@ button, input, select, textarea { font: inherit; }
   .field-row.two { grid-template-columns: 1fr 1fr; }
 }
 
-@keyframes float-a {
-  from { transform: translate(0, 0); }
-  to { transform: translate(12px, -18px); }
-}
-@keyframes float-b {
-  from { transform: translate(0, 0); }
-  to { transform: translate(-16px, 14px); }
-}
-
 @keyframes grid-drift {
   from { transform: translateY(0); }
   to { transform: translateY(52px); }
@@ -880,9 +810,7 @@ button, input, select, textarea { font: inherit; }
   .flow-scene { margin-bottom: 0.5rem; }
   .flow-art { min-height: 180px; }
   .flow-stage { max-height: 260px; }
-  .flow-hint { display: none; }
   .flow-step-text small { display: none; }
-  .flow-tooltip { max-width: 100%; }
   .form-side { position: static; }
 }
 

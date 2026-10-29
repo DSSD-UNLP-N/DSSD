@@ -1038,7 +1038,7 @@ export function DetallePage() {
               <strong>Reformular:</strong> se libera todo el stock reservado, se retiran las ofertas y se vuelve a cargar
               lotes y publicar (ronda {e.evaluacion.ronda + 1}).
             </p>
-            <div className="actions">
+            <div>
               <button className="btn btn-primary" disabled={busy} onClick={() => void decidir("PARCIAL")} data-testid="decidir-parcial">
                 Seguir con cobertura parcial
               </button>{" "}
