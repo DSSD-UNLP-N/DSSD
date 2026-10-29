@@ -7,8 +7,9 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.config import get_settings
-from app.errores import errores
 from app.routers import adjudicacion, auth, catalogo, cierre, inventario, reservas, validacion
+from app.services.reservas import ReservaEnConflicto, ReservaError, ReservaNoExiste
+from app.services.validacion import TipoRecursoDesconocido
 
 
 async def sin_nul(request: Request):
@@ -51,8 +52,14 @@ app = FastAPI(
 @app.exception_handler(RequestValidationError)
 async def validacion_fallida(_: Request, exc: RequestValidationError):
     """Igual que el 422 de FastAPI pero sin devolver `input`: un `NaN` en el cuerpo no se puede volver a serializar."""
-    errores = [{k: v for k, v in e.items() if k != "input"} for e in exc.errors()]
-    return JSONResponse(status_code=422, content={"detail": jsonable_encoder(errores)})
+    detalle = [{k: v for k, v in e.items() if k != "input"} for e in exc.errors()]
+    return JSONResponse(status_code=422, content={"detail": jsonable_encoder(detalle)})
+
+
+# Errores de los servicios -> HTTP. Ninguna hereda de otra: cada una cae en su propio handler.
+for _clase, _codigo in {ReservaError: 400, ReservaNoExiste: 404, ReservaEnConflicto: 409, TipoRecursoDesconocido: 422}.items():
+    app.add_exception_handler(
+        _clase, lambda _, exc, codigo=_codigo: JSONResponse(status_code=codigo, content={"detail": str(exc)}))
 
 
 app.include_router(auth.router)

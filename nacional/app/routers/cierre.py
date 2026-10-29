@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session, selectinload
 from app.db import get_db
 from app.errores import SERVICIO, errores
 from app.models import CierreItem, CierreOperativo, Ong
-from app.routers.reservas import _ERRORES, _http
 from app.schemas import MAX_ENTERO, CierreIn, CierreItemOut, CierreLoteIn, CierreOut, CuitPath
 from app.security import require_servicio
 from app.services import reservas
@@ -66,14 +65,11 @@ def informar_cierre(body: CierreIn, response: Response, db: Session = Depends(ge
     `201` con el cierre. Repetirlo responde `200` con el mismo cierre, sin restar de nuevo. `404` si la ONG o la
     referencia no existen (o la referencia es de otra ONG); `409` si la referencia no está `ADJUDICADA`."""
     try:
-        try:
-            cierre, nuevo = reservas.cerrar(db, body.cuit, body.referencia)
-        except IntegrityError:
-            # Dos cierres iguales a la vez (reintento de Bonita): el otro ganó; esta vez encuentra el cierre hecho.
-            db.rollback()
-            cierre, nuevo = reservas.cerrar(db, body.cuit, body.referencia)
-    except _ERRORES as exc:
-        raise _http(exc) from exc
+        cierre, nuevo = reservas.cerrar(db, body.cuit, body.referencia)
+    except IntegrityError:
+        # Dos cierres iguales a la vez (reintento de Bonita): el otro ganó; esta vez encuentra el cierre hecho.
+        db.rollback()
+        cierre, nuevo = reservas.cerrar(db, body.cuit, body.referencia)
     if not nuevo:
         response.status_code = 200
     return _out(_cargar_cierre(db, cierre.id))
@@ -91,13 +87,10 @@ def informar_cierres(body: CierreLoteIn, db: Session = Depends(get_db)):
     completa devuelve los mismos cierres sin restar de nuevo. Cada cierre se comporta como en `POST /cierres`."""
     pedidos = [(c.cuit, c.referencia) for c in body.cierres]
     try:
-        try:
-            cerrados = reservas.cerrar_varias(db, pedidos)
-        except IntegrityError:
-            db.rollback()
-            cerrados = reservas.cerrar_varias(db, pedidos)
-    except _ERRORES as exc:
-        raise _http(exc) from exc
+        cerrados = reservas.cerrar_varias(db, pedidos)
+    except IntegrityError:
+        db.rollback()
+        cerrados = reservas.cerrar_varias(db, pedidos)
     return [_out(_cargar_cierre(db, cierre.id)) for cierre, _ in cerrados]
 
 
