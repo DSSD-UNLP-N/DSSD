@@ -805,14 +805,29 @@ export function DetallePage() {
     );
   }
 
-  async function addLote(ev: FormEvent<HTMLFormElement>) {
-    ev.preventDefault();
-    const form = ev.currentTarget;
-    const fd = new FormData(form);
+  // Envuelve una acción: busy mientras dura, limpia mensajes, muestra el ok o el error y recarga.
+  // esperaMs: el pase de estado lo hace Bonita en unos segundos (adjudicar → En ejecución, validar cierre → Resuelta).
+  async function run<T>(paso: () => Promise<T>, mensaje: string | ((r: T) => string), esperaMs = 0) {
     setBusy(true);
     setError(null);
     setOk(null);
     try {
+      const r = await paso();
+      setOk(typeof mensaje === "string" ? mensaje : mensaje(r));
+      if (esperaMs) await new Promise((res) => setTimeout(res, esperaMs));
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function addLote(ev: FormEvent<HTMLFormElement>) {
+    ev.preventDefault();
+    const form = ev.currentTarget;
+    const fd = new FormData(form);
+    return run(async () => {
       await api.createLote(id, {
         tipo_recurso: String(fd.get("tipo_recurso")),
         detalle: String(fd.get("detalle") ?? "").trim() || undefined,
@@ -820,100 +835,34 @@ export function DetallePage() {
         tipo: String(fd.get("tipo")),
       });
       form.reset();
-      setOk("Lote agregado");
-      await reload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error");
-    } finally {
-      setBusy(false);
-    }
+    }, "Lote agregado");
   }
 
-  async function decidir(decision: "PARCIAL" | "REFORMULAR") {
-    setBusy(true);
-    setError(null);
-    setOk(null);
-    try {
-      await api.decidir(id, decision);
-      setOk(decision === "PARCIAL" ? "Seguís con la cobertura parcial: el Municipio adjudica." : "Convocatoria reformulada: cargá los lotes y publicá de nuevo.");
-      await reload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error");
-    } finally {
-      setBusy(false);
-    }
-  }
+  const decidir = (decision: "PARCIAL" | "REFORMULAR") =>
+    run(
+      () => api.decidir(id, decision),
+      decision === "PARCIAL" ? "Seguís con la cobertura parcial: el Municipio adjudica." : "Convocatoria reformulada: cargá los lotes y publicá de nuevo.",
+    );
 
-  async function adjudicar() {
-    setBusy(true);
-    setError(null);
-    setOk(null);
-    try {
-      await api.adjudicar(id, elegidas);
-      setOk("Adjudicación enviada: Bonita confirma las reservas elegidas y libera las demás.");
-      setElegidas([]);
-      // El pase a "En ejecución" lo hace Bonita en unos segundos.
-      await new Promise((r) => setTimeout(r, 4000));
-      await reload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error");
-    } finally {
-      setBusy(false);
-    }
-  }
+  const adjudicar = () =>
+    run(
+      async () => {
+        await api.adjudicar(id, elegidas);
+        setElegidas([]);
+      },
+      "Adjudicación enviada: Bonita confirma las reservas elegidas y libera las demás.",
+      4000,
+    );
 
-  async function avanzar(paso: () => Promise<Emergencia>, mensaje: string, esperarABonita = false) {
-    setBusy(true);
-    setError(null);
-    setOk(null);
-    try {
-      await paso();
-      setOk(mensaje);
-      // El pase a "Resuelta" lo hace Bonita en unos segundos, cuando libera los recursos.
-      if (esperarABonita) await new Promise((r) => setTimeout(r, 4000));
-      await reload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function publicar(ev: FormEvent<HTMLFormElement>) {
+  function publicar(ev: FormEvent<HTMLFormElement>) {
     ev.preventDefault();
     const fd = new FormData(ev.currentTarget);
     const iso = new Date(String(fd.get("ventana_fin"))).toISOString();
-    setBusy(true);
-    setError(null);
-    setOk(null);
-    try {
-      await api.publicar(id, iso);
-      setOk("Convocatoria publicada");
-      await reload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error");
-    } finally {
-      setBusy(false);
-    }
+    return run(() => api.publicar(id, iso), "Convocatoria publicada");
   }
 
-  async function enviarOferta(
-    items: { lote_id: number; recurso: string; cantidad: number }[],
-    mensaje: (o: Oferta) => string,
-  ) {
-    setBusy(true);
-    setError(null);
-    setOk(null);
-    try {
-      const o = await api.createOferta(id, items);
-      setOk(mensaje(o));
-      await reload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error");
-    } finally {
-      setBusy(false);
-    }
-  }
+  const enviarOferta = (items: { lote_id: number; recurso: string; cantidad: number }[], mensaje: (o: Oferta) => string) =>
+    run(() => api.createOferta(id, items), mensaje);
 
   async function oferta(ev: FormEvent<HTMLFormElement>) {
     ev.preventDefault();
@@ -1206,7 +1155,7 @@ export function DetallePage() {
                         className="btn btn-primary"
                         disabled={busy}
                         data-testid="monitorear"
-                        onClick={() => void avanzar(() => api.monitorear(id), "Monitoreo iniciado: las ONGs ya pueden finalizar.")}
+                        onClick={() => void run(() => api.monitorear(id), "Monitoreo iniciado: las ONGs ya pueden finalizar.")}
                       >
                         Monitorear ejecución
                       </button>
@@ -1225,7 +1174,7 @@ export function DetallePage() {
                         disabled={busy}
                         data-testid="validar-cierre"
                         onClick={() =>
-                          void avanzar(() => api.validarCierre(id), "Cierre validado: Bonita libera los recursos.", true)
+                          void run(() => api.validarCierre(id), "Cierre validado: Bonita libera los recursos.", 4000)
                         }
                       >
                         Validar cierre bilateral
@@ -1249,7 +1198,7 @@ export function DetallePage() {
                       className="btn btn-primary"
                       disabled={busy}
                       data-testid="finalizar"
-                      onClick={() => void avanzar(() => api.finalizar(id), "Marcaste tu actividad como finalizada.")}
+                      onClick={() => void run(() => api.finalizar(id), "Marcaste tu actividad como finalizada.")}
                     >
                       Marcar actividad finalizada
                     </button>
