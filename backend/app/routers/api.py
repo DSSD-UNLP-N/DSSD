@@ -329,7 +329,7 @@ def api_publicar(
 
 
 def _oferta_out(o: Oferta) -> OfertaOut:
-    items = [OfertaItemOut.model_validate(i) for i in o.items if i.version == o.version_actual]
+    items = [OfertaItemOut.model_validate(i) for i in o.items_vigentes]
     return OfertaOut(
         id=o.id,
         emergencia_id=o.emergencia_id,

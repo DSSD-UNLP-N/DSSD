@@ -56,7 +56,7 @@ def _retirar_ofertas(db: Session, emergencia: Emergencia) -> None:
     """Retira las ofertas de la ronda (versión nueva sin ítems): el historial queda."""
     ofertas = db.scalars(select(Oferta).where(Oferta.emergencia_id == emergencia.id).options(selectinload(Oferta.items)))
     for o in ofertas:
-        if any(i.version == o.version_actual for i in o.items):
+        if o.items_vigentes:
             o.version_actual += 1
 
 

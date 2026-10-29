@@ -8,7 +8,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import Emergencia, EstadoEmergencia, EstadoOferta, Notificacion, Oferta, OfertaItem
+from app.models import Emergencia, EstadoEmergencia, EstadoOferta, Notificacion, Oferta
 from app.schemas.evaluacion import Evaluacion
 from app.services import ServicioError
 from app.services.emergencias import cerrar_ventanas_vencidas
@@ -45,7 +45,7 @@ def consolidar_ofertas(db: Session, emergencia_id: int) -> dict | None:
     for o in ofertas:
         items = [
             {"lote_id": i.lote_id, "tipo_recurso": lotes[i.lote_id].tipo_recurso, "cantidad": i.cantidad}
-            for i in _vigentes(o) if lotes[i.lote_id].tipo_recurso
+            for i in o.items_vigentes if lotes[i.lote_id].tipo_recurso
         ]
         if items and o.ong.cuit:
             consolidadas.append({
@@ -61,10 +61,6 @@ def consolidar_ofertas(db: Session, emergencia_id: int) -> dict | None:
         ],
         "ofertas": consolidadas,
     }
-
-
-def _vigentes(oferta: Oferta) -> list[OfertaItem]:
-    return [i for i in oferta.items if i.version == oferta.version_actual]
 
 
 def guardar_evaluacion(db: Session, emergencia_id: int, resultado: Evaluacion) -> bool:

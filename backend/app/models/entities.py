@@ -158,6 +158,11 @@ class Oferta(Base):
     ong: Mapped[Ong] = relationship()
     items: Mapped[list["OfertaItem"]] = relationship(back_populates="oferta", cascade="all, delete-orphan")
 
+    @property
+    def items_vigentes(self) -> list["OfertaItem"]:
+        """Los ítems de la versión actual; sin ninguno, la oferta está retirada."""
+        return [i for i in self.items if i.version == self.version_actual]
+
 
 class OfertaItem(Base):
     """Línea de una oferta en una versión. Editar = insertar líneas con version+1;
