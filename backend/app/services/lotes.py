@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.integrations.bonita import BonitaClient, BonitaError
+from app.integrations.bonita import BonitaError, bonita_login
 from app.integrations.nacional import NacionalClient
 from app.models import Emergencia, EstadoEmergencia, Lote, OfertaItem, Usuario
 from app.schemas.api import LoteIn
@@ -104,10 +104,8 @@ def publicar_en_bonita(settings: Settings, case_id: int, ventana_fin: datetime, 
 
     Lo administrativo (leer tareas, setear la variable) va con el usuario técnico; las tareas
     humanas las ejecuta el coordinador que publicó, para que el motor lo registre a él."""
-    admin = BonitaClient(settings.bonita_base_url, settings.bonita_timeout_seconds)
-    admin.login(settings.bonita_username, settings.bonita_password)
-    coordinador = BonitaClient(settings.bonita_base_url, settings.bonita_timeout_seconds)
-    coordinador.login(coordinador_username, settings.bonita_test_password)
+    admin = bonita_login(settings)
+    coordinador = bonita_login(settings, coordinador_username)
 
     # Si un intento anterior se cortó después de completar "Revisar…", el caso ya está en
     # "Publicar…": se sigue desde ahí en vez de fallar.

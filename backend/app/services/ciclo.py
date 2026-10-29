@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import Settings
-from app.integrations.bonita import BonitaClient, BonitaError
+from app.integrations.bonita import BonitaError, bonita_login
 from app.integrations.nacional import NacionalClient
 from app.models import Emergencia, EstadoEmergencia, Oferta, Usuario
 from app.schemas.evaluacion import Evaluacion
@@ -37,10 +37,8 @@ def completar_en_bonita(settings: Settings, case_id: int | None, tarea: str, use
     if case_id is None:
         raise CicloError("La emergencia no tiene caso en Bonita.", 409)
     try:
-        admin = BonitaClient(settings.bonita_base_url, settings.bonita_timeout_seconds)
-        admin.login(settings.bonita_username, settings.bonita_password)
-        usuario = BonitaClient(settings.bonita_base_url, settings.bonita_timeout_seconds)
-        usuario.login(username, settings.bonita_test_password)
+        admin = bonita_login(settings)
+        usuario = bonita_login(settings, username)
         pendiente = admin.wait_for_task(case_id, tarea)
         if pendiente is None:
             raise CicloError(f"El caso {case_id} no está esperando la tarea '{tarea}…' en Bonita.", 409)

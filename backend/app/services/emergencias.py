@@ -18,7 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.integrations.bonita import BonitaClient, BonitaError
+from app.integrations.bonita import BonitaClient, BonitaError, bonita_login
 from app.models import Emergencia, EstadoEmergencia, Gravedad, Rol, Usuario
 from app.services import ServicioError
 
@@ -99,9 +99,7 @@ def _borrar_caso_huerfano(settings: Settings, case_id) -> None:
     """Si el alta falla después de crear el caso, se borra en Bonita: si no, queda un caso trabado en
     'Registrar Emergencia' con un emergenciaId que la base local va a reusar para la próxima emergencia."""
     try:
-        admin = BonitaClient(settings.bonita_base_url, settings.bonita_timeout_seconds)
-        admin.login(settings.bonita_username, settings.bonita_password)
-        admin.delete_case(case_id)
+        bonita_login(settings).delete_case(case_id)
     except (BonitaError, requests.RequestException):
         log.warning("No se pudo borrar el caso huérfano %s de Bonita", case_id, exc_info=True)
 
@@ -148,8 +146,7 @@ def registrar_emergencia(
     try:
         # Bonita registra al iniciador y al ejecutor: hay que entrar como quien hizo el alta
         # (mismo username que en la app), no con el usuario técnico.
-        bonita = BonitaClient(settings.bonita_base_url, settings.bonita_timeout_seconds)
-        bonita.login(operador.username, settings.bonita_test_password)
+        bonita = bonita_login(settings, operador.username)
         process_id = bonita.resolve_process_id(settings.bonita_process_name, settings.bonita_process_version)
         case_id = bonita.start_case(process_id, {
             "emergenciaId": emergencia.id,
@@ -183,9 +180,8 @@ def tarea_ong_en_bonita(settings: Settings, emergencia: Emergencia, user: Usuari
     if user.rol is not Rol.ONG or emergencia.bonita_case_id is None:
         return None
     try:
-        client = BonitaClient(settings.bonita_base_url, settings.bonita_timeout_seconds)
-        client.login(user.username, settings.bonita_test_password)
-        tarea = client.find_task(emergencia.bonita_case_id, TAREA_CARGAR_OFERTAS)
+        bonita = bonita_login(settings, user.username)
+        tarea = bonita.find_task(emergencia.bonita_case_id, TAREA_CARGAR_OFERTAS)
     except (BonitaError, requests.RequestException):
         return None
     return tarea["displayName"] if tarea else None

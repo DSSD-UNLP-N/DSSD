@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.security import hash_password
-from app.integrations.bonita import BonitaClient, BonitaError
+from app.integrations.bonita import BonitaClient, BonitaError, bonita_login
 from app.integrations.nacional import NACIONAL_CAIDO, NacionalClient, NacionalError
 from app.models import Ong, Rol, Usuario
 from app.services import ServicioError
@@ -47,10 +47,8 @@ def normalizar_cuit(cuit: str) -> str:
     return f"{digitos[:2]}-{digitos[2:10]}-{digitos[10]}"
 
 
-def _borrar_usuario_bonita(bonita: BonitaClient, user_id: str | None) -> None:
+def _borrar_usuario_bonita(bonita: BonitaClient, user_id: str) -> None:
     """Compensación: si falla, se ignora para que se informe el error original."""
-    if user_id is None:
-        return
     try:
         bonita.delete_user(user_id)
     except (BonitaError, requests.RequestException):
@@ -58,16 +56,16 @@ def _borrar_usuario_bonita(bonita: BonitaClient, user_id: str | None) -> None:
 
 
 def _crear_en_bonita(settings: Settings, datos: DatosAlta) -> tuple[BonitaClient, str]:
-    bonita = BonitaClient(settings.bonita_base_url, settings.bonita_timeout_seconds)
     user_id: str | None = None
     try:
-        bonita.login(settings.bonita_username, settings.bonita_password)
+        bonita = bonita_login(settings)
         if bonita.find_user_id(datos.username) is not None:
             raise AltaOngError("El usuario ya está registrado", 409)
         user_id = bonita.create_user(datos.username, settings.bonita_test_password, datos.nombre)
         bonita.add_membership(user_id, bonita.group_id(BONITA_GRUPO_ONG), bonita.role_id(BONITA_ROL_ONG))
     except (BonitaError, requests.RequestException) as exc:
-        _borrar_usuario_bonita(bonita, user_id)
+        if user_id is not None:  # solo se crea después del login: `bonita` ya existe
+            _borrar_usuario_bonita(bonita, user_id)
         raise AltaOngError(BONITA_CAIDO, 503) from exc
     return bonita, user_id
 
