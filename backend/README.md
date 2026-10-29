@@ -53,7 +53,7 @@ Qué protegen (entre otros):
   `models/entities.py` sin correr `alembic revision --autogenerate`.
 - `test_auth.py`: login, sesión y 401/403 por rol.
 - `test_bonita_client.py`: cliente de Bonita con HTTP simulado.
-- `test_bonita_contract.py`: el contrato de instanciación y las tareas del `.bos` (`entrega-2/RescueSync.bos`) coinciden con
+- `test_bonita_contract.py`: el contrato de instanciación y las tareas del `.bos` vigente (`entrega-3/entrega42_local.bos`) coinciden con
   lo que manda la app. Si cambiás el contrato en Studio, exportá el `.bos` y actualizá `CONTRACT_INPUTS`.
 - `test_bonita_conectores_nacional.py`: los `.bos` vigentes (`entrega-3/entrega42_*.bos`) llaman a la API Nacional con login previo y
   `Authorization`, y el de la nube es el local apuntando a Render.

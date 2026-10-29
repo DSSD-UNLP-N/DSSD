@@ -9,8 +9,8 @@ mapping) se diseña en Bonita Studio Community 10.4.0; lo demás se automatiza d
 | Archivo | Para qué |
 |---|---|
 | `entrega-3/entrega42_nube.bos` | Proceso vigente con los conectores apuntando a la API Nacional de Render. |
-| `entrega-3/entrega42_local.bos` | El mismo proceso con los conectores apuntando a `localhost:8002`. |
-| `entrega-2/RescueSync.bos` | Export de la Entrega 2: lo lee `backend/tests/test_bonita_contract.py` para comprobar el contrato de instanciación. |
+| `entrega-3/entrega42_local.bos` | El mismo proceso con los conectores apuntando a `localhost:8002`. Lo lee `backend/tests/test_bonita_contract.py` para comprobar el contrato de instanciación. |
+| `entrega-2/RescueSync.bos` | Export de la Entrega 2 (histórico, ya no vigente). |
 
 En Studio solo puede haber uno activo a la vez (mismo nombre y versión de proceso). Los dos vigentes se generaron con los
 scripts de abajo y `backend/tests/test_bonita_conectores_nacional.py` comprueba que el de la nube es el local apuntando a Render.
