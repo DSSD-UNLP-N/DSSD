@@ -32,7 +32,6 @@ import subprocess
 import sys
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import requests
@@ -43,7 +42,6 @@ VENV = BACKEND / ".venv" / "Scripts" / "python.exe"
 PY = str(VENV if VENV.exists() else sys.executable)
 
 GUIONES = {"e2e": "e2e_ui.py", "parada2": "ui_parada2.py", "parada3": "ui_parada3.py"}
-ONGS = ("30-54666544-5", "30-68522415-9")  # Cruz Roja y Bomberos: las que usan los guiones
 
 
 def servicio_responde(url: str) -> bool:
@@ -60,53 +58,13 @@ def chequear_servicios() -> list[str]:
     return [nombre for nombre, url in pedidos.items() if not servicio_responde(url)]
 
 
-def _nacional():
-    sys.path.insert(0, str(BACKEND))
-    sys.path.insert(0, str(HERE))
-    from app.core.config import get_settings
-    from nacional_auth import nacional_get, nacional_post
-
-    return get_settings().nacional_base_url.rstrip("/"), nacional_get, nacional_post
-
-
 def comprometido() -> dict[str, int]:
-    base, get, _ = _nacional()
-    return {f"{cuit} {i['tipo_recurso']}": i["cantidad_comprometida"] for cuit in ONGS
-            for i in get(f"{base}/ongs/{cuit}", timeout=90).json()["inventario"] if i["cantidad_comprometida"]}
+    from comun import BOMBEROS, CRUZ_ROJA, nacional_get  # comun también deja `app` importable
+    from app.core.config import get_settings
 
-
-def liberar_reservas() -> None:
-    """Libera en la API Nacional las reservas que dejó una corrida que falló a medias (lo que no existe da 404 y se ignora)."""
-    base, _, post = _nacional()  # también deja `app` importable
-    from app.seed import DEMO_PASSWORD
-
-    s = requests.Session()
-    s.post("http://localhost:8001/api/auth/login", json={"username": "coordinador.regional", "password": DEMO_PASSWORD}, timeout=30)
-    # Solo donde puede haber una reserva: sin evaluar todavía (REGISTRADA, CONVOCATORIA) o ya cerrada (RESUELTA) no hay ninguna.
-    refs = [f"emg-{e['id']}-r{ronda}-{cuit}" for e in s.get("http://localhost:8001/api/emergencias", timeout=30).json()
-            if e["estado"] in ("CERRADA", "EN_EVALUACION", "ADJUDICACION", "EN_EJECUCION") for ronda in (1, 2) for cuit in ONGS]
-    with ThreadPoolExecutor(8) as pool:
-        list(pool.map(lambda ref: post(f"{base}/adjudicaciones/{ref}/liberar", timeout=90), refs))
-
-
-def retirar_ofertas_abiertas() -> int:
-    """Retira las ofertas de las dos ONGs en convocatorias abiertas (las que dejó e2e_ui o una corrida a medias): cada una descuenta
-    del inventario de la ONG y hace fallar al guion siguiente con «No alcanza tu inventario»."""
-    _nacional()  # deja `app` importable
-    from app.seed import DEMO_PASSWORD
-
-    app = "http://localhost:8001/api"
-    retiradas = 0
-    for usuario in ("ong.cruzroja", "ong.bomberos"):
-        s = requests.Session()
-        s.post(f"{app}/auth/login", json={"username": usuario, "password": DEMO_PASSWORD}, timeout=30).raise_for_status()
-        for e in s.get(f"{app}/emergencias", timeout=30).json():
-            if e["estado"] != "CONVOCATORIA":
-                continue
-            for o in s.get(f"{app}/emergencias/{e['id']}/ofertas", timeout=30).json():
-                if not o["retirada"]:
-                    retiradas += s.post(f"{app}/emergencias/{e['id']}/ofertas", json={"items": []}, timeout=60).ok
-    return retiradas
+    base = get_settings().nacional_base_url.rstrip("/")
+    return {f"{cuit} {i['tipo_recurso']}": i["cantidad_comprometida"] for cuit in (CRUZ_ROJA, BOMBEROS)
+            for i in nacional_get(f"{base}/ongs/{cuit}", timeout=90).json()["inventario"] if i["cantidad_comprometida"]}
 
 
 def correr(nombre: str, args: list[str], resultados: dict) -> None:
@@ -151,6 +109,8 @@ def main() -> int:
         return 2
 
     if args.liberar:
+        from comun import liberar_reservas
+
         liberar_reservas()
     colgado = comprometido()
     if colgado:

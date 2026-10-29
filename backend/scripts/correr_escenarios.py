@@ -60,9 +60,9 @@ def borrar_casos_abiertos() -> int:
 
 def limpiar_previos() -> None:
     """Lo que dejó una corrida anterior y los escenarios no limpian: ofertas abiertas y reservas en la API Nacional."""
-    from correr_ui import liberar_reservas, retirar_ofertas_abiertas
+    from comun import liberar_reservas, retirar_ofertas_abiertas
 
-    print(f"Limpieza previa: {retirar_ofertas_abiertas()} ofertas abiertas retiradas; reservas de la API Nacional liberadas.", flush=True)
+    print(f"Limpieza previa: {retirar_ofertas_abiertas('http://localhost:8001')} ofertas abiertas retiradas; reservas de la API Nacional liberadas.", flush=True)
     liberar_reservas()
 
 

@@ -25,15 +25,13 @@ import sys
 import time
 from datetime import datetime, timedelta
 
-import requests
 from playwright.sync_api import sync_playwright
 
-from comun import esperar, tarea_activa
+from comun import esperar, retirar_ofertas_abiertas, tarea_activa
 import ui_comun
 from ui_comun import PLAZO, PLAZO_LENTO, POLL_S, Reporte, Ui, dato, ejecutada_por
 from app.core.config import get_settings
 from app.integrations.bonita import BonitaClient
-from app.seed import DEMO_PASSWORD
 
 TAREA_TRAS_ALTA = "Revisar Informacion"
 TAREA_TRAS_PUBLICAR = "Cargar Ofertas de Ayuda"
@@ -196,24 +194,6 @@ def fase_bonita_publicacion(r: Reporte, admin: BonitaClient, case_id: int, fin: 
         r.check(f"'{prefijo}…' es del actor '{esperado}'", actor == esperado, actor)
 
 
-def retirar_ofertas_previas(app: str, emergencia_id: int, r: Reporte) -> None:
-    """Las corridas anteriores dejan convocatorias abiertas (2 h) con ofertas, y cada oferta abierta
-    descuenta del inventario de la ONG: sin esto la segunda corrida seguida se pasaría del tope.
-    Se retiran por la API, con la misma función que usa la SPA (reenviar la oferta vacía)."""
-    retiradas = 0
-    for usuario in ("ong.cruzroja", "ong.bomberos"):
-        sesion = requests.Session()
-        sesion.post(f"{app}/api/auth/login", json={"username": usuario, "password": DEMO_PASSWORD}).raise_for_status()
-        for e in sesion.get(f"{app}/api/emergencias").json():
-            if e["id"] == emergencia_id or e["estado"] != "CONVOCATORIA" or "(UI e2e)" not in e["zona_afectada"]:
-                continue  # solo lo que dejó una corrida de este mismo guion: otros guiones pueden estar corriendo a la vez
-            for o in sesion.get(f"{app}/api/emergencias/{e['id']}/ofertas").json():
-                if not o["retirada"]:
-                    sesion.post(f"{app}/api/emergencias/{e['id']}/ofertas", json={"items": []})
-                    retiradas += 1
-    r.check("Limpieza: ofertas de corridas anteriores retiradas", True, f"{retiradas} retiradas")
-
-
 def cargar_oferta(u: Ui, cantidades: list[str]) -> None:
     for campo, valor in zip(u.page.locator("[name^=lote_]").all(), cantidades):
         campo.fill(valor)
@@ -222,7 +202,10 @@ def cargar_oferta(u: Ui, cantidades: list[str]) -> None:
 
 def fase_ongs(u: Ui, app: str, emergencia_id: int) -> None:
     u.r.fase("Limpieza de corridas anteriores")
-    retirar_ofertas_previas(app, emergencia_id, u.r)
+    # Las corridas anteriores dejan convocatorias abiertas (2 h) con ofertas: sin retirarlas, la segunda corrida seguida se pasaría
+    # del tope. Solo lo que dejó este mismo guion: otros guiones pueden estar corriendo a la vez.
+    retiradas = retirar_ofertas_abiertas(app, lambda em: em["id"] == emergencia_id or "(UI e2e)" not in em["zona_afectada"])
+    u.r.check("Limpieza: ofertas de corridas anteriores retiradas", True, f"{retiradas} retiradas")
     u.r.fase("ONG Cruz Roja: oferta versionada")
     u.entrar(app, "ong.cruzroja")
     u.ve("Hola,", "Login correcto: panel de la ONG")

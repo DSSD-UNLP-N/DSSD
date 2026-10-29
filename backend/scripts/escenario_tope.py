@@ -18,7 +18,7 @@ import sys
 import time
 from datetime import datetime, timedelta
 
-from comun import Escenario, crear_y_publicar, retirar_previas
+from comun import Escenario, crear_y_publicar, retirar_ofertas_abiertas
 from nacional_auth import nacional_post
 from app.core.config import get_settings
 from app.integrations.bonita import BonitaClient
@@ -60,7 +60,7 @@ def main() -> int:
     print(f"     emergencias #{e1}, #{e2} (2 h) y #{e3} (vence {fin3:%H:%M:%S}); casos Bonita {caso1}…{caso3}")
     e.check("Las tres convocatorias quedaron abiertas",
             all(e.get("coordinador.regional", f"/emergencias/{i}").json()["estado"] == "CONVOCATORIA" for i in (e1, e2, e3)))
-    print(f"     limpieza: {retirar_previas(e, {e1, e2, e3})} ofertas de corridas anteriores retiradas")
+    print(f"     limpieza: {retirar_ofertas_abiertas(e.app, lambda em: em["id"] in (e1, e2, e3))} ofertas de corridas anteriores retiradas")
 
     pm1, agua1, rac1, pm2, pm3 = l1["PARAMEDICO"], l1["AGUA_POTABLE"], l1["RACION_ALIMENTO"], l2["PARAMEDICO"], l3["PARAMEDICO"]
 

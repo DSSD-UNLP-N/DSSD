@@ -119,7 +119,7 @@ def base_de_la_app(cfg) -> None:
     abiertas, = con.execute("select count(*) from emergencia where estado = 'CONVOCATORIA'").fetchone()
     ok(f"{total} emergencia(s) en {ruta}")
     if abiertas:
-        aviso(f"{abiertas} convocatoria(s) abiertas: sus ofertas descuentan inventario de las ONGs (retirar_previas las retira)")
+        aviso(f"{abiertas} convocatoria(s) abiertas: sus ofertas descuentan inventario de las ONGs (comun.retirar_ofertas_abiertas las retira)")
 
 
 def main() -> int:

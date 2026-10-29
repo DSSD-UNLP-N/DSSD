@@ -6,6 +6,7 @@ import os
 import sys
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
@@ -15,7 +16,8 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE))
 
-from nacional_auth import nacional_get  # noqa: E402
+from nacional_auth import nacional_get, nacional_post  # noqa: E402
+from app.core.config import get_settings  # noqa: E402
 from app.integrations.bonita import BonitaClient  # noqa: E402
 from app.seed import DEMO_PASSWORD  # noqa: E402
 
@@ -154,14 +156,32 @@ def crear_y_publicar(e: Escenario, zona: str, gravedad: str, lotes: list[tuple[s
     return emergencia, caso, ids
 
 
-def retirar_previas(e: Escenario, propias: set[int]) -> int:
-    """Corridas anteriores dejan convocatorias abiertas con ofertas que descuentan inventario."""
+def retirar_ofertas_abiertas(app: str, saltear=lambda emergencia: False) -> int:
+    """Corridas anteriores (o una que falló a medias) dejan convocatorias abiertas con ofertas de Cruz Roja y Bomberos: cada una
+    descuenta del inventario de la ONG y hace fallar al guion siguiente con «No alcanza tu inventario». Las retira por la API,
+    como la SPA (reenviando la oferta vacía), salvo en las emergencias para las que `saltear(emergencia)` es cierto. `app` es la
+    base de la app (sin `/api`); devuelve cuántas retiró."""
     retiradas = 0
-    for ong in ("ong.cruzroja", "ong.bomberos"):
-        for em in e.get(ong, "/emergencias").json():
-            if em["id"] in propias or em["estado"] != "CONVOCATORIA":
+    for usuario in ("ong.cruzroja", "ong.bomberos"):
+        s = requests.Session()
+        s.post(f"{app}/api/auth/login", json={"username": usuario, "password": DEMO_PASSWORD}, timeout=30).raise_for_status()
+        for em in s.get(f"{app}/api/emergencias", timeout=120).json():
+            if em["estado"] != "CONVOCATORIA" or saltear(em):
                 continue
-            for o in e.get(ong, f"/emergencias/{em['id']}/ofertas").json():
-                if not o["retirada"] and e.ofrecer(ong, em["id"]).status_code == 201:
-                    retiradas += 1
+            for o in s.get(f"{app}/api/emergencias/{em['id']}/ofertas", timeout=120).json():
+                if not o["retirada"]:
+                    retiradas += s.post(f"{app}/api/emergencias/{em['id']}/ofertas", json={"items": []}, timeout=120).ok
     return retiradas
+
+
+def liberar_reservas(app: str = "http://localhost:8001") -> None:
+    """Libera en la API Nacional las reservas que dejó una corrida que falló a medias (lo que no existe da 404 y se ignora)."""
+    base = get_settings().nacional_base_url.rstrip("/")
+    s = requests.Session()
+    s.post(f"{app}/api/auth/login", json={"username": "coordinador.regional", "password": DEMO_PASSWORD}, timeout=30)
+    # Solo donde puede haber una reserva: sin evaluar todavía (REGISTRADA, CONVOCATORIA) o ya cerrada (RESUELTA) no hay ninguna.
+    refs = [f"emg-{e['id']}-r{ronda}-{cuit}" for e in s.get(f"{app}/api/emergencias", timeout=30).json()
+            if e["estado"] in ("CERRADA", "EN_EVALUACION", "ADJUDICACION", "EN_EJECUCION")
+            for ronda in (1, 2) for cuit in (CRUZ_ROJA, BOMBEROS)]
+    with ThreadPoolExecutor(8) as pool:
+        list(pool.map(lambda ref: nacional_post(f"{base}/adjudicaciones/{ref}/liberar", timeout=90), refs))
