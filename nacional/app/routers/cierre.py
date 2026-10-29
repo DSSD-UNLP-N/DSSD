@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.db import get_db
 from app.errores import SERVICIO, errores
 from app.models import CierreItem, CierreOperativo, Ong
+from app.routers.catalogo import ong_o_404
 from app.schemas import MAX_ENTERO, CierreIn, CierreItemOut, CierreLoteIn, CierreOut, CuitPath
 from app.security import require_servicio
 from app.services import reservas
@@ -111,9 +112,7 @@ def obtener_cierre(
             responses=errores({404: "ONG no registrada"}))
 def cierres_de_la_ong(cuit: CuitPath, db: Session = Depends(get_db)):
     """Todos los cierres de la ONG, del más viejo al más nuevo."""
-    ong = db.scalar(select(Ong).where(Ong.cuit == cuit))
-    if ong is None:
-        raise HTTPException(status_code=404, detail="ONG no registrada")
+    ong = ong_o_404(db, cuit)
     cierres = db.scalars(
         select(CierreOperativo)
         .where(CierreOperativo.ong_id == ong.id)

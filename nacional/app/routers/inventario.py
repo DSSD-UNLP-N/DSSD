@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.db import get_db
 from app.errores import AUTH, errores
 from app.models import Cuenta, Inventario, Ong, OngCertificacion, TipoRecurso
-from app.routers.catalogo import inventario_out
+from app.routers.catalogo import inventario_out, ong_o_404
 from app.schemas import CuitPath, InventarioIn, InventarioOut
 from app.security import require_ong_account
 
@@ -32,14 +32,11 @@ def declarar_inventario(
 ):
     """Fija `cantidad_total` por tipo de recurso. No toca `cantidad_comprometida`: no se puede declarar
     menos de lo ya comprometido (409). Devuelve el inventario completo de la ONG."""
-    ong = db.scalar(
-        select(Ong).where(Ong.cuit == cuit).options(
-            selectinload(Ong.certificaciones).selectinload(OngCertificacion.certificacion),
-            selectinload(Ong.inventario).selectinload(Inventario.tipo_recurso),
-        )
+    ong = ong_o_404(
+        db, cuit,
+        selectinload(Ong.certificaciones).selectinload(OngCertificacion.certificacion),
+        selectinload(Ong.inventario).selectinload(Inventario.tipo_recurso),
     )
-    if ong is None:
-        raise HTTPException(status_code=404, detail="ONG no registrada")
 
     codigos = [i.tipo_recurso for i in body.items]
     if len(set(codigos)) != len(codigos):

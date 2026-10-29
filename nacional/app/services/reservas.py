@@ -219,11 +219,26 @@ def _devolver_stock(db: Session, adj: Adjudicacion) -> None:
         por_id[it.inventario_id].cantidad_comprometida -= it.cantidad
 
 
+def _exigir_confirmable(ref: str, estado: EstadoAdjudicacion) -> None:
+    if estado in (EstadoAdjudicacion.LIBERADA, EstadoAdjudicacion.CERRADA):
+        raise ReservaEnConflicto(f"La referencia {ref} está {estado.value}; no se puede adjudicar")
+
+
+def _exigir_liberable(ref: str, estado: EstadoAdjudicacion) -> None:
+    if estado is EstadoAdjudicacion.CERRADA:
+        raise ReservaEnConflicto(f"La referencia {ref} ya está CERRADA; sus recursos ya se liberaron")
+
+
+def _exigir_cerrable(ref: str, estado: EstadoAdjudicacion) -> None:
+    """Una CERRADA pasa: repetir el cierre devuelve el mismo."""
+    if estado not in (EstadoAdjudicacion.ADJUDICADA, EstadoAdjudicacion.CERRADA):
+        raise ReservaEnConflicto(f"La referencia {ref} está {estado.value}; solo se cierra una ADJUDICADA")
+
+
 def confirmar(db: Session, ref: str) -> Adjudicacion:
     """RESERVADA -> ADJUDICADA. Repetirlo no cambia nada."""
     adj = _cargar_bloqueada(db, ref)
-    if adj.estado in (EstadoAdjudicacion.LIBERADA, EstadoAdjudicacion.CERRADA):
-        raise ReservaEnConflicto(f"La referencia {ref} está {adj.estado.value}; no se puede adjudicar")
+    _exigir_confirmable(ref, adj.estado)
     adj.estado = EstadoAdjudicacion.ADJUDICADA
     db.commit()
     return adj
@@ -232,8 +247,7 @@ def confirmar(db: Session, ref: str) -> Adjudicacion:
 def liberar(db: Session, ref: str) -> LiberacionOut:
     """RESERVADA o ADJUDICADA -> LIBERADA: devuelve el stock. Repetirlo no resta dos veces."""
     adj = _cargar_bloqueada(db, ref)
-    if adj.estado is EstadoAdjudicacion.CERRADA:
-        raise ReservaEnConflicto(f"La referencia {ref} ya está CERRADA; sus recursos ya se liberaron")
+    _exigir_liberable(ref, adj.estado)
     if adj.estado is not EstadoAdjudicacion.LIBERADA:
         _devolver_stock(db, adj)
         adj.estado = EstadoAdjudicacion.LIBERADA
@@ -255,14 +269,13 @@ def cerrar(db: Session, cuit: str, ref: str) -> tuple[CierreOperativo, bool]:
     adj = _cargar_bloqueada(db, ref)
     if adj.ong_id != ong.id:
         raise ReservaNoExiste(f"La referencia {ref} no pertenece a la ONG {cuit}")
+    _exigir_cerrable(ref, adj.estado)
     if adj.estado is EstadoAdjudicacion.CERRADA:
         cierre = db.scalar(select(CierreOperativo).where(
             CierreOperativo.ong_id == ong.id, CierreOperativo.referencia == ref))
         if cierre is None:
             raise ReservaEnConflicto(f"La referencia {ref} está CERRADA pero no tiene un cierre guardado")
         return cierre, False
-    if adj.estado is not EstadoAdjudicacion.ADJUDICADA:
-        raise ReservaEnConflicto(f"La referencia {ref} está {adj.estado.value}; solo se cierra una ADJUDICADA")
     _devolver_stock(db, adj)
     adj.estado = EstadoAdjudicacion.CERRADA
     cierre = CierreOperativo(ong=ong, referencia=ref, informado_en=datetime.now(timezone.utc))
@@ -289,9 +302,7 @@ def cerrar_varias(db: Session, pedidos: list[tuple[str, str]]) -> list[tuple[Cie
             raise ReservaNoExiste("ONG no registrada")
         if ref not in existentes or existentes[ref].ong_id != ongs[cuit].id:
             raise ReservaNoExiste(f"La referencia {ref} no existe para la ONG {cuit}")
-        if existentes[ref].estado not in (EstadoAdjudicacion.ADJUDICADA, EstadoAdjudicacion.CERRADA):
-            raise ReservaEnConflicto(
-                f"La referencia {ref} está {existentes[ref].estado.value}; solo se cierra una ADJUDICADA")
+        _exigir_cerrable(ref, existentes[ref].estado)
     return [cerrar(db, cuit, ref) for cuit, ref in pedidos]
 
 
@@ -309,11 +320,9 @@ def resolver(db: Session, confirmar_refs: list[str], liberar_refs: list[str]) ->
         if ref not in existentes:
             raise ReservaNoExiste(f"La referencia {ref} no existe")
     for ref in confirmar_refs:
-        if existentes[ref].estado in (EstadoAdjudicacion.LIBERADA, EstadoAdjudicacion.CERRADA):
-            raise ReservaEnConflicto(f"La referencia {ref} está {existentes[ref].estado.value}; no se puede adjudicar")
+        _exigir_confirmable(ref, existentes[ref].estado)
     for ref in liberar_refs:
-        if existentes[ref].estado is EstadoAdjudicacion.CERRADA:
-            raise ReservaEnConflicto(f"La referencia {ref} ya está CERRADA; sus recursos ya se liberaron")
+        _exigir_liberable(ref, existentes[ref].estado)
 
     confirmadas = [confirmar(db, ref) for ref in confirmar_refs]
     liberadas = [liberar(db, ref) for ref in liberar_refs]

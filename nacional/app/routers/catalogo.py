@@ -24,6 +24,13 @@ from app.services.catalogo import riesgo_permitido
 router = APIRouter(tags=["catálogo"], dependencies=[Depends(get_current_account)], responses=errores(AUTH))
 
 
+def ong_o_404(db: Session, cuit: str, *opciones) -> Ong:
+    ong = db.scalar(select(Ong).where(Ong.cuit == cuit).options(*opciones))
+    if ong is None:
+        raise HTTPException(status_code=404, detail="ONG no registrada")
+    return ong
+
+
 def _tipo_out(t: TipoRecurso) -> TipoRecursoOut:
     return TipoRecursoOut(
         codigo=t.codigo, nombre=t.nombre, categoria=t.categoria, unidad=t.unidad,
@@ -77,14 +84,11 @@ def listar_ongs(
             responses=errores({404: "ONG no registrada"}))
 def ficha_ong(cuit: CuitPath, db: Session = Depends(get_db)):
     """Certificaciones (con su vencimiento y riesgo máximo) e inventario de la ONG, con lo que hoy puede operar."""
-    ong = db.scalar(
-        select(Ong).where(Ong.cuit == cuit).options(
-            selectinload(Ong.certificaciones).selectinload(OngCertificacion.certificacion),
-            selectinload(Ong.inventario).selectinload(Inventario.tipo_recurso),
-        )
+    ong = ong_o_404(
+        db, cuit,
+        selectinload(Ong.certificaciones).selectinload(OngCertificacion.certificacion),
+        selectinload(Ong.inventario).selectinload(Inventario.tipo_recurso),
     )
-    if ong is None:
-        raise HTTPException(status_code=404, detail="ONG no registrada")
     hoy = date.today()
     return FichaOngOut(
         cuit=ong.cuit, nombre=ong.nombre, estado=ong.estado,
