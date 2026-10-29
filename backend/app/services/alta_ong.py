@@ -6,7 +6,6 @@ lo local se crea al final y el usuario de Bonita se borra si algo falla después
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 
 import requests
 from sqlalchemy import or_, select
@@ -18,6 +17,7 @@ from app.core.security import hash_password
 from app.integrations.bonita import BonitaClient, BonitaError, bonita_login
 from app.integrations.nacional import NACIONAL_CAIDO, NacionalClient, NacionalError
 from app.models import Ong, Rol, Usuario
+from app.schemas.api import AltaOngIn
 from app.services import ServicioError
 
 BONITA_GRUPO_ONG = "/rescuesync/ong"
@@ -28,16 +28,6 @@ BONITA_CAIDO = "Bonita no responde; probá de nuevo en un momento."
 
 class AltaOngError(ServicioError):
     status = 409
-
-
-@dataclass
-class DatosAlta:
-    ong_nombre: str
-    cuit: str
-    nombre: str
-    username: str
-    password: str
-    rubros: list[dict]
 
 
 def normalizar_cuit(cuit: str) -> str:
@@ -55,7 +45,7 @@ def _borrar_usuario_bonita(bonita: BonitaClient, user_id: str) -> None:
         pass
 
 
-def _crear_en_bonita(settings: Settings, datos: DatosAlta) -> tuple[BonitaClient, str]:
+def _crear_en_bonita(settings: Settings, datos: AltaOngIn) -> tuple[BonitaClient, str]:
     user_id: str | None = None
     try:
         bonita = bonita_login(settings)
@@ -70,7 +60,7 @@ def _crear_en_bonita(settings: Settings, datos: DatosAlta) -> tuple[BonitaClient
     return bonita, user_id
 
 
-def alta_ong(db: Session, settings: Settings, nacional: NacionalClient, datos: DatosAlta) -> Usuario:
+def alta_ong(db: Session, settings: Settings, nacional: NacionalClient, datos: AltaOngIn) -> Usuario:
     cuit = normalizar_cuit(datos.cuit)
 
     existe = db.scalar(select(Ong.id).where(or_(Ong.nombre == datos.ong_nombre, Ong.cuit == cuit)))
@@ -89,7 +79,7 @@ def alta_ong(db: Session, settings: Settings, nacional: NacionalClient, datos: D
         raise AltaOngError(NACIONAL_CAIDO, 503) from exc
 
     try:
-        nacional.declarar_inventario(cuit, token, datos.rubros)
+        nacional.declarar_inventario(cuit, token, [r.model_dump() for r in datos.rubros])
     except NacionalError as exc:
         _borrar_usuario_bonita(bonita, user_id)
         raise AltaOngError(

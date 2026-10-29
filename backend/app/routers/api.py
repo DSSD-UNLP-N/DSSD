@@ -36,7 +36,7 @@ from app.services.emergencias import (
     registrar_emergencia,
     tarea_ong_en_bonita,
 )
-from app.services.alta_ong import DatosAlta, alta_ong
+from app.services.alta_ong import alta_ong
 from app.services.ciclo import adjudicar, decidir
 from app.services.ejecucion import finalizar, monitorear, resumen, validar_cierre
 from app.services.ofertas import publicar_oferta
@@ -276,11 +276,7 @@ def api_alta_ong(
     nacional: NacionalClient = Depends(get_nacional),
 ):
     """Alta pública de una ONG en Bonita, el Sistema Nacional y la app."""
-    datos = DatosAlta(
-        ong_nombre=body.ong_nombre, cuit=body.cuit, nombre=body.nombre, username=body.username,
-        password=body.password, rubros=[r.model_dump() for r in body.rubros],
-    )
-    usuario = alta_ong(db, settings, nacional, datos)
+    usuario = alta_ong(db, settings, nacional, body)
     return AltaOngOut(ong_nombre=usuario.ong.nombre, cuit=usuario.ong.cuit, username=usuario.username,
                       rubros=body.rubros)
 

@@ -7,17 +7,18 @@ from app.core.config import get_settings
 from app.core.security import verify_password
 from app.integrations.nacional import NacionalError
 from app.models import Ong, Rol
-from app.services.alta_ong import AltaOngError, DatosAlta, alta_ong, normalizar_cuit
+from app.schemas.api import AltaOngIn
+from app.services.alta_ong import AltaOngError, alta_ong, normalizar_cuit
 from tests.conftest import mock_bonita_alta_ong, mock_login
 
 RUBROS = [{"tipo_recurso": "PARAMEDICO", "cantidad_total": 4}, {"tipo_recurso": "RACION_ALIMENTO", "cantidad_total": 0}]
 
 
-def _datos(**kw) -> DatosAlta:
+def _datos(**kw) -> AltaOngIn:
     base = dict(ong_nombre="Techo Digno", cuit="30-71234567-8", nombre="Ana Paz", username="ong.techo",
                 password="secreto123", rubros=RUBROS)
     base.update(kw)
-    return DatosAlta(**base)
+    return AltaOngIn(**base)
 
 
 def _llamadas(metodo, sufijo):
