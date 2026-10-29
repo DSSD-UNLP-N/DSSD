@@ -71,9 +71,9 @@ backend/        App web (FastAPI + SQLAlchemy + Alembic). Ver backend/README.md.
 frontend/       SPA de React (Vite + TypeScript).
 nacional/       API Nacional (FastAPI): JWT, reservas, cierres, Dockerfile, scripts/verificar_despliegue.py.
 docs/           Guías de instalación: nube (por defecto) y local (plan B).
-bonita/         Herramientas: cliente REST y scripts que editan el .bos (conectores de cierre, login JWT, preparar_entorno.py, ver_conectores.py).
+bonita/         Scripts que editan el .bos sin abrir Studio (conectores de cierre, login JWT, preparar_entorno.py) y ver_conectores.py.
 entrega-1/      Entrega 1 (entregada): modelo BPM inicial e informe.
-entrega-2/      Entrega 2 (entregada): RescueSync.bos, ACME.xml (organización) y bitácora de cambios en Bonita.
+entrega-2/      Entrega 2 (entregada): RescueSync.bos (histórico), ACME.xml (organización vigente) y bitácora de cambios en Bonita.
 entrega-3/      Entrega 3: entrega42_local.bos y entrega42_nube.bos (el proceso vigente, local y contra la API de Render), ficha de entrega y Swagger.
 render.yaml     Blueprint de Render para la API Nacional (referencia; el servicio vivo se creó desde el repo).
 docker-compose.yml   Postgres 16 para el backend (opcional).
