@@ -30,7 +30,7 @@ from pathlib import Path
 
 from playwright.sync_api import Page, sync_playwright
 
-from comun import BOMBEROS, CRUZ_ROJA, comprometido, tarea_activa
+from comun import BOMBEROS, CRUZ_ROJA, admin_bonita, comprometido, tarea_activa
 import ui_comun
 from ui_comun import (PLAZO, Reporte, Ui, agregar_lote, cierre_de_ventana, esperar_estado, esperar_evaluacion,
                       esperar_hasta, ofrecer, publicar, registrar)
@@ -125,8 +125,7 @@ def main() -> int:
             vieja.unlink()
     cfg = get_settings()
     nacional = cfg.nacional_base_url.rstrip("/")
-    admin = BonitaClient(cfg.bonita_base_url, cfg.bonita_timeout_seconds)
-    admin.login(cfg.bonita_username, cfg.bonita_password)
+    admin = admin_bonita()
     r = Reporte()
     app, con_a = args.app, args.con_parcial
 

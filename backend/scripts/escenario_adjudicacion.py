@@ -20,10 +20,10 @@ import argparse
 import sys
 from datetime import datetime, timedelta
 
-from comun import BOMBEROS, CRUZ_ROJA, VENTANA_S, Escenario, comprometido, crear_y_publicar, esperar_detalle
+from comun import (BOMBEROS, CRUZ_ROJA, VENTANA_S, Escenario, admin_bonita, comprometido, crear_y_publicar, esperar_detalle,
+                   tareas)
 from nacional_auth import nacional_post
 from app.core.config import get_settings
-from app.integrations.bonita import BonitaClient
 
 # Ronda 2: la ventana solo tiene que alcanzar para publicar y que Cruz Roja ofrezca (una sola oferta).
 RONDA2_S = int(os.environ.get("ESCENARIO_VENTANA_S", 60)) * 3 // 4
@@ -36,8 +36,7 @@ def main() -> int:
     e = Escenario(args.app)
     cfg = get_settings()
     nacional = cfg.nacional_base_url.rstrip("/")
-    admin = BonitaClient(cfg.bonita_base_url, cfg.bonita_timeout_seconds)
-    admin.login(cfg.bonita_username, cfg.bonita_password)
+    admin = admin_bonita()
 
     print("== Preparación")
     previos = {(c, t): comprometido(nacional, c, t) for c, t in
@@ -58,8 +57,7 @@ def main() -> int:
             da is not None and db is not None and da["estado"] == db["estado"] == "EN_EVALUACION",
             (da and da["estado"], db and db["estado"]))
     if da is None or db is None:
-        print(f"\n{e.ok}/{e.total} verificaciones OK")
-        return 1
+        return e.terminar()
 
     print("\n== Permisos de la decisión")
     e.esperar("P1 El Municipio no decide → 403", e.post("operador.municipal", f"/emergencias/{ea}/decision", {"decision": "PARCIAL"}), 403)
@@ -70,7 +68,7 @@ def main() -> int:
     e.check("A3 PARCIAL → la emergencia pasa a ADJUDICACION", r.status_code == 200 and r.json()["estado"] == "ADJUDICACION", r.text)
     tarea = admin.wait_for_task(caso_a, "Adjudicar Ofertas", retries=20)
     e.check("A4 Bonita: el caso pasó a 'Adjudicar Ofertas' (Municipio)", tarea is not None,
-            [t["displayName"] for t in admin.get_human_tasks(caso_a)])
+            tareas(admin, caso_a))
     e.esperar("A5 El Coordinador no adjudica → 403", e.post("coordinador.regional", f"/emergencias/{ea}/adjudicar", {"cuits": [CRUZ_ROJA]}), 403)
     e.esperar("A6 No se puede elegir una ONG sin oferta validada → 400",
               e.post("operador.municipal", f"/emergencias/{ea}/adjudicar", {"cuits": ["30-99999999-9"]}), 400)
@@ -85,7 +83,7 @@ def main() -> int:
             (comprometido(nacional, CRUZ_ROJA, "PARAMEDICO"), comprometido(nacional, BOMBEROS, "PARAMEDICO")) == (4, 0))
     tarea = admin.wait_for_task(caso_a, "Monitorear Ejecucion", retries=20)
     e.check("A11 Bonita: el caso espera en 'Monitorear Ejecucion del Despliegue' (Coordinador)", tarea is not None,
-            [t["displayName"] for t in admin.get_human_tasks(caso_a)])
+            tareas(admin, caso_a))
     e.check("A12 Nacional: la reserva de Cruz Roja quedó ADJUDICADA y la de Bomberos LIBERADA",
             nacional_post(f"{nacional}/adjudicaciones/emg-{ea}-r1-{CRUZ_ROJA}/confirmar", timeout=60).json()["estado"] == "ADJUDICADA"
             and nacional_post(f"{nacional}/adjudicaciones/emg-{ea}-r1-{BOMBEROS}/liberar", timeout=60).json()["estado"] == "LIBERADA")
@@ -102,7 +100,7 @@ def main() -> int:
     e.check("B6 La oferta de la ronda 1 quedó retirada (con su historial)", len(o) == 1 and o[0]["retirada"] is True, o)
     tarea = admin.wait_for_task(caso_b, "Revisar Informacion", retries=20)
     e.check("B7 Bonita: el caso volvió a 'Revisar Informacion y Generar Lotes' (camino REFORMULAR)", tarea is not None,
-            [t["displayName"] for t in admin.get_human_tasks(caso_b)])
+            tareas(admin, caso_b))
 
     print("\n== B: segunda ronda")
     fin2 = datetime.now().astimezone() + timedelta(seconds=RONDA2_S)
@@ -119,7 +117,7 @@ def main() -> int:
         e.check("B11 La referencia lleva la ronda 2", ref2 == f"emg-{eb}-r2-{CRUZ_ROJA}", ref2)
         tarea = admin.wait_for_task(caso_b, "Adjudicar Ofertas", retries=20)
         e.check("B12 Bonita: el caso está en 'Adjudicar Ofertas'", tarea is not None,
-                [t["displayName"] for t in admin.get_human_tasks(caso_b)])
+                tareas(admin, caso_b))
         r = e.post("operador.municipal", f"/emergencias/{eb}/adjudicar", {"cuits": [CRUZ_ROJA]})
         e.check("B13 El Municipio adjudica", r.status_code == 200, r.text)
         d = esperar_detalle(e, eb, lambda d: d["estado"] == "EN_EJECUCION", 90)
@@ -132,8 +130,7 @@ def main() -> int:
         e.check(f"Liberar {ref}", r.status_code == 200, r.text)
     e.check("La API Nacional quedó como al empezar", {k: comprometido(nacional, *k) for k in previos} == previos)
 
-    print(f"\n{e.ok}/{e.total} verificaciones OK")
-    return 0 if e.ok == e.total else 1
+    return e.terminar()
 
 
 if __name__ == "__main__":

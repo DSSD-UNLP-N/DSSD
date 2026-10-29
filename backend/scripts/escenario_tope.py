@@ -18,10 +18,9 @@ import sys
 import time
 from datetime import datetime, timedelta
 
-from comun import Escenario, crear_y_publicar, retirar_ofertas_abiertas
+from comun import Escenario, admin_bonita, crear_y_publicar, retirar_ofertas_abiertas, tareas
 from nacional_auth import nacional_post
 from app.core.config import get_settings
-from app.integrations.bonita import BonitaClient
 
 VENTANA_CORTA_S = int(os.environ.get("ESCENARIO_VENTANA_S", 60)) + 20  # la tercera convocatoria vence durante la corrida
 
@@ -86,8 +85,8 @@ def main() -> int:
             r.status_code == 201 and len(r.json()["items"]) == 3, r.text)
     e.esperar("C7 Agua 3001 → 400 solo por el agua", e.ofrecer("ong.cruzroja", e1, (pm1, 3), (agua1, 3001)), 400,
               "Agua potable: entre tus ofertas abiertas sumás 3001 litros y tenés 3000 disponibles")
-    d = e.esperar("C8 Paramédicos 4 y agua 4000 → 400 con los dos recursos",
-                  e.ofrecer("ong.cruzroja", e1, (pm1, 4), (agua1, 4000)), 400, "Paramédico", "Agua potable")
+    e.esperar("C8 Paramédicos 4 y agua 4000 → 400 con los dos recursos",
+              e.ofrecer("ong.cruzroja", e1, (pm1, 4), (agua1, 4000)), 400, "Paramédico", "Agua potable")
     r = e.get("ong.cruzroja", f"/emergencias/{e1}/ofertas").json()[0]
     e.check("C8b El rechazo no guardó nada: sigue la versión 3", r["version_actual"] == 3, r)
 
@@ -132,11 +131,10 @@ def main() -> int:
               e.ofrecer("ong.bomberos", e1, (pm1, 1)), 400, "tenés 0 disponibles")
     e.check("V5 La app marca #3 como EN_EVALUACION (el conector de Bonita pidió el consolidado)",
             e.get("coordinador.regional", f"/emergencias/{e3}").json()["estado"] == "EN_EVALUACION")
-    admin = BonitaClient(settings.bonita_base_url, settings.bonita_timeout_seconds)
-    admin.login(settings.bonita_username, settings.bonita_password)
+    admin = admin_bonita()
     tarea = admin.wait_for_task(caso3, "Evaluar Cobertura", retries=30)
     e.check("V6 Bonita: el timer cerró la ventana y el caso pasó a 'Evaluar Cobertura…'", tarea is not None,
-            [t["displayName"] for t in admin.get_human_tasks(caso3)])
+            tareas(admin, caso3))
 
     print("\n== Limpieza")
     nacional = settings.nacional_base_url.rstrip("/")
@@ -145,8 +143,7 @@ def main() -> int:
     retiradas =sum(e.ofrecer(o, i).status_code == 201 for o in ("ong.cruzroja", "ong.bomberos") for i in (e1, e2))
     print(f"     {retiradas} ofertas del escenario retiradas (las convocatorias quedan abiertas 2 h)")
 
-    print(f"\n{e.ok}/{e.total} verificaciones OK")
-    return 0 if e.ok == e.total else 1
+    return e.terminar()
 
 
 if __name__ == "__main__":

@@ -13,11 +13,10 @@ from pathlib import Path
 
 import requests
 
-from comun import BOMBEROS, CRUZ_ROJA, Escenario, esperar_detalle, sin_tareas
+from comun import BOMBEROS, CRUZ_ROJA, Escenario, admin_bonita, esperar_detalle, sin_tareas, tareas
 from recuperar_cierre import recuperar
 from nacional_auth import nacional_get
 from app.core.config import get_settings
-from app.integrations.bonita import BonitaClient
 from app.seed import DEMO_PASSWORD
 
 REPO = Path(__file__).resolve().parents[2]
@@ -32,8 +31,7 @@ class Ctx:
         cfg = get_settings()
         self.cfg = cfg
         self.nacional = cfg.nacional_base_url.rstrip("/")
-        self.admin = BonitaClient(cfg.bonita_base_url, cfg.bonita_timeout_seconds)
-        self.admin.login(cfg.bonita_username, cfg.bonita_password)
+        self.admin = admin_bonita()
         self.emg: dict[str, dict] = {}  # variante -> {id, caso, lotes}
 
     # --- lectura -----------------------------------------------------------------------------------------------
@@ -64,7 +62,7 @@ class Ctx:
         return [a["texto"] for a in self.e.get(usuario, "/notificaciones").json() if f"#{emg} {texto}" in a["texto"]]
 
     def tareas(self, caso: int) -> list[str]:
-        return [t["displayName"] for t in self.admin.get_human_tasks(caso)]
+        return tareas(self.admin, caso)
 
     def espera_tarea(self, caso: int, prefijo: str, reintentos: int = 20) -> bool:
         return self.admin.wait_for_task(caso, prefijo, retries=reintentos) is not None

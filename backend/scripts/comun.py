@@ -42,6 +42,19 @@ def esperar(cond, segundos: float, desde: datetime | None = None, cada: float = 
     return None
 
 
+def admin_bonita() -> BonitaClient:
+    """Cliente de Bonita con el usuario técnico de la configuración: lee casos y tareas."""
+    cfg = get_settings()
+    admin = BonitaClient(cfg.bonita_base_url, cfg.bonita_timeout_seconds)
+    admin.login(cfg.bonita_username, cfg.bonita_password)
+    return admin
+
+
+def tareas(admin: BonitaClient, caso) -> list[str]:
+    """Nombres de las tareas humanas pendientes del caso."""
+    return [t["displayName"] for t in admin.get_human_tasks(caso)]
+
+
 def comprometido(nacional: str, cuit: str, tipo: str) -> int:
     ficha = nacional_get(f"{nacional}/ongs/{cuit}", timeout=60).json()
     return next(i["cantidad_comprometida"] for i in ficha["inventario"] if i["tipo_recurso"] == tipo)
@@ -84,6 +97,11 @@ class Escenario:
             self.total += 1
             self.ok += bool(condicion)
             print(f"  [{'OK   ' if condicion else 'FALLA'}] {nombre}" + ("" if condicion else f"  -> {detalle}"), flush=True)
+
+    def terminar(self) -> int:
+        """Imprime el resumen (correr_escenarios.py lo lee) y devuelve el código de salida del escenario."""
+        print(f"\n{self.ok}/{self.total} verificaciones OK")
+        return 0 if self.ok == self.total else 1
 
     def como(self, usuario: str) -> requests.Session:
         with self._lock:

@@ -37,7 +37,7 @@ sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE))
 
 from comun import (  # noqa: E402
-    BOMBEROS, CRUZ_ROJA, comprometido, esperar_resuelta, esperar_tarea_activa, sin_tareas, tarea_activa,
+    BOMBEROS, CRUZ_ROJA, admin_bonita, comprometido, esperar_resuelta, esperar_tarea_activa, sin_tareas, tarea_activa,
 )
 import ui_comun  # noqa: E402
 from ui_comun import (  # noqa: E402
@@ -46,7 +46,6 @@ from ui_comun import (  # noqa: E402
 )
 from nacional_auth import nacional_get  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
-from app.integrations.bonita import BonitaClient  # noqa: E402
 
 IMG = HERE.parents[1] / "entrega-3" / "img" / "parada-3"
 ui_comun.CAPTURAS = IMG
@@ -74,8 +73,7 @@ def main() -> int:
             vieja.unlink()
     cfg = get_settings()
     nacional = cfg.nacional_base_url.rstrip("/")
-    admin = BonitaClient(cfg.bonita_base_url, cfg.bonita_timeout_seconds)
-    admin.login(cfg.bonita_username, cfg.bonita_password)
+    admin = admin_bonita()
     r = Reporte()
     app = args.app
 

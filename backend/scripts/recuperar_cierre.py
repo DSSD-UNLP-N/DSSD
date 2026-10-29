@@ -23,9 +23,9 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from comun import admin_bonita  # noqa: E402
 from nacional_auth import nacional_post  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
-from app.integrations.bonita import BonitaClient  # noqa: E402
 from app.seed import DEMO_PASSWORD  # noqa: E402
 
 
@@ -41,8 +41,7 @@ def recuperar(emergencia: int, app: str = "http://localhost:8001", coordinador: 
     sesion = requests.Session()
     sesion.post(f"{app}/api/auth/login", json={"username": coordinador, "password": clave}, timeout=30).raise_for_status()
     d = sesion.get(f"{app}/api/emergencias/{emergencia}", timeout=30).json()
-    bonita = BonitaClient(cfg.bonita_base_url, cfg.bonita_timeout_seconds)
-    bonita.login(cfg.bonita_username, cfg.bonita_password)
+    bonita = admin_bonita()
     fallidos = bonita._request("GET", "/API/bpm/flowNode",
                                params={"f": [f"caseId={d['bonita_case_id']}", "state=failed"], "p": 0, "c": 20}).json()
     if d["estado"] != "EN_EJECUCION" or not fallidos or not (d.get("ejecucion") or {}).get("todas_finalizadas"):

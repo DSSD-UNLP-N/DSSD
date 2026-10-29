@@ -27,10 +27,9 @@ from datetime import datetime, timedelta
 
 from playwright.sync_api import sync_playwright
 
-from comun import esperar, retirar_ofertas_abiertas, tarea_activa
+from comun import admin_bonita, esperar, retirar_ofertas_abiertas, tarea_activa
 import ui_comun
 from ui_comun import PLAZO, PLAZO_LENTO, POLL_S, Reporte, Ui, dato, ejecutada_por
-from app.core.config import get_settings
 from app.integrations.bonita import BonitaClient
 
 TAREA_TRAS_ALTA = "Revisar Informacion"
@@ -306,10 +305,8 @@ def main() -> int:
     if not args.sin_capturas:
         for vieja in ui_comun.CAPTURAS.glob("*.png"):  # solo quedan las de esta corrida
             vieja.unlink()
-    settings = get_settings()
     r = Reporte()
-    admin = BonitaClient(settings.bonita_base_url, settings.bonita_timeout_seconds)
-    admin.login(settings.bonita_username, settings.bonita_password)
+    admin = admin_bonita()
 
     with sync_playwright() as pw:
         try:

@@ -352,8 +352,7 @@ def main() -> int:
     e.check("Nacional: ninguna reserva quedó RESERVADA o ADJUDICADA", ctx.reservas_abiertas() == 0, ctx.reservas_abiertas())
     abiertos = ctx.admin._request("GET", "/API/bpm/case", params={"p": 0, "c": 50}).json()
     e.check("Bonita: ningún caso abierto", abiertos == [], [c["id"] for c in abiertos])
-    print(f"\n{e.ok}/{e.total} verificaciones OK")
-    return 0 if e.ok == e.total else 1
+    return e.terminar()
 
 
 if __name__ == "__main__":

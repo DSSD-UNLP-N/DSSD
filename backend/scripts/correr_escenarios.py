@@ -31,8 +31,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 
-from app.core.config import get_settings  # noqa: E402
-from app.integrations.bonita import BonitaClient  # noqa: E402
+from comun import admin_bonita  # noqa: E402
 
 ESCENARIOS = {
     "evaluacion": "escenario_evaluacion.py",
@@ -45,9 +44,7 @@ ESCENARIOS = {
 
 
 def borrar_casos_abiertos() -> int:
-    cfg = get_settings()
-    admin = BonitaClient(cfg.bonita_base_url, cfg.bonita_timeout_seconds)
-    admin.login(cfg.bonita_username, cfg.bonita_password)
+    admin = admin_bonita()
     casos = admin._request("GET", "/API/bpm/case", params={"p": 0, "c": 200}).json()
     for c in casos:
         admin.delete_case(c["id"])

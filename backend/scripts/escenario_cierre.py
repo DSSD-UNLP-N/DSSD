@@ -23,11 +23,10 @@ import argparse
 import sys
 from datetime import datetime, timedelta
 
-from comun import (BOMBEROS, CRUZ_ROJA, VENTANA_S, Escenario, comprometido, crear_y_publicar, esperar_detalle,
-                   sin_tareas)
+from comun import (BOMBEROS, CRUZ_ROJA, VENTANA_S, Escenario, admin_bonita, comprometido, crear_y_publicar, esperar_detalle,
+                   sin_tareas, tareas)
 from nacional_auth import nacional_get
 from app.core.config import get_settings
-from app.integrations.bonita import BonitaClient
 
 
 def main() -> int:
@@ -37,8 +36,7 @@ def main() -> int:
     e = Escenario(args.app)
     cfg = get_settings()
     nacional = cfg.nacional_base_url.rstrip("/")
-    admin = BonitaClient(cfg.bonita_base_url, cfg.bonita_timeout_seconds)
-    admin.login(cfg.bonita_username, cfg.bonita_password)
+    admin = admin_bonita()
 
     print("== Preparación")
     claves = [(CRUZ_ROJA, "PARAMEDICO"), (BOMBEROS, "PARAMEDICO")]
@@ -54,8 +52,7 @@ def main() -> int:
     d = esperar_detalle(e, emg, lambda d: d["evaluacion"] is not None, 200, desde=fin)
     e.check("Bonita evaluó: EN_EVALUACION con 60 %", d is not None and d["estado"] == "EN_EVALUACION", d and d["estado"])
     if d is None:
-        print(f"\n{e.ok}/{e.total} verificaciones OK")
-        return 1
+        return e.terminar()
     r = e.post("coordinador.regional", f"/emergencias/{emg}/decision", {"decision": "PARCIAL"})
     e.check("El Coordinador sigue con la cobertura parcial", r.status_code == 200, r.text)
     admin.wait_for_task(caso, "Adjudicar Ofertas", retries=20)
@@ -72,14 +69,14 @@ def main() -> int:
     e.esperar("E3 El Coordinador monitorea", e.post("coordinador.regional", f"/emergencias/{emg}/monitorear", {}), 200)
     e.check("E4 Bonita pasó a «Confirmar Finalizacion de Actividades»",
             admin.wait_for_task(caso, "Confirmar Finalizacion", retries=20) is not None,
-            [t["displayName"] for t in admin.get_human_tasks(caso)])
+            tareas(admin, caso))
     e.esperar("E5 Con una ONG pendiente no se valida el cierre → 409", e.post("coordinador.regional", f"/emergencias/{emg}/validar-cierre", {}), 409)
     e.esperar("E6 Bomberos marca su actividad finalizada", e.post("ong.bomberos", f"/emergencias/{emg}/finalizar", {}), 200)
     e.check("E7 Con Cruz Roja pendiente, Bonita sigue en «Confirmar Finalizacion»",
             admin.find_task(caso, "Confirmar Finalizacion") is not None)
     e.esperar("E8 Cruz Roja marca su actividad finalizada", e.post("ong.cruzroja", f"/emergencias/{emg}/finalizar", {}), 200)
     e.check("E9 Bonita pasó a «Validar Cierre Operativo Bilateral»",
-            admin.wait_for_task(caso, "Validar Cierre", retries=20) is not None, [t["displayName"] for t in admin.get_human_tasks(caso)])
+            admin.wait_for_task(caso, "Validar Cierre", retries=20) is not None, tareas(admin, caso))
     d = e.get("coordinador.regional", f"/emergencias/{emg}").json()
     e.check("E10 El detalle dice que todas finalizaron", d["ejecucion"]["todas_finalizadas"] is True, d["ejecucion"])
 
@@ -94,14 +91,13 @@ def main() -> int:
         cierres = nacional_get(f"{nacional}/ongs/{cuit}/cierres", timeout=60).json()
         propios = [c for c in cierres if c["referencia"] == f"emg-{emg}-r1-{cuit}"]
         e.check(f"C5 Nacional: hay un cierre de {nombre} para esta emergencia", len(propios) == 1, cierres)
-    e.check("C6 Bonita: el caso terminó, sin tareas pendientes", sin_tareas(admin, caso), [t["displayName"] for t in admin.get_human_tasks(caso)])
+    e.check("C6 Bonita: el caso terminó, sin tareas pendientes", sin_tareas(admin, caso), tareas(admin, caso))
     for usuario in ("ong.cruzroja", "ong.bomberos"):
         avisos = e.get(usuario, "/notificaciones").json()
         e.check(f"C7 {usuario}: recibió el aviso del cierre",
                 any(f"#{emg} se cerró" in a["texto"] for a in avisos), [a["texto"] for a in avisos][:3])
 
-    print(f"\n{e.ok}/{e.total} verificaciones OK")
-    return 0 if e.ok == e.total else 1
+    return e.terminar()
 
 
 if __name__ == "__main__":
