@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.integrations.nacional import NACIONAL_CAIDO, NacionalError
+from app.integrations.nacional import NacionalError
 from app.models import EstadoEmergencia
 from app.routers import api
 from app.services.alta_ong import AltaOngError
@@ -18,6 +18,7 @@ from app.services.ofertas import OfertaError
 from tests.conftest import body_alta_ong as _alta_ong, crear_emergencia
 
 MENSAJE = "mensaje del servicio"
+NACIONAL_CAIDO = "El Sistema Nacional no responde; probá de nuevo en un momento."
 FUTURO = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
 EMERGENCIA = {"tipo": "inundacion", "nivel_gravedad": "ALTO", "zona_afectada": "Centro", "descripcion": "d"}
 
