@@ -118,6 +118,14 @@ class Emergencia(Base):
     lotes: Mapped[list["Lote"]] = relationship(back_populates="emergencia", cascade="all, delete-orphan")
     ofertas: Mapped[list["Oferta"]] = relationship(back_populates="emergencia")
 
+    @property
+    def municipio_nombre(self) -> str | None:
+        return self.municipio.nombre if self.municipio else None
+
+    @property
+    def municipio_provincia(self) -> str | None:
+        return self.municipio.provincia if self.municipio else None
+
 
 class Lote(Base):
     """Lote de necesidades (p. ej. 5 paramédicos, 1000 raciones de alimento)."""
@@ -162,6 +170,14 @@ class Oferta(Base):
     def items_vigentes(self) -> list["OfertaItem"]:
         """Los ítems de la versión actual; sin ninguno, la oferta está retirada."""
         return [i for i in self.items if i.version == self.version_actual]
+
+    @property
+    def retirada(self) -> bool:
+        return not self.items_vigentes
+
+    @property
+    def ong_nombre(self) -> str:
+        return self.ong.nombre
 
 
 class OfertaItem(Base):

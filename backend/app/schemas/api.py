@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AfterValidator, AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 from app.models import EstadoEmergencia, EstadoOferta, Gravedad, Rol, TipoLote
 from app.schemas.evaluacion import Evaluacion
@@ -93,6 +93,12 @@ class EmergenciaOut(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+    @field_validator("evaluacion", mode="before")
+    @classmethod
+    def _sin_evaluacion_cruda(cls, v):
+        # Desde el modelo llega el JSON crudo de la columna: la evaluación la agrega aparte el detalle (y no para la ONG).
+        return None if isinstance(v, str) else v
+
 
 class DecisionIn(BaseModel):
     # PARCIAL: seguir con lo reservado. REFORMULAR: liberar todo y volver a cargar lotes (ronda siguiente).
@@ -135,7 +141,7 @@ class OfertaOut(BaseModel):
     ong_id: int
     ong_nombre: str
     version_actual: int
-    items: list[OfertaItemOut]
+    items: list[OfertaItemOut] = Field(validation_alias=AliasChoices("items_vigentes", "items"))  # del modelo, solo la versión actual
     retirada: bool = False  # la versión vigente no tiene ítems
     estado: EstadoOferta = EstadoOferta.PRESENTADA
 

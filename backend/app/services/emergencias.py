@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 import requests
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import Settings
 from app.integrations.bonita import BonitaClient, BonitaError, bonita_login
@@ -65,16 +65,22 @@ def cerrar_ventanas_vencidas(db: Session) -> None:
         db.commit()
 
 
+# Lo que muestra EmergenciaOut: se trae en una consulta por relación, no una por emergencia.
+_CON_LOTES = (selectinload(Emergencia.lotes), selectinload(Emergencia.municipio))
+
+
 def emergencias_visibles(db: Session, user: Usuario) -> list[Emergencia]:
     cerrar_ventanas_vencidas(db)
     return list(db.scalars(
-        select(Emergencia).where(_filtro_visibilidad(user)).order_by(Emergencia.id.desc())
+        select(Emergencia).where(_filtro_visibilidad(user)).order_by(Emergencia.id.desc()).options(*_CON_LOTES)
     ))
 
 
 def emergencia_visible(db: Session, user: Usuario, emergencia_id: int) -> Emergencia | None:
     cerrar_ventanas_vencidas(db)
-    return db.scalar(select(Emergencia).where(Emergencia.id == emergencia_id, _filtro_visibilidad(user)))
+    return db.scalar(
+        select(Emergencia).where(Emergencia.id == emergencia_id, _filtro_visibilidad(user)).options(*_CON_LOTES)
+    )
 
 
 class AltaEmergenciaError(ServicioError):

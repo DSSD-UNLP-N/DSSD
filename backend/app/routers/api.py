@@ -22,7 +22,6 @@ from app.schemas.api import (
     LoteOut,
     NotificacionOut,
     OfertaIn,
-    OfertaItemOut,
     OfertaOut,
     PublicarIn,
     TipoRecursoOut,
@@ -45,34 +44,9 @@ from app.services.lotes import agregar_lote, borrar_lote, publicar_convocatoria
 router = APIRouter(prefix="/api")
 
 
-def _load_emergencia(db: Session, emergencia_id: int) -> Emergencia | None:
-    return db.scalar(
-        select(Emergencia)
-        .where(Emergencia.id == emergencia_id)
-        .options(selectinload(Emergencia.lotes), selectinload(Emergencia.municipio))
-    )
-
-
-def _emergencia_out(e: Emergencia) -> EmergenciaOut:
-    return EmergenciaOut(
-        id=e.id,
-        tipo=e.tipo,
-        nivel_gravedad=e.nivel_gravedad,
-        zona_afectada=e.zona_afectada,
-        descripcion=e.descripcion,
-        estado=e.estado,
-        bonita_case_id=e.bonita_case_id,
-        ventana_ofertas_fin=e.ventana_ofertas_fin,
-        creada_en=e.creada_en,
-        municipio_nombre=e.municipio.nombre if e.municipio else None,
-        municipio_provincia=e.municipio.provincia if e.municipio else None,
-        lotes=[LoteOut.model_validate(l) for l in e.lotes],
-    )
-
-
 def _require_visible(db: Session, user: Usuario, emergencia_id: int) -> Emergencia:
-    emergencia = _load_emergencia(db, emergencia_id)
-    if emergencia is None or emergencia_visible(db, user, emergencia_id) is None:
+    emergencia = emergencia_visible(db, user, emergencia_id)
+    if emergencia is None:
         raise HTTPException(status_code=404, detail="Emergencia no encontrada")
     return emergencia
 
@@ -116,13 +90,7 @@ def api_listar(
     user: Usuario = Depends(require_role()),
     db: Session = Depends(get_db),
 ):
-    items = emergencias_visibles(db, user)
-    out: list[EmergenciaOut] = []
-    for e in items:
-        full = _load_emergencia(db, e.id)
-        if full:
-            out.append(_emergencia_out(full))
-    return out
+    return emergencias_visibles(db, user)
 
 
 @router.post("/emergencias", response_model=EmergenciaOut, status_code=201)
@@ -132,9 +100,7 @@ def api_crear(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ):
-    emergencia = registrar_emergencia(db, settings, operador=user, **body.model_dump())
-    full = _load_emergencia(db, emergencia.id)
-    return _emergencia_out(full or emergencia)
+    return registrar_emergencia(db, settings, operador=user, **body.model_dump())
 
 
 @router.get("/emergencias/{emergencia_id}", response_model=EmergenciaOut)
@@ -148,7 +114,7 @@ def api_detalle(
 
 
 def _detalle_out(db: Session, emergencia: Emergencia, user: Usuario, settings: Settings) -> EmergenciaOut:
-    out = _emergencia_out(emergencia)
+    out = EmergenciaOut.model_validate(emergencia)
     out.tarea_bonita = tarea_ong_en_bonita(settings, emergencia, user)
     if emergencia.evaluacion and user.rol is not Rol.ONG:
         out.evaluacion = Evaluacion.model_validate_json(emergencia.evaluacion)
@@ -168,7 +134,7 @@ def api_decidir(
     """Con la cobertura incompleta: PARCIAL sigue con lo reservado; REFORMULAR libera todo y empieza otra ronda."""
     emergencia = _require_visible(db, user, emergencia_id)
     decidir(db, settings, nacional, emergencia=emergencia, coordinador=user, decision=body.decision)
-    return _detalle_out(db, _load_emergencia(db, emergencia_id), user, settings)
+    return _detalle_out(db, emergencia, user, settings)
 
 
 @router.post("/emergencias/{emergencia_id}/adjudicar", response_model=EmergenciaOut)
@@ -182,14 +148,14 @@ def api_adjudicar(
     """El Municipio elige entre las ofertas validadas. Bonita confirma lo elegido y libera lo demás."""
     emergencia = _require_visible(db, user, emergencia_id)
     adjudicar(settings, emergencia=emergencia, municipal=user, cuits=body.cuits)
-    return _detalle_out(db, _load_emergencia(db, emergencia_id), user, settings)
+    return _detalle_out(db, emergencia, user, settings)
 
 
 def _avanzar(db: Session, emergencia_id: int, user: Usuario, settings: Settings, paso) -> EmergenciaOut:
     """Un paso de la ejecución: lo hace `paso(emergencia)`; si algo falla no queda nada a medias."""
     emergencia = _require_visible(db, user, emergencia_id)
     paso(emergencia)
-    return _detalle_out(db, _load_emergencia(db, emergencia_id), user, settings)
+    return _detalle_out(db, emergencia, user, settings)
 
 
 @router.post("/emergencias/{emergencia_id}/monitorear", response_model=EmergenciaOut)
@@ -313,28 +279,12 @@ def api_publicar(
     settings: Settings = Depends(get_settings),
 ):
     emergencia = _require_visible(db, user, emergencia_id)
-    publicada = publicar_convocatoria(
+    return publicar_convocatoria(
         db,
         settings,
         emergencia=emergencia,
         coordinador=user,
         ventana_fin=body.ventana_fin,
-    )
-    full = _load_emergencia(db, publicada.id)
-    return _emergencia_out(full or publicada)
-
-
-def _oferta_out(o: Oferta) -> OfertaOut:
-    items = [OfertaItemOut.model_validate(i) for i in o.items_vigentes]
-    return OfertaOut(
-        id=o.id,
-        emergencia_id=o.emergencia_id,
-        ong_id=o.ong_id,
-        ong_nombre=o.ong.nombre,
-        version_actual=o.version_actual,
-        items=items,
-        retirada=not items,
-        estado=o.estado,
     )
 
 
@@ -348,8 +298,7 @@ def api_listar_ofertas(
     query = select(Oferta).where(Oferta.emergencia_id == emergencia_id)
     if user.rol is Rol.ONG:  # una ONG no ve las ofertas de las demás
         query = query.where(Oferta.ong_id == user.ong_id)
-    ofertas = db.scalars(query.options(selectinload(Oferta.items), selectinload(Oferta.ong))).all()
-    return [_oferta_out(o) for o in ofertas]
+    return db.scalars(query.options(selectinload(Oferta.items), selectinload(Oferta.ong))).all()
 
 
 @router.post("/emergencias/{emergencia_id}/ofertas", response_model=OfertaOut, status_code=201)
@@ -362,5 +311,4 @@ def api_crear_oferta(
 ):
     """Cada envío es la oferta completa: una versión nueva con todos sus ítems (T-12)."""
     emergencia = _require_visible(db, user, emergencia_id)
-    oferta = publicar_oferta(db, nacional, emergencia=emergencia, ong=user.ong, items=body.items)
-    return _oferta_out(oferta)
+    return publicar_oferta(db, nacional, emergencia=emergencia, ong=user.ong, items=body.items)
