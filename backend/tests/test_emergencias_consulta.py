@@ -122,3 +122,14 @@ def test_a_otros_perfiles_y_al_listado_no_se_les_consulta_bonita(login, emergenc
         r = login(usuario).get(f"/api/emergencias/{ajena}")
         assert r.status_code == 200 and r.json()["tarea_bonita"] is None
     assert login("ong.bomberos").get("/api/emergencias").status_code == 200
+
+
+@pytest.mark.parametrize("estado", [EstadoEmergencia.EN_EVALUACION, EstadoEmergencia.REGISTRADA])
+def test_listado_con_una_evaluacion_guardada_no_la_expone(login, seeded, estado):
+    """La columna guarda la evaluación como JSON crudo (también la conserva una emergencia que volvió a REGISTRADA por
+    REFORMULAR): el listado no la serializa ni falla por ella; el detalle la arma aparte."""
+    eid, _ = crear_emergencia(seeded, estado, ofertas=(), evaluacion='{"cobertura_completa": false, "lotes": []}')
+    for usuario in ("coordinador.regional", "operador.municipal"):
+        r = login(usuario).get("/api/emergencias")
+        assert r.status_code == 200
+        assert [e["evaluacion"] for e in r.json() if e["id"] == eid] == [None]
