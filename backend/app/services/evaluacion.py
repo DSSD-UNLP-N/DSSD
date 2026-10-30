@@ -18,14 +18,17 @@ class ConsolidadoError(ServicioError):
     status = 409  # la emergencia no está en un estado desde el que se pueda entregar el consolidado
 
 
-def consolidar_ofertas(db: Session, emergencia_id: int) -> dict | None:
-    """El consolidado del contrato (contrato del consolidado), o None si la emergencia no existe."""
-    cerrar_ventanas_vencidas(db)
-    e = db.scalar(
-        select(Emergencia).where(Emergencia.id == emergencia_id).options(selectinload(Emergencia.lotes))
-    )
+def _emergencia(db: Session, emergencia_id: int) -> Emergencia:
+    e = db.get(Emergencia, emergencia_id)
     if e is None:
-        return None
+        raise ServicioError("Emergencia no encontrada", 404)
+    return e
+
+
+def consolidar_ofertas(db: Session, emergencia_id: int) -> dict:
+    """El consolidado del contrato (contrato del consolidado); 404 si la emergencia no existe."""
+    cerrar_ventanas_vencidas(db)
+    e = _emergencia(db, emergencia_id)
     if e.estado is EstadoEmergencia.CERRADA:
         e.estado = EstadoEmergencia.EN_EVALUACION
         db.commit()
@@ -63,15 +66,13 @@ def consolidar_ofertas(db: Session, emergencia_id: int) -> dict | None:
     }
 
 
-def guardar_evaluacion(db: Session, emergencia_id: int, resultado: Evaluacion) -> bool:
-    """Guarda lo que Bonita recibió de la API Nacional. False si la emergencia no existe.
+def guardar_evaluacion(db: Session, emergencia_id: int, resultado: Evaluacion) -> None:
+    """Guarda lo que Bonita recibió de la API Nacional. 404 si la emergencia no existe.
 
     Vale mientras la emergencia espera la decisión (EN_EVALUACION) y para su ronda actual. Si la cobertura está
     completa no hay nada que decidir y pasa directo a ADJUDICACION, igual que el caso en Bonita. Repetir el mismo
     evento deja todo como está."""
-    e = db.get(Emergencia, emergencia_id)
-    if e is None:
-        return False
+    e = _emergencia(db, emergencia_id)
     if e.estado not in (EstadoEmergencia.EN_EVALUACION, EstadoEmergencia.ADJUDICACION):
         raise ConsolidadoError(f"La emergencia está en {e.estado.value}: ya no espera una evaluación")
     if resultado.emergencia_id != e.id or resultado.ronda != e.ronda:
@@ -86,17 +87,14 @@ def guardar_evaluacion(db: Session, emergencia_id: int, resultado: Evaluacion) -
     if resultado.cobertura_completa:
         e.estado = EstadoEmergencia.ADJUDICACION
     db.commit()
-    return True
 
 
-def registrar_adjudicacion(db: Session, emergencia_id: int, adjudicadas: list[str], no_adjudicadas: list[str]) -> bool:
+def registrar_adjudicacion(db: Session, emergencia_id: int, adjudicadas: list[str], no_adjudicadas: list[str]) -> None:
     """Bonita ya confirmó las reservas elegidas y liberó las demás: se marcan las ofertas, se avisa a cada ONG y la
-    emergencia pasa a EN_EJECUCION. False si no existe. Repetir el evento no vuelve a avisar."""
-    e = db.get(Emergencia, emergencia_id)
-    if e is None:
-        return False
+    emergencia pasa a EN_EJECUCION. 404 si no existe. Repetir el evento no vuelve a avisar."""
+    e = _emergencia(db, emergencia_id)
     if e.estado is EstadoEmergencia.EN_EJECUCION:
-        return True
+        return
     if e.estado is not EstadoEmergencia.ADJUDICACION:
         raise ConsolidadoError(f"La emergencia está en {e.estado.value}: no espera una adjudicación")
     if set(adjudicadas) & set(no_adjudicadas):
@@ -112,17 +110,14 @@ def registrar_adjudicacion(db: Session, emergencia_id: int, adjudicadas: list[st
         db.add(Notificacion(ong_id=o.ong_id, emergencia_id=e.id, texto=texto))
     e.estado = EstadoEmergencia.EN_EJECUCION
     db.commit()
-    return True
 
 
-def registrar_cierre(db: Session, emergencia_id: int, cuits: list[str]) -> bool:
+def registrar_cierre(db: Session, emergencia_id: int, cuits: list[str]) -> None:
     """Bonita ya liberó en la API Nacional lo de cada ONG adjudicada: la emergencia queda RESUELTA y cada ONG recibe
-    el aviso del cierre. False si no existe. Repetir el evento no vuelve a avisar."""
-    e = db.get(Emergencia, emergencia_id)
-    if e is None:
-        return False
+    el aviso del cierre. 404 si no existe. Repetir el evento no vuelve a avisar."""
+    e = _emergencia(db, emergencia_id)
     if e.estado is EstadoEmergencia.RESUELTA:
-        return True
+        return
     if e.estado is not EstadoEmergencia.EN_EJECUCION:
         raise ConsolidadoError(f"La emergencia está en {e.estado.value}: no espera un cierre")
     ofertas = db.scalars(select(Oferta).where(Oferta.emergencia_id == e.id).options(selectinload(Oferta.ong)))
@@ -132,4 +127,3 @@ def registrar_cierre(db: Session, emergencia_id: int, cuits: list[str]) -> bool:
             db.add(Notificacion(ong_id=o.ong_id, emergencia_id=e.id, texto=texto))
     e.estado = EstadoEmergencia.RESUELTA
     db.commit()
-    return True

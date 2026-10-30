@@ -177,3 +177,14 @@ def test_el_evento_de_una_emergencia_inexistente_es_404_y_uno_mal_formado_es_422
     r = client.post(f"/api/bonita/emergencias/{emergencia_id}/eventos", headers=CLAVE,
                     json={"tipo": "OTRO", "resultado": {}})
     assert r.status_code == 422
+
+
+@pytest.mark.parametrize("metodo, ruta, cuerpo", [
+    ("GET", "ofertas", None),
+    ("POST", "eventos", {"tipo": "EVALUACION", "resultado": _evaluacion(9999, 1)}),
+    ("POST", "eventos", {"tipo": "ADJUDICACION", "adjudicadas": [CRUZ_ROJA], "no_adjudicadas": []}),
+    ("POST", "eventos", {"tipo": "CIERRE", "cuits": [CRUZ_ROJA]}),
+])
+def test_emergencia_inexistente_es_404_con_el_detail_que_esperan_los_conectores(client, metodo, ruta, cuerpo):
+    r = client.request(metodo, f"/api/bonita/emergencias/9999/{ruta}", headers=CLAVE, json=cuerpo)
+    assert (r.status_code, r.json()) == (404, {"detail": "Emergencia no encontrada"})

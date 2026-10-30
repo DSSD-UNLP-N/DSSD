@@ -1,5 +1,5 @@
 """Endpoints que llama el motor de Bonita (conectores del proceso); sin sesión, con X-Api-Key."""
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.deps import require_bonita_key
@@ -14,10 +14,7 @@ router = APIRouter(prefix="/api/bonita", dependencies=[Depends(require_bonita_ke
 
 @router.get("/emergencias/{emergencia_id}/ofertas")
 def consolidado_de_ofertas(emergencia_id: int, db: Session = Depends(get_db)):
-    consolidado = consolidar_ofertas(db, emergencia_id)
-    if consolidado is None:
-        raise HTTPException(status_code=404, detail="Emergencia no encontrada")
-    return consolidado
+    return consolidar_ofertas(db, emergencia_id)
 
 
 @router.post("/emergencias/{emergencia_id}/eventos", status_code=status.HTTP_204_NO_CONTENT)
@@ -25,11 +22,10 @@ def evento_de_bonita(emergencia_id: int, evento: Evento, db: Session = Depends(g
     """Bonita avisa lo que hizo: evaluó las ofertas (EVALUACION), resolvió las reservas (ADJUDICACION) o liberó los
     recursos al cerrar (CIERRE)."""
     if evento.tipo == "EVALUACION":
-        existe = guardar_evaluacion(db, emergencia_id, evento.resultado)
+        guardar_evaluacion(db, emergencia_id, evento.resultado)
     elif evento.tipo == "ADJUDICACION":
-        existe = registrar_adjudicacion(db, emergencia_id, evento.adjudicadas, evento.no_adjudicadas)
+        registrar_adjudicacion(db, emergencia_id, evento.adjudicadas, evento.no_adjudicadas)
     else:
-        existe = registrar_cierre(db, emergencia_id, evento.cuits)
-    if not existe:
-        raise HTTPException(status_code=404, detail="Emergencia no encontrada")
+        registrar_cierre(db, emergencia_id, evento.cuits)
+    # Explícito: sin esto FastAPI agrega `content-type: application/json` a un 204 sin cuerpo.
     return Response(status_code=status.HTTP_204_NO_CONTENT)
