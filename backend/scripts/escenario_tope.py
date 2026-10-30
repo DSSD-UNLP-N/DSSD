@@ -59,7 +59,7 @@ def main() -> int:
     print(f"     emergencias #{e1}, #{e2} (2 h) y #{e3} (vence {fin3:%H:%M:%S}); casos Bonita {caso1}…{caso3}")
     e.check("Las tres convocatorias quedaron abiertas",
             all(e.get("coordinador.regional", f"/emergencias/{i}").json()["estado"] == "CONVOCATORIA" for i in (e1, e2, e3)))
-    print(f"     limpieza: {retirar_ofertas_abiertas(e.app, lambda em: em["id"] in (e1, e2, e3))} ofertas de corridas anteriores retiradas")
+    print(f"     limpieza: {retirar_ofertas_abiertas(e.app, lambda em: em['id'] in (e1, e2, e3))} ofertas de corridas anteriores retiradas")
 
     pm1, agua1, rac1, pm2, pm3 = l1["PARAMEDICO"], l1["AGUA_POTABLE"], l1["RACION_ALIMENTO"], l2["PARAMEDICO"], l3["PARAMEDICO"]
 

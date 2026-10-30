@@ -50,7 +50,7 @@ def main() -> int:
     eb, caso_b, lb = crear_y_publicar(e, "Escenario B", "MEDIO",
                                       [("AGUA_POTABLE", 2000, "PRINCIPAL"), ("RACION_ALIMENTO", 1000, "APOYO")], fin)
     print(f"     A=#{ea} (caso {caso_a}) · B=#{eb} (caso {caso_b}) · vencen {fin:%H:%M:%S}")
-    print(f"     limpieza: {retirar_ofertas_abiertas(e.app, lambda em: em["id"] in (ea, eb))} ofertas de corridas anteriores retiradas")
+    print(f"     limpieza: {retirar_ofertas_abiertas(e.app, lambda em: em['id'] in (ea, eb))} ofertas de corridas anteriores retiradas")
 
     e.esperar("A1 Cruz Roja ofrece 4 paramédicos", e.ofrecer("ong.cruzroja", ea, (la["PARAMEDICO"], 4)), 201)
     e.esperar("A2 Bomberos ofrece 2 paramédicos", e.ofrecer("ong.bomberos", ea, (la["PARAMEDICO"], 2)), 201)
