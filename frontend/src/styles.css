@@ -21,6 +21,8 @@
   --font-display: "Syne", sans-serif;
   --font-body: "Figtree", sans-serif;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Spring stiffness 500 / damping 25 (framer-motion's default for x/y), sampled. */
+  --spring: linear(0, 0.125, 0.39, 0.67, 0.895, 1.039, 1.107, 1.119, 1.099, 1.066, 1.033, 1.008, 0.993, 0.986, 0.986, 0.989, 0.993, 0.997, 1);
 }
 
 * { box-sizing: border-box; }
@@ -802,6 +804,15 @@ button, input, select, textarea { font: inherit; }
   to { transform: translate(-5vmin, 7vmin) rotate(16deg); }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Entry animations (ex framer-motion). fill-mode backwards: no transform is left behind. */
+.fade-in { animation: fade-up-14 380ms cubic-bezier(0, 0, 0.58, 1) backwards; }
+.rise-in { animation: fade-up-12 350ms cubic-bezier(0, 0, 0.58, 1) backwards; }
+.alert-in { animation: fade-in-o 300ms cubic-bezier(0.25, 0.1, 0.35, 1) backwards, drop-6 450ms var(--spring) backwards; }
+@keyframes fade-up-14 { from { opacity: 0; transform: translateY(14px); } }
+@keyframes fade-up-12 { from { opacity: 0; transform: translateY(12px); } }
+@keyframes fade-in-o { from { opacity: 0; } }
+@keyframes drop-6 { from { transform: translateY(-6px); } }
 
 @media (max-width: 900px) {
   .login-stage { grid-template-columns: 1fr; }

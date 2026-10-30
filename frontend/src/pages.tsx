@@ -1,6 +1,5 @@
 import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
-import { AnimatePresence, motion } from "framer-motion";
 import { api, type AltaOngIn, type Emergencia, type Meta, type Notificacion, type Oferta, type Rol, type TipoRecurso } from "./api";
 import { useAuth } from "./auth";
 import { FlowBubbles } from "./FlowBubbles";
@@ -34,13 +33,6 @@ const MENU: Record<Rol, { title: string; to: string; hint: string }[]> = {
   AUDITOR: [
     { title: "Consulta de emergencias", to: "/emergencias", hint: "Vista de solo lectura" },
   ],
-};
-
-const fade = {
-  initial: { opacity: 0, y: 14 },
-  animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -8 },
-  transition: { duration: 0.38, ease: "easeOut" as const },
 };
 
 function formatFecha(iso: string | null) {
@@ -251,7 +243,7 @@ export function LoginPage() {
   return (
     <div className="login-stage">
       <section className="login-hero">
-        <motion.div className="login-hero-inner" {...fade}>
+        <div className="login-hero-inner fade-in">
           <FlowBubbles />
           <div className="login-hero-copy">
             <p className="kicker" style={{ color: "rgba(246,243,236,0.7)" }}>
@@ -270,16 +262,14 @@ export function LoginPage() {
               <span className="login-stat">Red de ONGs</span>
             </div>
           </div>
-        </motion.div>
+        </div>
       </section>
       <section className="login-panel">
-        <motion.div className="login-card" {...fade} transition={{ ...fade.transition, delay: 0.08 }}>
+        <div className="login-card fade-in" style={{ animationDelay: "0.08s" }}>
           <h1>Ingresar</h1>
           <p className="sub">Usá tu perfil operativo para continuar.</p>
           {error && (
-            <motion.div className="alert" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}>
-              {error}
-            </motion.div>
+            <div className="alert alert-in">{error}</div>
           )}
           <form onSubmit={onSubmit}>
             <div className="field">
@@ -334,7 +324,7 @@ export function LoginPage() {
               </ul>
             </details>
           )}
-        </motion.div>
+        </div>
       </section>
     </div>
   );
@@ -345,7 +335,7 @@ export function HomePage() {
   const items = MENU[user!.rol] ?? [];
   return (
     <Shell>
-      <motion.div {...fade}>
+      <div className="fade-in">
         <p className="kicker">Panel operativo</p>
         <h1 className="title" style={{ fontSize: "clamp(1.9rem, 4vw, 2.45rem)" }}>
           Hola, {user!.nombre.split(" ")[0]}
@@ -355,12 +345,7 @@ export function HomePage() {
         </p>
         <nav className={`menu-grid ${items.length > 1 ? "cols-2" : ""}`}>
           {items.map((item, i) => (
-            <motion.div
-              key={item.to}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.06 * i, duration: 0.35 }}
-            >
+            <div key={item.to} className="rise-in" style={{ animationDelay: `${0.06 * i}s` }}>
               <Link className="menu-card" to={item.to}>
                 <div className="menu-title">
                   <strong>{item.title}</strong>
@@ -370,10 +355,10 @@ export function HomePage() {
                   →
                 </span>
               </Link>
-            </motion.div>
+            </div>
           ))}
         </nav>
-      </motion.div>
+      </div>
     </Shell>
   );
 }
@@ -397,7 +382,7 @@ export function EmergenciasPage() {
 
   return (
     <Shell>
-      <motion.div {...fade}>
+      <div className="fade-in">
         <div className="page-head">
           <div>
             <p className="kicker">Operación</p>
@@ -421,55 +406,45 @@ export function EmergenciasPage() {
           <div className="panel empty">
             <div className="loading-dot" style={{ margin: "0 auto" }} />
           </div>
+        ) : items.length === 0 ? (
+          <div className="panel empty">
+            <div className="empty-mark">∅</div>
+            <p>
+              {user!.rol === "ONG"
+                ? "No hay convocatorias abiertas por ahora."
+                : "Todavía no hay emergencias registradas."}
+            </p>
+          </div>
         ) : (
-          <AnimatePresence mode="popLayout">
-            {items.length === 0 ? (
-              <div className="panel empty">
-                <div className="empty-mark">∅</div>
-                <p>
-                  {user!.rol === "ONG"
-                    ? "No hay convocatorias abiertas por ahora."
-                    : "Todavía no hay emergencias registradas."}
-                </p>
+          <div className="cards two">
+            {items.map((em, i) => (
+              <div key={em.id} className="rise-in" style={{ animationDelay: `${i * 0.04}s` }}>
+                <Link
+                  className="em-card"
+                  to={`/emergencias/${em.id}`}
+                  style={{ ["--grav-color" as string]: GRAV_COLOR[em.nivel_gravedad] }}
+                >
+                  <div className="em-card-top">
+                    <span className="badge muted">#{em.id}</span>
+                    {estadoBadge(em.estado)}
+                  </div>
+                  <h3>{meta?.tipos[em.tipo] ?? em.tipo}</h3>
+                  <p>{em.zona_afectada}</p>
+                  <div className="meta-line">
+                    <span className={`badge g-${em.nivel_gravedad}`}>{em.nivel_gravedad}</span>
+                    <span>{formatFecha(em.creada_en)}</span>
+                    {em.lotes.length > 0 && (
+                      <span>
+                        {em.lotes.length} lote{em.lotes.length === 1 ? "" : "s"}
+                      </span>
+                    )}
+                  </div>
+                </Link>
               </div>
-            ) : (
-              <div className="cards two">
-                {items.map((em, i) => (
-                  <motion.div
-                    key={em.id}
-                    layout
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.04, duration: 0.35 }}
-                  >
-                    <Link
-                      className="em-card"
-                      to={`/emergencias/${em.id}`}
-                      style={{ ["--grav-color" as string]: GRAV_COLOR[em.nivel_gravedad] }}
-                    >
-                      <div className="em-card-top">
-                        <span className="badge muted">#{em.id}</span>
-                        {estadoBadge(em.estado)}
-                      </div>
-                      <h3>{meta?.tipos[em.tipo] ?? em.tipo}</h3>
-                      <p>{em.zona_afectada}</p>
-                      <div className="meta-line">
-                        <span className={`badge g-${em.nivel_gravedad}`}>{em.nivel_gravedad}</span>
-                        <span>{formatFecha(em.creada_en)}</span>
-                        {em.lotes.length > 0 && (
-                          <span>
-                            {em.lotes.length} lote{em.lotes.length === 1 ? "" : "s"}
-                          </span>
-                        )}
-                      </div>
-                    </Link>
-                  </motion.div>
-                ))}
-              </div>
-            )}
-          </AnimatePresence>
+            ))}
+          </div>
         )}
-      </motion.div>
+      </div>
     </Shell>
   );
 }
@@ -506,7 +481,7 @@ export function NuevaEmergenciaPage() {
 
   return (
     <Shell>
-      <motion.div {...fade}>
+      <div className="fade-in">
         <PageHeader
           to="/"
           label="Volver al panel"
@@ -581,7 +556,7 @@ export function NuevaEmergenciaPage() {
             </div>
           </aside>
         </div>
-      </motion.div>
+      </div>
     </Shell>
   );
 }
@@ -653,7 +628,7 @@ export function AltaOngPage() {
 
   return (
     <Shell>
-      <motion.div {...fade}>
+      <div className="fade-in">
         <PageHeader
           to="/login"
           label="Ir al ingreso"
@@ -755,7 +730,7 @@ export function AltaOngPage() {
             </div>
           </form>
         </div>
-      </motion.div>
+      </div>
     </Shell>
   );
 }
@@ -898,7 +873,7 @@ export function DetallePage() {
 
   return (
     <Shell>
-      <motion.div {...fade}>
+      <div className="fade-in">
         <PageHeader
           to="/emergencias"
           label="Volver al listado"
@@ -1245,7 +1220,7 @@ export function DetallePage() {
         <Link className="btn btn-ghost" to="/emergencias" style={{ display: "inline-flex" }}>
           ← Volver al listado
         </Link>
-      </motion.div>
+      </div>
     </Shell>
   );
 }
