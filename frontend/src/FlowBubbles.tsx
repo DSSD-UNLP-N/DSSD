@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { type CSSProperties, useEffect, useState } from "react";
 
 type ZoneId = "municipio" | "centro" | "ong" | "rescate" | "ambulancia";
 type Phase = "panorama" | "traveling" | "scene";
@@ -94,13 +93,17 @@ const STEPS = [
   },
 ];
 
-const TRAVEL_MS = 700;
+const TRAVEL_MS = 700; // = transition of .flow-panorama in styles.css
 
 export function FlowBubbles() {
   const [activeStep, setActiveStep] = useState(1);
   const [focus, setFocus] = useState<ZoneId | null>(null);
   const [phase, setPhase] = useState<Phase>("panorama");
   const [pinned, setPinned] = useState(false);
+  /** Scenes mounted so far: they stay mounted so they can fade out with CSS. */
+  const [seen, setSeen] = useState<ZoneId[]>([]);
+  /** Bumped on every trip so the travel streak animation restarts. */
+  const [trip, setTrip] = useState(0);
 
   const activeZone = focus ? ZONES.find((z) => z.id === focus) ?? null : null;
   const inScene = phase === "scene" && activeZone;
@@ -124,6 +127,8 @@ export function FlowBubbles() {
     setPinned(true);
     setFocus(zoneId);
     setActiveStep(zone.step);
+    setSeen((s) => (s.includes(zoneId) ? s : [...s, zoneId]));
+    setTrip((t) => t + 1);
     setPhase("traveling");
     window.setTimeout(() => setPhase("scene"), TRAVEL_MS);
   }
@@ -136,6 +141,7 @@ export function FlowBubbles() {
   }
 
   function resetView() {
+    setTrip((t) => t + 1);
     setPhase("traveling");
     window.setTimeout(() => {
       setFocus(null);
@@ -148,28 +154,14 @@ export function FlowBubbles() {
       <div className="flow-art">
         <div className="flow-stage">
           {/* Panorama base */}
-          <motion.div
-            className="flow-panorama"
-            animate={
-              traveling && activeZone
-                ? {
-                    scale: 1.22,
-                    x: activeZone.fly.x,
-                    y: activeZone.fly.y,
-                    filter: "blur(7px)",
-                    opacity: 0.45,
-                  }
-                : phase === "scene"
-                  ? {
-                      scale: 1.1,
-                      opacity: 0,
-                      filter: "blur(10px)",
-                      x: activeZone?.fly.x ?? 0,
-                      y: activeZone?.fly.y ?? 0,
-                    }
-                  : { scale: 1, x: 0, y: 0, filter: "blur(0px)", opacity: 1 }
+          <div
+            className={`flow-panorama ${traveling && activeZone ? "is-traveling" : phase === "scene" ? "is-scene" : ""}`}
+            style={
+              {
+                "--fly-x": `${activeZone?.fly.x ?? 0}px`,
+                "--fly-y": `${activeZone?.fly.y ?? 0}px`,
+              } as CSSProperties
             }
-            transition={{ duration: TRAVEL_MS / 1000, ease: [0.22, 1, 0.36, 1] }}
           >
             <img
               src="/hero-dssd.png"
@@ -180,46 +172,30 @@ export function FlowBubbles() {
               decoding="async"
               draggable={false}
             />
-          </motion.div>
+          </div>
 
-          {/* Destination scene */}
-          <AnimatePresence>
-            {inScene && (
-              <motion.div
-                key={activeZone.id}
-                className="flow-destination"
-                initial={{ opacity: 0, scale: 1.08, filter: "blur(10px)" }}
-                animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
-                exit={{ opacity: 0, scale: 1.04, filter: "blur(6px)" }}
-                transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-              >
-                <img
-                  src={activeZone.scene}
-                  alt={activeZone.label}
-                  className="flow-destination-img"
-                  width={1200}
-                  height={675}
-                  decoding="async"
-                  draggable={false}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {/* Destination scenes */}
+          {ZONES.filter((zone) => seen.includes(zone.id)).map((zone) => (
+            <div
+              key={zone.id}
+              className={`flow-destination ${inScene && activeZone.id === zone.id ? "is-on" : ""}`}
+            >
+              <img
+                src={zone.scene}
+                alt={zone.label}
+                className="flow-destination-img"
+                width={1200}
+                height={675}
+                decoding="async"
+                draggable={false}
+              />
+            </div>
+          ))}
 
           {/* Travel streak */}
-          <AnimatePresence>
-            {traveling && (
-              <motion.div
-                className="flow-travel-veil"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.25 }}
-              >
-                <span className="flow-travel-line" />
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <div className={`flow-travel-veil ${traveling ? "is-on" : ""}`} aria-hidden>
+            <span key={trip} className="flow-travel-line" />
+          </div>
 
           {/* Hotspots only on panorama */}
           {phase === "panorama" && (
@@ -245,20 +221,9 @@ export function FlowBubbles() {
             </div>
           )}
 
-          <AnimatePresence>
-            {inScene && (
-              <motion.button
-                type="button"
-                className="flow-reset"
-                initial={{ opacity: 0, y: -8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                onClick={resetView}
-              >
-                Ver panorama
-              </motion.button>
-            )}
-          </AnimatePresence>
+          <button type="button" className={`flow-reset ${inScene ? "is-on" : ""}`} onClick={resetView}>
+            Ver panorama
+          </button>
         </div>
 
       </div>
