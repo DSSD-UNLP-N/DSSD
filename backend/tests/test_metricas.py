@@ -53,6 +53,7 @@ def test_metricas_locales_agrega_estados_correspondientes(client, seeded):
         "proyectos_finalizados": 1,
         "suministros_movilizados": 30,
         "porcentaje_consorcios": 0.0,
+        "tiempo_promedio_resolucion_horas": 0.0,
     }
 
 
@@ -61,6 +62,31 @@ def test_metricas_locales_sin_ofertas_devuelve_cero(client):
 
     assert response.status_code == 200
     assert response.json()["porcentaje_consorcios"] == 0.0
+    assert response.json()["tiempo_promedio_resolucion_horas"] == 0.0
+
+
+def test_metricas_locales_combina_datos_de_bonita(client, monkeypatch):
+    class FakeBonita:
+        def __init__(self, base_url, timeout):
+            pass
+
+        def login(self, username, password):
+            pass
+
+        def resolve_process_id(self, name, version):
+            return "42"
+
+        def average_archived_case_duration_hours(self, process_definition_id):
+            assert process_definition_id == "42"
+            return 12.5
+
+    monkeypatch.setattr("app.routers.api.BonitaClient", FakeBonita)
+
+    response = client.get("/api/metricas/locales")
+
+    assert response.status_code == 200
+    assert response.json()["proyectos_finalizados"] == 0
+    assert response.json()["tiempo_promedio_resolucion_horas"] == 12.5
 
 
 def test_metricas_locales_calcula_porcentaje_de_proyectos_resueltos_con_consorcio(client, seeded):

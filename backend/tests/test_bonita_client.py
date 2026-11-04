@@ -107,6 +107,21 @@ def test_get_case_devuelve_quien_inicio_el_caso(client):
 
 
 @responses.activate
+def test_average_archived_case_duration_hours_calcula_duracion_media(client):
+    responses.add(
+        responses.GET,
+        f"{BASE}/API/bpm/archivedCase",
+        json=[
+            {"started_date": "2026-11-03T10:00:00Z", "end_date": "2026-11-03T14:00:00Z"},
+            {"started_date": "2026-11-03T10:00:00Z", "end_date": "2026-11-03T20:00:00Z"},
+            {"started_date": None, "end_date": None},
+        ],
+    )
+
+    assert client.average_archived_case_duration_hours("42") == 7.0
+
+
+@responses.activate
 def test_get_archived_human_tasks_trae_el_ejecutor(client):
     responses.add(responses.GET, f"{BASE}/API/bpm/archivedHumanTask",
                   json=[{"displayName": "Registrar Emergencia", "executedBy": "101"}])

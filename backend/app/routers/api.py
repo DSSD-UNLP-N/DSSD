@@ -1,5 +1,6 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+import requests
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -9,6 +10,7 @@ from app.core.security import verify_password
 from app.core.labels import ROL_LABEL, TIPO_LABEL
 from app.db import get_db
 from app.integrations.nacional import NacionalClient, NacionalError, get_nacional
+from app.integrations.bonita import BonitaClient, BonitaError
 from app.models import (
     Emergencia,
     EstadoEmergencia,
@@ -148,10 +150,24 @@ def metricas_locales(db: Session = Depends(get_db)) -> MetricasLocalesOut:
         else 0.0
     )
 
+    tiempo_promedio_resolucion_horas = 0.0
+    try:
+        settings = get_settings()
+        bonita = BonitaClient(settings.bonita_base_url, settings.bonita_timeout_seconds)
+        bonita.login(settings.bonita_username, settings.bonita_password)
+        process_id = bonita.resolve_process_id(
+            settings.bonita_process_name,
+            settings.bonita_process_version,
+        )
+        tiempo_promedio_resolucion_horas = bonita.average_archived_case_duration_hours(process_id)
+    except (BonitaError, requests.RequestException):
+        tiempo_promedio_resolucion_horas = 0.0
+
     return MetricasLocalesOut(
         proyectos_finalizados=proyectos_finalizados,
         suministros_movilizados=suministros_movilizados,
         porcentaje_consorcios=porcentaje_consorcios,
+        tiempo_promedio_resolucion_horas=tiempo_promedio_resolucion_horas,
     )
 
 

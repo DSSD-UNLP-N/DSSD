@@ -5,3 +5,4 @@ class MetricasLocalesOut(BaseModel):
     proyectos_finalizados: int
     suministros_movilizados: int
     porcentaje_consorcios: float
+    tiempo_promedio_resolucion_horas: float

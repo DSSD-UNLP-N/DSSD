@@ -6,6 +6,7 @@ setear variables y avanzar tareas. Ver bonita/scripts/bonita_client.py para la
 version de linea de comandos.
 """
 import time
+from datetime import datetime
 
 import requests
 
@@ -13,6 +14,15 @@ CONTRACT_INPUTS = ("emergenciaId", "municipioId", "nivelGravedad", "ventanaOfert
 
 class BonitaError(RuntimeError):
     pass
+
+
+def _parse_bonita_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
 class BonitaClient:
@@ -87,6 +97,28 @@ class BonitaClient:
         resp = self._request("GET", f"/API/bpm/case/{case_id}")
         resp.raise_for_status()
         return resp.json()
+
+    def average_archived_case_duration_hours(self, process_definition_id: str) -> float:
+        """Devuelve la duración media, en horas, de los casos archivados del proceso."""
+        resp = self._request(
+            "GET",
+            "/API/bpm/archivedCase",
+            params={
+                "f": f"processDefinitionId={process_definition_id}",
+                "p": 0,
+                "c": 200,
+            },
+        )
+        resp.raise_for_status()
+
+        durations = []
+        for case in resp.json():
+            started = _parse_bonita_datetime(case.get("started_date"))
+            ended = _parse_bonita_datetime(case.get("end_date"))
+            if started is None or ended is None or ended < started:
+                continue
+            durations.append((ended - started).total_seconds() / 3600)
+        return sum(durations) / len(durations) if durations else 0.0
 
     def get_archived_human_tasks(self, case_id) -> list:
         """Tareas ya completadas del caso. Traen 'executedBy': con quién las ejecutó el motor."""
