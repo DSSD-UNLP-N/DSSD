@@ -54,13 +54,19 @@ def test_una_oferta_cubre_varios_lotes_y_cada_envio_es_una_version(api_login, ab
     assert [(i["lote_id"], i["cantidad"]) for i in v2["items"]] == [(lotes[0], 80)]
 
 
-def test_una_oferta_puede_marcarse_como_consorcio_y_actualizarse(api_login, abierta):
+def test_una_oferta_puede_marcarse_como_consorcio_y_actualizarse(api_login, abierta, seeded):
     eid, lotes = abierta
     c = api_login("ong.cruzroja")
+    with seeded() as db:
+        bomberos = db.query(Ong).filter_by(nombre="Bomberos Voluntarios").one()
 
     consorcio = c.post(
         f"/api/emergencias/{eid}/ofertas",
-        json={**_items(lotes, 10, 5), "es_consorcio": True},
+        json={
+            **_items(lotes, 10, 5),
+            "es_consorcio": True,
+            "ongs_asociadas_ids": [bomberos.id],
+        },
     )
     assert consorcio.status_code == 201
     assert consorcio.json()["es_consorcio"] is True
@@ -89,6 +95,30 @@ def test_una_oferta_consorcio_expone_sus_ongs_asociadas(api_login, abierta, seed
 
     assert response.status_code == 201
     assert response.json()["ongs_asociadas_ids"] == [bomberos.id]
+
+
+@pytest.mark.parametrize(
+    ("es_consorcio", "ongs_asociadas_ids", "detail"),
+    [
+        (True, [], "al menos una ONG"),
+        (True, [1, 1], "repetir"),
+    ],
+)
+def test_rechaza_consorcio_sin_participantes_o_con_ids_duplicados(
+    api_login, abierta, es_consorcio, ongs_asociadas_ids, detail
+):
+    eid, lotes = abierta
+    response = api_login("ong.cruzroja").post(
+        f"/api/emergencias/{eid}/ofertas",
+        json={
+            **_items(lotes, 10, 5),
+            "es_consorcio": es_consorcio,
+            "ongs_asociadas_ids": ongs_asociadas_ids,
+        },
+    )
+
+    assert response.status_code == 400
+    assert detail in response.json()["detail"]
 
 
 def test_ventana_vencida_rechaza_ofertas(api_login, seeded):

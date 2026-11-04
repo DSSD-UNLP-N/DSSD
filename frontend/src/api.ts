@@ -128,6 +128,8 @@ export type Oferta = {
   ong_id: number;
   ong_nombre: string;
   version_actual: number;
+  es_consorcio: boolean;
+  ongs_asociadas_ids: number[];
   items: { lote_id: number; recurso: string; cantidad: number; version: number }[];
   retirada: boolean;
   estado: "PRESENTADA" | "ADJUDICADA" | "NO_ADJUDICADA" | "FINALIZADA";
@@ -235,10 +237,14 @@ export const api = {
   listOfertas: (id: number) => request<Oferta[]>(`/api/emergencias/${id}/ofertas`),
   createOferta: (
     id: number,
-    items: { lote_id: number; recurso: string; cantidad: number }[],
+    body: {
+      items: { lote_id: number; recurso: string; cantidad: number }[];
+      es_consorcio?: boolean;
+      ongs_asociadas_ids?: number[];
+    },
   ) =>
     request<Oferta>(`/api/emergencias/${id}/ofertas`, {
       method: "POST",
-      body: JSON.stringify({ items }),
+      body: JSON.stringify(body),
     }),
 };

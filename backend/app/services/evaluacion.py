@@ -37,7 +37,11 @@ def consolidar_ofertas(db: Session, emergencia_id: int) -> dict | None:
     ofertas = db.scalars(
         select(Oferta)
         .where(Oferta.emergencia_id == e.id)
-        .options(selectinload(Oferta.items), selectinload(Oferta.ong))
+        .options(
+            selectinload(Oferta.items),
+            selectinload(Oferta.ong),
+            selectinload(Oferta.ongs_asociadas),
+        )
         .order_by(Oferta.id)
     )
     consolidadas = []
@@ -52,6 +56,14 @@ def consolidar_ofertas(db: Session, emergencia_id: int) -> dict | None:
                 "ong": o.ong.nombre,
                 "version": o.version_actual,
                 "es_consorcio": o.es_consorcio,
+                "ongs_asociadas": [
+                    {
+                        "id": ong.id,
+                        "cuit": ong.cuit,
+                        "nombre": ong.nombre,
+                    }
+                    for ong in o.ongs_asociadas
+                ],
                 "items": items,
             })
     return {

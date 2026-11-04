@@ -62,6 +62,10 @@ def publicar_oferta(
     if ong is None:
         raise OfertaError("Tu usuario no tiene ONG asignada")
     ongs_asociadas_ids = ongs_asociadas_ids or []
+    if es_consorcio and not ongs_asociadas_ids:
+        raise OfertaError("Una oferta consorcio debe tener al menos una ONG asociada")
+    if len(ongs_asociadas_ids) != len(set(ongs_asociadas_ids)):
+        raise OfertaError("No se puede repetir una ONG asociada")
 
     por_lote = {l.id: l for l in emergencia.lotes}
     pedidos = [item.lote_id for item in items]
@@ -100,7 +104,7 @@ def publicar_oferta(
         ongs_asociadas = db.scalars(
             select(Ong).where(Ong.id.in_(ongs_asociadas_ids))
         ).all()
-        if len(ongs_asociadas) != len(set(ongs_asociadas_ids)):
+        if len(ongs_asociadas) != len(ongs_asociadas_ids):
             raise OfertaError("Una o más ONGs asociadas no existen")
         oferta.ongs_asociadas = ongs_asociadas
     elif not es_consorcio:

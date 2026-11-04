@@ -111,27 +111,20 @@ def meta(settings: Settings = Depends(get_settings)):
 
 
 @router.get("/metricas/locales", response_model=MetricasLocalesOut)
-def metricas_locales(db: Session = Depends(get_db)) -> MetricasLocalesOut:
+def metricas_locales(
+    user: Usuario = Depends(require_role(Rol.AUDITOR)),
+    db: Session = Depends(get_db),
+) -> MetricasLocalesOut:
     proyectos_finalizados = db.scalar(
         select(func.count(Emergencia.id)).where(
-            Emergencia.estado.in_(
-                (EstadoEmergencia.RESUELTA, EstadoEmergencia.CERRADA)
-            )
+            Emergencia.estado == EstadoEmergencia.RESUELTA
         )
     ) or 0
 
     suministros_movilizados = db.scalar(
         select(func.coalesce(func.sum(Lote.cantidad), 0))
         .join(Emergencia, Lote.emergencia_id == Emergencia.id)
-        .where(
-            Emergencia.estado.in_(
-                (
-                    EstadoEmergencia.EN_EJECUCION,
-                    EstadoEmergencia.RESUELTA,
-                    EstadoEmergencia.CERRADA,
-                )
-            )
-        )
+        .where(Emergencia.estado == EstadoEmergencia.RESUELTA)
     ) or 0
 
     ofertas_resueltas = (EstadoOferta.ADJUDICADA, EstadoOferta.FINALIZADA)

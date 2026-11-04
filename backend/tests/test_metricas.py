@@ -10,7 +10,7 @@ from app.models import (
 )
 
 
-def test_metricas_locales_agrega_estados_correspondientes(client, seeded):
+def test_metricas_locales_agrega_estados_correspondientes(client, seeded, login):
     with seeded() as db:
         municipio = db.query(Municipio).one()
         db.add_all(
@@ -46,18 +46,20 @@ def test_metricas_locales_agrega_estados_correspondientes(client, seeded):
         )
         db.commit()
 
+    login("auditor")
     response = client.get("/api/metricas/locales")
 
     assert response.status_code == 200
     assert response.json() == {
         "proyectos_finalizados": 1,
-        "suministros_movilizados": 30,
+        "suministros_movilizados": 10,
         "porcentaje_consorcios": 0.0,
         "tiempo_promedio_resolucion_horas": 0.0,
     }
 
 
-def test_metricas_locales_sin_ofertas_devuelve_cero(client):
+def test_metricas_locales_sin_ofertas_devuelve_cero(client, login):
+    login("auditor")
     response = client.get("/api/metricas/locales")
 
     assert response.status_code == 200
@@ -65,7 +67,7 @@ def test_metricas_locales_sin_ofertas_devuelve_cero(client):
     assert response.json()["tiempo_promedio_resolucion_horas"] == 0.0
 
 
-def test_metricas_locales_combina_datos_de_bonita(client, monkeypatch):
+def test_metricas_locales_combina_datos_de_bonita(client, monkeypatch, login):
     class FakeBonita:
         def __init__(self, base_url, timeout):
             pass
@@ -82,6 +84,7 @@ def test_metricas_locales_combina_datos_de_bonita(client, monkeypatch):
 
     monkeypatch.setattr("app.routers.api.BonitaClient", FakeBonita)
 
+    login("auditor")
     response = client.get("/api/metricas/locales")
 
     assert response.status_code == 200
@@ -89,7 +92,9 @@ def test_metricas_locales_combina_datos_de_bonita(client, monkeypatch):
     assert response.json()["tiempo_promedio_resolucion_horas"] == 12.5
 
 
-def test_metricas_locales_calcula_porcentaje_de_proyectos_resueltos_con_consorcio(client, seeded):
+def test_metricas_locales_calcula_porcentaje_de_proyectos_resueltos_con_consorcio(
+    client, seeded, login
+):
     with seeded() as db:
         municipio = db.query(Municipio).one()
         ongs = db.query(Ong).order_by(Ong.id).all()
@@ -137,6 +142,7 @@ def test_metricas_locales_calcula_porcentaje_de_proyectos_resueltos_con_consorci
         )
         db.commit()
 
+    login("auditor")
     response = client.get("/api/metricas/locales")
 
     assert response.status_code == 200

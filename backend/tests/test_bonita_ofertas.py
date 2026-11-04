@@ -66,6 +66,7 @@ def test_devuelve_el_consolidado_del_contrato(client, vencida):
     assert cuerpo["ofertas"] == [{
         "cuit": CRUZ_ROJA, "ong": "Cruz Roja Argentina", "version": 2,
         "es_consorcio": False,
+        "ongs_asociadas": [],
         "items": [{"lote_id": lote_pm, "tipo_recurso": "PARAMEDICO", "cantidad": 4}],
     }]
 

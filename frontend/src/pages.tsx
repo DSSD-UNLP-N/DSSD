@@ -20,6 +20,13 @@ const GRAV_COLOR: Record<Emergencia["nivel_gravedad"], string> = {
   BAJO: "#3f6212",
 };
 
+// Reemplazar por el catálogo de ONGs cuando esté disponible en la API.
+const ONGS_DISPONIBLES = [
+  { id: 1, nombre: "ONG #1" },
+  { id: 2, nombre: "ONG #2" },
+  { id: 3, nombre: "ONG #3" },
+];
+
 const MENU: Record<Rol, { title: string; to: string; hint: string }[]> = {
   MUNICIPIO: [
     { title: "Registrar emergencia", to: "/emergencias/nueva", hint: "Alta operativa y caso Bonita" },
@@ -773,6 +780,8 @@ export function DetallePage() {
   const [busy, setBusy] = useState(false);
   const [tipos, setTipos] = useState<TipoRecurso[]>([]);
   const [elegidas, setElegidas] = useState<string[]>([]);
+  const [esConsorcio, setEsConsorcio] = useState(false);
+  const [ongsSeleccionadas, setOngsSeleccionadas] = useState<number[]>([]);
 
   const reload = useCallback(async () => {
     const [em, m, of] = await Promise.all([api.getEmergencia(id), api.meta(), api.listOfertas(id)]);
@@ -901,12 +910,18 @@ export function DetallePage() {
   async function enviarOferta(
     items: { lote_id: number; recurso: string; cantidad: number }[],
     mensaje: (o: Oferta) => string,
+    consorcio = esConsorcio,
+    participantes = ongsSeleccionadas,
   ) {
     setBusy(true);
     setError(null);
     setOk(null);
     try {
-      const o = await api.createOferta(id, items);
+      const o = await api.createOferta(id, {
+        items,
+        es_consorcio: consorcio,
+        ongs_asociadas_ids: consorcio ? participantes : [],
+      });
       setOk(mensaje(o));
       await reload();
     } catch (err) {
@@ -927,10 +942,19 @@ export function DetallePage() {
       setError("Indicá cuánto ofrecés para al menos un lote (o usá «Retirar mi oferta»).");
       return;
     }
+    if (esConsorcio && ongsSeleccionadas.length === 0) {
+      setError("Seleccioná al menos una ONG asociada para una oferta consorcio.");
+      return;
+    }
     await enviarOferta(items, (o) => `Oferta enviada (versión ${o.version_actual})`);
   }
 
   const miOferta = user!.rol === "ONG" ? ofertas[0] : undefined;
+
+  useEffect(() => {
+    setEsConsorcio(miOferta?.es_consorcio ?? false);
+    setOngsSeleccionadas(miOferta?.ongs_asociadas_ids ?? []);
+  }, [miOferta?.id, miOferta?.es_consorcio, miOferta?.ongs_asociadas_ids]);
 
   // Retirar = reenviar la oferta sin ese lote (versión nueva); sin ningún lote, la oferta queda retirada.
   const itemsVigentes = (miOferta && !miOferta.retirada ? miOferta.items : []).map(({ lote_id, recurso, cantidad }) => ({
@@ -1162,6 +1186,42 @@ export function DetallePage() {
                 )}
               </div>
             ))}
+            <label className="lote-row" style={{ cursor: "pointer", marginTop: "0.75rem" }}>
+              <span>
+                <input
+                  type="checkbox"
+                  checked={esConsorcio}
+                  onChange={(ev) => {
+                    setEsConsorcio(ev.target.checked);
+                    if (!ev.target.checked) setOngsSeleccionadas([]);
+                  }}
+                  disabled={busy}
+                />{" "}
+                <strong>Oferta conjunta / consorcio</strong>
+              </span>
+            </label>
+            {esConsorcio && (
+              <div className="field" style={{ marginTop: "0.75rem" }}>
+                <span className="hint">Seleccioná las otras ONGs participantes.</span>
+                {ONGS_DISPONIBLES.map((ong) => (
+                  <label key={ong.id} className="lote-row" style={{ cursor: "pointer" }}>
+                    <span>
+                      <input
+                        type="checkbox"
+                        checked={ongsSeleccionadas.includes(ong.id)}
+                        onChange={(ev) =>
+                          setOngsSeleccionadas((prev) =>
+                            ev.target.checked ? [...prev, ong.id] : prev.filter((id) => id !== ong.id),
+                          )
+                        }
+                        disabled={busy}
+                      />{" "}
+                      {ong.nombre}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
             <button className="btn btn-primary" disabled={busy}>
               Enviar oferta
             </button>
