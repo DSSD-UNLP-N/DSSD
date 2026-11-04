@@ -48,7 +48,11 @@ def consolidar_ofertas(db: Session, emergencia_id: int) -> dict | None:
         ]
         if items and o.ong.cuit:
             consolidadas.append({
-                "cuit": o.ong.cuit, "ong": o.ong.nombre, "version": o.version_actual, "items": items,
+                "cuit": o.ong.cuit,
+                "ong": o.ong.nombre,
+                "version": o.version_actual,
+                "es_consorcio": o.es_consorcio,
+                "items": items,
             })
     return {
         "emergencia_id": e.id,

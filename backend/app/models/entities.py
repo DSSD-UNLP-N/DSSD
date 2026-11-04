@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Table, Text, UniqueConstraint
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -70,6 +70,14 @@ class Ong(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     nombre: Mapped[str] = mapped_column(String(120), unique=True)
     cuit: Mapped[str | None] = mapped_column(String(13), unique=True)
+
+
+oferta_consorcio_ong = Table(
+    "oferta_consorcio_ong",
+    Base.metadata,
+    Column("oferta_id", ForeignKey("oferta.id", ondelete="CASCADE"), primary_key=True),
+    Column("ong_id", ForeignKey("ong.id", ondelete="CASCADE"), primary_key=True),
+)
 
 
 class Usuario(Base):
@@ -149,6 +157,12 @@ class Oferta(Base):
     emergencia_id: Mapped[int] = mapped_column(ForeignKey("emergencia.id"))
     ong_id: Mapped[int] = mapped_column(ForeignKey("ong.id"))
     version_actual: Mapped[int] = mapped_column(Integer, default=1)
+    es_consorcio: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default="false",
+        nullable=False,
+    )
     estado: Mapped[EstadoOferta] = mapped_column(
         _enum(EstadoOferta), default=EstadoOferta.PRESENTADA, server_default=EstadoOferta.PRESENTADA.value
     )
@@ -156,6 +170,10 @@ class Oferta(Base):
 
     emergencia: Mapped[Emergencia] = relationship(back_populates="ofertas")
     ong: Mapped[Ong] = relationship()
+    ongs_asociadas: Mapped[list[Ong]] = relationship(
+        "Ong",
+        secondary=oferta_consorcio_ong,
+    )
     items: Mapped[list["OfertaItem"]] = relationship(back_populates="oferta", cascade="all, delete-orphan")
 
 

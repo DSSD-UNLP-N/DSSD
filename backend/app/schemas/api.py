@@ -116,6 +116,8 @@ class OfertaItemIn(BaseModel):
 class OfertaIn(BaseModel):
     # Cada envío es la oferta completa. Lista vacía = retirar la oferta (queda como versión nueva sin ítems).
     items: list[OfertaItemIn]
+    es_consorcio: bool = False
+    ongs_asociadas_ids: list[int] = Field(default_factory=list)
 
 
 class OfertaItemOut(BaseModel):
@@ -133,6 +135,8 @@ class OfertaOut(BaseModel):
     ong_id: int
     ong_nombre: str
     version_actual: int
+    es_consorcio: bool = False
+    ongs_asociadas_ids: list[int] = Field(default_factory=list)
     items: list[OfertaItemOut]
     retirada: bool = False  # la versión vigente no tiene ítems
     estado: EstadoOferta = EstadoOferta.PRESENTADA

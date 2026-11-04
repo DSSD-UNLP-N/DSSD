@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.models import Emergencia, EstadoEmergencia, Gravedad, Lote, Municipio
+from app.models import Emergencia, EstadoEmergencia, Gravedad, Lote, Municipio, Ong
 from tests.conftest import PASSWORD
 
 
@@ -52,6 +52,43 @@ def test_una_oferta_cubre_varios_lotes_y_cada_envio_es_una_version(api_login, ab
     v2 = c.post(f"/api/emergencias/{eid}/ofertas", json=_items(lotes[:1], 80)).json()
     assert v2["version_actual"] == 2
     assert [(i["lote_id"], i["cantidad"]) for i in v2["items"]] == [(lotes[0], 80)]
+
+
+def test_una_oferta_puede_marcarse_como_consorcio_y_actualizarse(api_login, abierta):
+    eid, lotes = abierta
+    c = api_login("ong.cruzroja")
+
+    consorcio = c.post(
+        f"/api/emergencias/{eid}/ofertas",
+        json={**_items(lotes, 10, 5), "es_consorcio": True},
+    )
+    assert consorcio.status_code == 201
+    assert consorcio.json()["es_consorcio"] is True
+
+    individual = c.post(
+        f"/api/emergencias/{eid}/ofertas",
+        json={**_items(lotes[:1], 12), "es_consorcio": False},
+    )
+    assert individual.status_code == 201
+    assert individual.json()["es_consorcio"] is False
+
+
+def test_una_oferta_consorcio_expone_sus_ongs_asociadas(api_login, abierta, seeded):
+    eid, lotes = abierta
+    with seeded() as db:
+        bomberos = db.query(Ong).filter_by(nombre="Bomberos Voluntarios").one()
+
+    response = api_login("ong.cruzroja").post(
+        f"/api/emergencias/{eid}/ofertas",
+        json={
+            **_items(lotes, 10, 5),
+            "es_consorcio": True,
+            "ongs_asociadas_ids": [bomberos.id],
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["ongs_asociadas_ids"] == [bomberos.id]
 
 
 def test_ventana_vencida_rechaza_ofertas(api_login, seeded):

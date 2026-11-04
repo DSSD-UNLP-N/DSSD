@@ -44,7 +44,14 @@ def _verificar_abierta(e: Emergencia, ahora: datetime) -> None:
 
 
 def publicar_oferta(
-    db: Session, nacional: NacionalClient, *, emergencia: Emergencia, ong: Ong | None, items: list[OfertaItemIn]
+    db: Session,
+    nacional: NacionalClient,
+    *,
+    emergencia: Emergencia,
+    ong: Ong | None,
+    items: list[OfertaItemIn],
+    es_consorcio: bool = False,
+    ongs_asociadas_ids: list[int] | None = None,
 ) -> Oferta:
     """Guarda una versión nueva de la oferta de `ong` en `emergencia`.
 
@@ -54,6 +61,7 @@ def publicar_oferta(
     _verificar_abierta(emergencia, ahora)
     if ong is None:
         raise OfertaError("Tu usuario no tiene ONG asignada")
+    ongs_asociadas_ids = ongs_asociadas_ids or []
 
     por_lote = {l.id: l for l in emergencia.lotes}
     pedidos = [item.lote_id for item in items]
@@ -77,11 +85,26 @@ def publicar_oferta(
     _validar_tope(db, nacional, emergencia, ong, oferta, items, ahora)
 
     if oferta is None:
-        oferta = Oferta(emergencia_id=emergencia.id, ong_id=ong.id, version_actual=1)
+        oferta = Oferta(
+            emergencia_id=emergencia.id,
+            ong_id=ong.id,
+            version_actual=1,
+            es_consorcio=es_consorcio,
+        )
         db.add(oferta)
         db.flush()
     else:
         oferta.version_actual += 1
+        oferta.es_consorcio = es_consorcio
+    if ongs_asociadas_ids:
+        ongs_asociadas = db.scalars(
+            select(Ong).where(Ong.id.in_(ongs_asociadas_ids))
+        ).all()
+        if len(ongs_asociadas) != len(set(ongs_asociadas_ids)):
+            raise OfertaError("Una o más ONGs asociadas no existen")
+        oferta.ongs_asociadas = ongs_asociadas
+    elif not es_consorcio:
+        oferta.ongs_asociadas = []
     for item in items:
         db.add(OfertaItem(oferta_id=oferta.id, version=oferta.version_actual, lote_id=item.lote_id,
                           recurso=item.recurso, cantidad=item.cantidad))

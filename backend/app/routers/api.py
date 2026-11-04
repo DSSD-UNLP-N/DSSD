@@ -9,7 +9,16 @@ from app.core.security import verify_password
 from app.core.labels import ROL_LABEL, TIPO_LABEL
 from app.db import get_db
 from app.integrations.nacional import NacionalClient, NacionalError, get_nacional
-from app.models import Emergencia, EstadoEmergencia, Lote, Notificacion, Oferta, Rol, Usuario
+from app.models import (
+    Emergencia,
+    EstadoEmergencia,
+    EstadoOferta,
+    Lote,
+    Notificacion,
+    Oferta,
+    Rol,
+    Usuario,
+)
 from app.schemas.api import (
     AdjudicarIn,
     AltaOngIn,
@@ -123,8 +132,21 @@ def metricas_locales(db: Session = Depends(get_db)) -> MetricasLocalesOut:
         )
     ) or 0
 
-    # El modelo actual no soporta consorcios: requiere una actualización para medirlos.
-    porcentaje_consorcios = 0.0
+    ofertas_resueltas = (EstadoOferta.ADJUDICADA, EstadoOferta.FINALIZADA)
+    total_ofertas_resueltas = db.scalar(
+        select(func.count(Oferta.id)).where(Oferta.estado.in_(ofertas_resueltas))
+    ) or 0
+    ofertas_consorcio = db.scalar(
+        select(func.count(Oferta.id)).where(
+            Oferta.estado.in_(ofertas_resueltas),
+            Oferta.es_consorcio.is_(True),
+        )
+    ) or 0
+    porcentaje_consorcios = (
+        round(ofertas_consorcio / total_ofertas_resueltas * 100, 2)
+        if total_ofertas_resueltas
+        else 0.0
+    )
 
     return MetricasLocalesOut(
         proyectos_finalizados=proyectos_finalizados,
@@ -419,6 +441,8 @@ def _oferta_out(o: Oferta) -> OfertaOut:
         ong_id=o.ong_id,
         ong_nombre=o.ong.nombre,
         version_actual=o.version_actual,
+        es_consorcio=o.es_consorcio,
+        ongs_asociadas_ids=[ong.id for ong in o.ongs_asociadas],
         items=items,
         retirada=not items,
         estado=o.estado,
@@ -435,7 +459,13 @@ def api_listar_ofertas(
     query = select(Oferta).where(Oferta.emergencia_id == emergencia_id)
     if user.rol is Rol.ONG:  # una ONG no ve las ofertas de las demás
         query = query.where(Oferta.ong_id == user.ong_id)
-    ofertas = db.scalars(query.options(selectinload(Oferta.items), selectinload(Oferta.ong))).all()
+    ofertas = db.scalars(
+        query.options(
+            selectinload(Oferta.items),
+            selectinload(Oferta.ong),
+            selectinload(Oferta.ongs_asociadas),
+        )
+    ).all()
     return [_oferta_out(o) for o in ofertas]
 
 
@@ -450,7 +480,15 @@ def api_crear_oferta(
     """Cada envío es la oferta completa: una versión nueva con todos sus ítems (T-12)."""
     emergencia = _require_visible(db, user, emergencia_id)
     try:
-        oferta = publicar_oferta(db, nacional, emergencia=emergencia, ong=user.ong, items=body.items)
+        oferta = publicar_oferta(
+            db,
+            nacional,
+            emergencia=emergencia,
+            ong=user.ong,
+            items=body.items,
+            es_consorcio=body.es_consorcio,
+            ongs_asociadas_ids=body.ongs_asociadas_ids,
+        )
     except OfertaError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except NacionalError as exc:
