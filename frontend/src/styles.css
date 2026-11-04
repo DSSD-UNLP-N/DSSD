@@ -208,6 +208,75 @@ button, input, select, textarea { font: inherit; }
   font-size: 1.1rem;
 }
 
+.metric-grid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  margin-bottom: 1rem;
+}
+.metric-card {
+  position: relative;
+  min-height: 9.5rem;
+  padding: 1.15rem 1.2rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255,255,255,0.82);
+  box-shadow: var(--shadow);
+}
+.metric-card-dot {
+  display: block;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  margin-bottom: 1rem;
+}
+.metric-card p { margin: 0 0 0.5rem; color: var(--ink-soft); font-size: 0.88rem; }
+.metric-card strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: clamp(1.65rem, 3vw, 2.2rem);
+  letter-spacing: -0.05em;
+}
+.panel-heading { display: flex; justify-content: space-between; gap: 1rem; align-items: end; }
+.panel-heading h2 { margin: 0; font-family: var(--font-display); letter-spacing: -0.04em; }
+.chart-caption { color: var(--ink-soft); font-size: 0.82rem; }
+.chart-bars { display: grid; gap: 0.8rem; margin-top: 1.4rem; }
+.chart-bar {
+  display: grid;
+  grid-template-columns: 7rem 1fr 7rem;
+  align-items: center;
+  gap: 0.8rem;
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.chart-bar:hover, .chart-bar.selected { border-color: var(--line-strong); background: rgba(255,255,255,0.7); }
+.chart-bar-label { font-size: 0.86rem; font-weight: 700; }
+.chart-bar-track { height: 0.85rem; overflow: hidden; border-radius: 999px; background: rgba(14,34,30,0.08); }
+.chart-bar-fill {
+  display: block;
+  width: var(--bar-size);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--bar-color);
+  transition: width 450ms var(--ease);
+}
+.chart-bar strong { text-align: right; font-size: 0.9rem; }
+.export-actions { display: flex; gap: 0.55rem; flex-wrap: wrap; }
+.dashboard-message { margin-top: 1rem; }
+.error-message { color: var(--danger); border-color: rgba(180,35,24,0.25); }
+@media (max-width: 600px) {
+  .panel-heading { display: block; }
+  .chart-caption { display: block; margin-top: 0.5rem; }
+  .chart-bar { grid-template-columns: 5.5rem 1fr; }
+  .chart-bar strong { grid-column: 2; text-align: left; }
+}
+
 .menu-grid { display: grid; gap: 0.85rem; }
 @media (min-width: 720px) {
   .menu-grid.cols-2 { grid-template-columns: 1fr 1fr; }

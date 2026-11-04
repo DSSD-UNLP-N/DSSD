@@ -9,6 +9,7 @@ import {
   NuevaEmergenciaPage,
   RequireAuth,
 } from "./pages";
+import { DashboardPage } from "./DashboardPage";
 
 export default function App() {
   return (
@@ -28,6 +29,14 @@ export default function App() {
           element={
             <RequireAuth>
               <EmergenciasPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/dashboard"
+          element={
+            <RequireAuth>
+              <DashboardPage />
             </RequireAuth>
           }
         />

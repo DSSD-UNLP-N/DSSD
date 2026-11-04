@@ -1,3 +1,5 @@
+import type { MetricasLocales } from "./types";
+
 export type Rol = "MUNICIPIO" | "COORDINADOR" | "ONG" | "AUDITOR";
 
 export type Usuario = {
@@ -6,6 +8,8 @@ export type Usuario = {
   nombre: string;
   rol: Rol;
 };
+
+export type { MetricasLocales } from "./types";
 
 export type Lote = {
   id: number;
@@ -131,6 +135,10 @@ export type Oferta = {
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
+  const token = localStorage.getItem("access_token");
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
   if (init.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
@@ -168,6 +176,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 export const api = {
   meta: () => request<Meta>("/api/meta"),
   me: () => request<Usuario>("/api/auth/me"),
+  getMetricasLocales: () => request<MetricasLocales>("/api/metricas/locales"),
   login: (username: string, password: string) =>
     request<Usuario>("/api/auth/login", {
       method: "POST",

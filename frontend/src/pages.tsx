@@ -32,6 +32,7 @@ const MENU: Record<Rol, { title: string; to: string; hint: string }[]> = {
     { title: "Convocatorias abiertas", to: "/emergencias", hint: "Cargar ofertas de ayuda" },
   ],
   AUDITOR: [
+    { title: "Dashboard de indicadores", to: "/dashboard", hint: "Métricas locales y Bonita" },
     { title: "Consulta de emergencias", to: "/emergencias", hint: "Vista de solo lectura" },
   ],
 };
