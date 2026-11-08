@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Rama `feat/consorcios` desde `dev`, PR a `dev`. Commits en inglés, formato convencional, sin emojis.
+- Rama de trabajo de esta sesión: `claude/stoic-brown-65bucb` (consorcios y después dashboard, en orden). El PR a `dev` se abre solo cuando el usuario lo pida. Commits en inglés, formato convencional, sin emojis.
 - TDD estricto en el backend: primero el test que falla.
 - Textos de UI y `detail` en castellano neutro. Identificadores en castellano, como el resto del código.
 - No se tocan `nacional/`, ningún `.bos` ni el consolidado de `GET /api/bonita/emergencias/{id}/ofertas`.

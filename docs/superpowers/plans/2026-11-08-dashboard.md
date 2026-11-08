@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Se implementa después de consorcios. Rama `feat/dashboard` desde `dev` con consorcios ya mergeado, PR a `dev`. Commits en inglés y convencionales.
+- Se implementa después de consorcios, en la misma rama `claude/stoic-brown-65bucb`. El PR a `dev` se abre solo cuando el usuario lo pida. Commits en inglés y convencionales.
 - Solo el rol `AUDITOR`: 403 para los demás, en todas las rutas de indicadores.
 - Filtros: `desde` y `hasta` (fechas ISO `YYYY-MM-DD`; por defecto, hoy menos 6 meses y hoy), `municipio_id` opcional. Si `desde` es posterior a `hasta`, o una fecha es inválida: 422.
 - Zona horaria para agrupar y mostrar: `America/Argentina/Buenos_Aires`.
