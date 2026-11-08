@@ -121,6 +121,18 @@ Emergencias por estado  [CSV]              Emergencias finalizadas            [C
    archivo de la actividad anterior del mismo caso (tareas humanas y de servicio, ordenadas por fecha; se consulta
    `archivedActivity`) o desde el inicio del caso si es la primera. El plan empieza con un spike corto contra el Bonita de
    la nube para confirmar qué campos sirven, y fija la definición antes de escribir la métrica.
+   **Resultado del spike (8/11, Bonita 2025.2-u5 en Docker, caso archivado 15):**
+   - En `archivedHumanTask`, `reached_state_date` y `archivedDate` difieren en milisegundos, así que no sirven.
+   - `GET /API/bpm/archivedFlowNode?f=caseId=<id>&p=<n>&c=100` (funciona con casos abiertos y archivados) devuelve un
+     registro por cambio de estado de cada nodo: `initializing`, `ready`, `completed` o `aborted`.
+   - **Definición:** duración de una instancia de tarea humana = `archivedDate - reached_state_date` de su registro
+     `type=USER_TASK, state=ready`. Es el tiempo que la tarea estuvo esperando a una persona, o al timer en el caso de
+     "Cargar Ofertas de Ayuda".
+   - Cada instancia (por ejemplo, las dos rondas) tiene su propio registro `ready`.
+   - Las fechas tienen el formato `"2026-11-08 21:54:53.794"`, en la hora del servidor de Bonita (UTC en Docker).
+   - Hay que paginar: un caso con dos rondas tiene unos 60 registros.
+   - Ejemplo recortado para el `FakeBonita`:
+     `{"type": "USER_TASK", "name": "Cargar Ofertas de Ayuda", "state": "ready", "reached_state_date": "2026-11-08 21:54:53.794", "archivedDate": "2026-11-08 21:56:13.015", "rootCaseId": "15"}`.
 2. **Etapas repetidas (REFORMULAR):** por emergencia se suman todas las instancias de la misma tarea, y después se
    promedia entre las emergencias que la completaron. Las emergencias en curso aportan solo las tareas ya terminadas.
    Así "tiempo por etapa" es el tiempo que la emergencia pasó en esa etapa, rondas incluidas.

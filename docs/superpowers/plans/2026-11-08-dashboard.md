@@ -36,8 +36,8 @@
 
 **Files:** solo el scratchpad. No se commitea código.
 
-- [ ] **Step 1:** Con el Bonita de la nube y un caso terminado por los escenarios, pedir `GET /API/bpm/archivedHumanTask?f=caseId=<id>&c=100` y `GET /API/bpm/archivedActivity?f=caseId=<id>&c=100`. Con un caso ya archivado, probar también `f=sourceObjectId`/`f=rootCaseId` si `caseId` no devuelve nada.
-- [ ] **Step 2:** Anotar en la sección "Decisiones del diseño" de la spec: qué campos de fecha hay, si `reached_state_date` y `archivedDate` difieren, y qué definición de duración queda (la del registro o la de "desde la actividad anterior"). Incluir una respuesta real recortada como ejemplo para el `FakeBonita`.
+- [x] **Step 1:** Con el Bonita de la nube y un caso terminado por los escenarios, pedir `GET /API/bpm/archivedHumanTask?f=caseId=<id>&c=100` y `GET /API/bpm/archivedActivity?f=caseId=<id>&c=100`. Con un caso ya archivado, probar también `f=sourceObjectId`/`f=rootCaseId` si `caseId` no devuelve nada.
+- [x] **Step 2:** Anotar en la sección "Decisiones del diseño" de la spec: qué campos de fecha hay, si `reached_state_date` y `archivedDate` difieren, y qué definición de duración queda (la del registro o la de "desde la actividad anterior"). Incluir una respuesta real recortada como ejemplo para el `FakeBonita`.
 - [ ] **Step 3:** Commit de la spec actualizada: `docs(dashboard): fix stage duration definition from Bonita spike`.
 
 ### Task 1: `oferta.adjudicada_en`
@@ -67,12 +67,12 @@
 
 **Interfaces:**
 - Produces:
-  - `BonitaClient.get_archived_activities(case_id) -> list[dict]` (solo si el spike lo pide; si alcanza con `get_archived_human_tasks`, se usa ese y este paso no se hace).
-  - Fixture `fake_bonita` en `conftest.py`: un objeto con `login`, `get_archived_human_tasks(case_id)` y `get_archived_activities(case_id)` que devuelve lo cargado con `fake_bonita.tareas[case_id] = [...]`. `fake_bonita.falla = True` hace que lance `requests.ConnectionError`. Se inyecta con una dependencia `get_bonita_lectura` (Task 4) que se puede sobreescribir.
+  - `BonitaClient.get_archived_flow_nodes(case_id) -> list[dict]`: pagina `GET /API/bpm/archivedFlowNode?f=caseId=<id>&p=<n>&c=100` hasta que una página trae menos de 100 (resultado del spike: ver la spec, decisión 1).
+  - Fixture `fake_bonita` en `conftest.py`: un objeto con `login`, `get_archived_flow_nodes(case_id)` que devuelve lo cargado con `fake_bonita.nodos[case_id] = [...]`. `fake_bonita.falla = True` hace que lance `requests.ConnectionError`. Se inyecta con una dependencia `get_bonita_lectura` (Task 4) que se puede sobreescribir.
 
-- [ ] **Step 1:** Test con `responses`: `test_get_archived_activities_pide_por_caso`, con la URL y los parámetros que fijó el spike.
+- [ ] **Step 1:** Test con `responses`: `test_get_archived_flow_nodes_pagina`: dos páginas (100 + 3 registros) y verifica `f=caseId=<id>`, `p` y `c=100`.
 - [ ] **Step 2–4:** Implementar, correr y verificar que pasa.
-- [ ] **Step 5:** Commit `feat(dashboard): Bonita client reads archived activities`.
+- [ ] **Step 5:** Commit `feat(dashboard): Bonita client reads archived flow nodes`.
 
 ### Task 3: Métricas
 
