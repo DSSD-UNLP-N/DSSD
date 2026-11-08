@@ -11,7 +11,14 @@ import pytest
 
 RAIZ = Path(__file__).resolve().parents[2]
 # Documentos de planificación de un momento puntual: nombran archivos que después cambiaron de lugar.
-EXCLUIDOS = ("docs/superpowers/",)
+# Las skills de Superpowers son de terceros (ver .claude/skills/SUPERPOWERS.md) y citan archivos de ejemplo.
+SKILLS_SUPERPOWERS = (
+    "brainstorming", "dispatching-parallel-agents", "executing-plans", "finishing-a-development-branch",
+    "receiving-code-review", "requesting-code-review", "subagent-driven-development", "systematic-debugging",
+    "test-driven-development", "using-git-worktrees", "using-superpowers", "verification-before-completion",
+    "writing-plans", "writing-skills",
+)
+EXCLUIDOS = ("docs/superpowers/", *(f".claude/skills/{s}/" for s in SKILLS_SUPERPOWERS))
 # Rutas que se nombran a propósito aunque git no las guarde (carpetas generadas).
 PERMITIDOS = {"scripts/capturas/"}
 EXTENSIONES = r"md|html|bos|py|sh|json|yml|yaml|xml|tsx|ts"

@@ -79,6 +79,9 @@ El usuario eligió la opción 1 el 8/11, apoyado en la nota del ítem 1 de la co
 - Cada miembro carga y edita su propia oferta como hoy (`ofertas.publicar_oferta`): mismas versiones, mismo tope por
   inventario, misma ventana. El consorcio no tiene oferta propia.
 - Pertenecer a un consorcio no obliga a tener oferta. Un miembro sin oferta no aporta cobertura.
+- **Los miembros aceptados ven la oferta vigente de los demás miembros, en solo lectura** (decisión del usuario, 8/11),
+  para coordinar quién cubre qué. Siguen sin ver las ofertas de ONGs que no están en su consorcio. Implica abrir el
+  filtro por `ong_id` del listado de ofertas para los miembros del mismo consorcio, con sus tests.
 
 ### Adjudicación (Municipio)
 - En la pantalla de adjudicación, las ofertas de los miembros aceptados de un consorcio se muestran juntas, en un bloque
