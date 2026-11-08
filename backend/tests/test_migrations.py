@@ -11,7 +11,7 @@ from sqlalchemy import create_engine, inspect
 from app.db import Base
 
 BACKEND = Path(__file__).resolve().parents[1]
-TABLAS = {"municipio", "ong", "usuario", "emergencia", "lote", "oferta", "oferta_item", "notificacion"}
+TABLAS = {"municipio", "ong", "usuario", "emergencia", "lote", "oferta", "oferta_item", "notificacion", "consorcio", "consorcio_miembro"}
 
 
 @pytest.fixture
