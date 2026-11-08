@@ -41,7 +41,7 @@ con el valor de ejemplo: están a la vista en el repositorio y con ellos cualqui
 | GET | `/certificaciones` | JWT de cualquier rol: catálogo de certificaciones |
 | GET | `/ongs?estado=HABILITADA` | JWT de cualquier rol: ONGs del registro |
 | GET | `/ongs/{cuit}` | JWT de cualquier rol: ficha de la ONG |
-| PUT | `/ongs/{cuit}/inventario` | Solo la cuenta ONG cuyo CUIT coincide con `{cuit}` |
+| PUT | `/ongs/{cuit}/inventario` | Solo cuentas de servicio: declara el inventario de la ONG (upsert por tipo de recurso) |
 | GET | `/recursos/disponibilidad?tipo_recurso=` | JWT de cualquier rol: disponibilidad global |
 | POST | `/validaciones` | Cualquier JWT: valida cantidades y competencia; **no guarda nada** |
 | POST | `/evaluaciones` | Solo cuentas de servicio |
@@ -56,16 +56,16 @@ con el valor de ejemplo: están a la vista en el repositorio y con ellos cualqui
 
 Los endpoints protegidos exigen `Authorization: Bearer <access_token>`. La API valida firma, vencimiento,
 identidad y rol contra la tabla `cuenta`. El JWT debe incluir `sub`, `username`, `rol`, `cuit`, `iat` y `exp`.
-Un token ONG solo puede modificar el inventario de la ONG que tiene asociada; los endpoints de evaluación,
-adjudicación y cierre exigen específicamente la cuenta BONITA.
+Un token de ONG no modifica inventarios (ni el propio): `PUT /ongs/{cuit}/inventario` es solo del sistema, igual que
+los endpoints de evaluación, adjudicación y cierre, que exigen una cuenta de servicio.
 `/health` también es público y devuelve `{"estado": "ok", "commit": "<sha>"}`: el commit que está sirviendo (en Render lo pone la plataforma; en local es `local`).
 
 Hay dos cuentas de servicio (rol `BONITA`): `bonita-service`, para los conectores de Bonita, y `app-service`, para la
 app local. Las personas (Municipio, Coordinador, ONG, Auditor) inician sesión en la app, no acá: la app valida sus
 credenciales con su propia base y, cuando necesita al Sistema Nacional, hace `POST /login` con `app-service`. Bonita hace
 lo mismo con `bonita-service`: sus parámetros de proceso `nacionalServiceUsername` y `nacionalServicePassword` van a
-`/login` y el JWT devuelto se manda en las llamadas protegidas. Las cuentas de ONG (`POST /ongs`) sirven para usar esta
-API directamente, por ejemplo desde Swagger.
+`/login` y el JWT devuelto se manda en las llamadas protegidas. Las cuentas de ONG (`POST /ongs`) solo consultan el
+catálogo y validan ofertas: el inventario de la ONG lo declara el sistema con su cuenta de servicio.
 
 ### Reglas de entrada (todos los endpoints)
 
