@@ -95,9 +95,21 @@ Borrador para el brainstorming (no es la spec):
 - **Tests**: servicio con `FakeBonita`, 403 para los otros roles, formatos de exportación, Bonita caído; prueba de UI con captura.
 
 ### B. Consorcios entre ONGs (ítem 2) — prioridad 2, **decisión pendiente**
-La consigna los nombra en el eslabón 3 y en el perfil ONG. Opción mínima: una oferta con ONG líder + ONGs asociadas,
-cada línea atribuida a una ONG, y que la reserva en Nacional se haga por ONG. Toca modelo, migración, UI de ofertas,
-el JSON que lee Bonita y la evaluación. Sin esto, la métrica "% resuelto mediante consorcios" del dashboard no tiene datos.
+La consigna los nombra en el eslabón 3 ("consorcios entre ONGs asociándose mediante la interfaz") y en el perfil ONG.
+Aclara que se resuelven en formularios web y base local, sin complicar el BPM. Hoy cada `Oferta` tiene una sola ONG y
+es única por (emergencia, ONG). Las ofertas parciales (cubrir parte de un lote) ya existen.
+
+- **Opción 1, agrupación (recomendada).** Cada ONG mantiene su propia oferta, como hoy. Se agrega `Consorcio`
+  (emergencia, nombre, ONG líder) y sus miembros: la líder crea el consorcio, invita a otras ONGs y ellas aceptan desde
+  la app. Cada oferta puede pertenecer a un consorcio. La cobertura de un lote suma la de todos los miembros. El
+  Municipio ve el consorcio como un bloque y lo adjudica entero. Bonita y la API Nacional no cambian: siguen recibiendo
+  y reservando ofertas por ONG (a lo sumo, un campo extra `consorcio_id` en el JSON). Una migración, una pantalla y tests.
+- **Opción 2, oferta conjunta.** Una sola oferta con líder y asociadas, y cada línea atribuida a una ONG. Una sola
+  historia de versiones, que cualquier miembro edita. Nacional valida y reserva por línea, todo o nada para el
+  consorcio. Cambia la restricción única, el JSON que lee Bonita, la evaluación y la reserva en Nacional. Es más fiel a
+  "oferta conjunta", pero arriesga los conectores del `.bos` y lleva el triple de trabajo.
+
+Sin consorcios, la métrica "% resuelto mediante consorcios" del dashboard no tiene datos.
 
 ### C. Perfil Auditor/Directivo completo — sale con A
 Menú propio (Indicadores + consulta de emergencias en solo lectura) y tests de permisos.
@@ -135,12 +147,18 @@ Guion de demo por rol, plan B local (`docs/instalacion-local.md`), preguntas pro
 | **Jue 19/11** | **Entrega 5** |
 | 20 – 25/11 | F: ensayo del coloquio |
 
-## 6. Decisiones abiertas
-1. ¿Se hacen consorcios (B)? ¿Alcance mínimo o completo?
-2. Dashboard: ¿quién lo ve (solo Auditor o también Coordinador)? ¿Qué métricas exactas? ¿Librería de gráficos?
-3. Exportación: ¿CSV y JSON alcanza, o también XLSX/PDF?
-4. ¿Se versionan los hooks (`.claude/settings.json`)?
-5. Formato del informe (¿docx/PDF? ¿plantilla de la cátedra?) y estado de la Entrega 4.
+## 6. Decisiones
+Tomadas el 8/11:
+- Dashboard: **solo el Auditor/Directivo**.
+- Gráficos: **Recharts** 3.x (React declarativo, tooltips y leyendas interactivas, compatible con React 19). Versión exacta al instalar.
+- Exportación: **CSV y JSON** (los "datos estructurados" que pide la consigna) **+ PDF** del reporte.
+- Hooks: **se versionan** (`!.claude/settings.json` en `.gitignore`).
+- Entrega 4 (Gantt): **entregada**. El frente E queda solo para el capítulo de desvíos del informe.
+
+Abiertas:
+1. Consorcios (B): opción 1 (agrupación de ofertas individuales) u opción 2 (oferta conjunta). Ver la sección 4.B.
+2. Dashboard: lista exacta de métricas; se cierra en el brainstorming.
+3. Formato del informe: ¿Word, PDF o plantilla de la cátedra?
 
 ## 7. Riesgos
 - Tope de 150 casos de Bonita Community: contar casos antes de generar datos de demo.
