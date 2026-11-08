@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.models import (
-    Emergencia, EstadoEmergencia, EstadoOferta, Gravedad, Lote, Municipio, Notificacion, Oferta, OfertaItem, Ong,
+    Consorcio, ConsorcioMiembro, Emergencia, EstadoEmergencia, EstadoMiembro, EstadoOferta, Gravedad, Lote, Municipio, Notificacion, Oferta, OfertaItem, Ong,
 )
 
 BASE = get_settings().bonita_base_url
@@ -217,6 +217,63 @@ def test_la_adjudicacion_valida_lo_que_se_elige(login, seeded, en_adjudicacion):
     evaluacion["ongs"][1]["estado"] = "NO_RESERVADA"  # Bomberos no pudo reservar: no se puede elegir
     _con_estado(seeded, emergencia_id, EstadoEmergencia.ADJUDICACION, evaluacion=json.dumps(evaluacion))
     assert c.post(url, json={"cuits": [BOMBEROS]}).status_code == 400
+
+
+def _consorcio(seeded, emergencia_id, nombre="Red Litoral"):
+    with seeded() as s:
+        cruz, bomberos = (s.query(Ong).filter_by(cuit=c).one() for c in (CRUZ_ROJA, BOMBEROS))
+        c = Consorcio(emergencia_id=emergencia_id, nombre=nombre, ong_lider_id=cruz.id)
+        c.miembros = [ConsorcioMiembro(ong_id=o.id, estado=EstadoMiembro.ACEPTADA, invitado_por_ong_id=cruz.id)
+                      for o in (cruz, bomberos)]
+        s.add(c)
+        s.commit()
+
+
+def test_adjudicar_parte_de_un_consorcio_da_409(login, seeded, en_adjudicacion):
+    emergencia_id, _ = en_adjudicacion
+    _consorcio(seeded, emergencia_id)
+
+    r = login("operador.municipal").post(f"/api/emergencias/{emergencia_id}/adjudicar", json={"cuits": [CRUZ_ROJA]})
+
+    assert r.status_code == 409
+    assert r.json()["detail"] == "El consorcio «Red Litoral» se adjudica entero: falta Bomberos Voluntarios."
+
+
+@responses.activate
+def test_adjudicar_consorcio_con_miembro_sin_reserva(login, seeded, en_adjudicacion):
+    emergencia_id, lote = en_adjudicacion
+    _consorcio(seeded, emergencia_id)
+    evaluacion = _evaluacion(emergencia_id, lote)
+    evaluacion["ongs"][1]["estado"] = "NO_RESERVADA"
+    _con_estado(seeded, emergencia_id, EstadoEmergencia.ADJUDICACION, evaluacion=json.dumps(evaluacion))
+    _mock_tarea(TAREA_ADJUDICAR)
+
+    r = login("operador.municipal").post(f"/api/emergencias/{emergencia_id}/adjudicar", json={"cuits": [CRUZ_ROJA]})
+
+    assert r.status_code == 200
+    assert json.loads(_variable_seteada("ongsAdjudicadas")) == [CRUZ_ROJA]
+
+
+@responses.activate
+def test_adjudicar_consorcio_entero_pasa(login, seeded, en_adjudicacion):
+    emergencia_id, _ = en_adjudicacion
+    _consorcio(seeded, emergencia_id)
+    _mock_tarea(TAREA_ADJUDICAR)
+
+    r = login("operador.municipal").post(f"/api/emergencias/{emergencia_id}/adjudicar",
+                                         json={"cuits": [CRUZ_ROJA, BOMBEROS]})
+
+    assert r.status_code == 200 and json.loads(_variable_seteada("ongsAdjudicadas")) == [CRUZ_ROJA, BOMBEROS]
+
+
+@responses.activate
+def test_adjudicar_sin_consorcios_igual_que_antes(login, seeded, en_adjudicacion):
+    emergencia_id, _ = en_adjudicacion
+    _mock_tarea(TAREA_ADJUDICAR)
+
+    r = login("operador.municipal").post(f"/api/emergencias/{emergencia_id}/adjudicar", json={"cuits": [BOMBEROS]})
+
+    assert r.status_code == 200 and json.loads(_variable_seteada("ongsAdjudicadas")) == [BOMBEROS]
 
 
 def test_solo_el_municipio_adjudica_y_solo_en_su_momento(login, seeded, en_adjudicacion):

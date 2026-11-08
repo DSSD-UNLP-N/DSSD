@@ -208,7 +208,7 @@ def api_adjudicar(
     """El Municipio elige entre las ofertas validadas. Bonita confirma lo elegido y libera lo demás."""
     emergencia = _require_visible(db, user, emergencia_id)
     try:
-        adjudicar(settings, emergencia=emergencia, municipal=user, cuits=body.cuits)
+        adjudicar(db, settings, emergencia=emergencia, municipal=user, cuits=body.cuits)
     except CicloError as exc:
         raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
     return _detalle_out(db, _load_emergencia(db, emergencia_id), user, settings)
