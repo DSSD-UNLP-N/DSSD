@@ -12,7 +12,7 @@ Cada punto tiene un test o un chequeo de CI que falla si se omite.
    dígitos con `[0-9]`, nunca `\d`. `Field(description=…)` en los campos que no se entienden solos y `model_config = ejemplos({...})`
    con un ejemplo realista en **cada** modelo de entrada y de salida (el test `test_los_ejemplos_de_swagger_son_validos_para_su_modelo` los valida).
 2. **Router**: `summary`, docstring que explique la regla, y `responses=errores({404: …, 409: …})` con cada código que el código puede devolver.
-   Permisos: `get_current_account` (cualquier cuenta), `require_servicio` (Bonita/app) o `require_ong_account` (la propia ONG); el router suma `errores(AUTH)` o `errores(SERVICIO)`.
+   Permisos: `get_current_account` (cualquier cuenta), `require_servicio` (Bonita/app: lo único que modifica datos de las ONGs, incluido su inventario; las ONGs no entran a esta API); el router suma `errores(AUTH)` o `errores(SERVICIO)`.
    El tag tiene que existir en `openapi_tags` de `main.py` (minúsculas).
 3. **Entrada hostil**: un dato mal formado da **422**, nunca 500 (agregar el caso a `tests/test_validaciones_de_entrada.py`). Cuidado con lo que SQLite acepta y Postgres no.
 4. **Tests**: camino feliz, 401 sin token, 403 con el rol equivocado, cada 4xx documentado, idempotencia si repetir el pedido es posible.

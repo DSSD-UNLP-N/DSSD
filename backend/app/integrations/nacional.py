@@ -92,14 +92,11 @@ class NacionalClient:
             raise NacionalError(f"Sistema Nacional: {method} {path} devolvió una respuesta inválida",
                                 resp.status_code) from exc
 
-    def registrar_ong(self, *, ong_nombre: str, cuit: str, nombre: str, username: str, password: str) -> str:
-        """Alta pública de una ONG con su primer usuario (POST /ongs, sin token de servicio). Devuelve su access_token."""
-        cuerpo = self._llamar_sin_servicio("POST", "/ongs", json={
+    def registrar_ong(self, *, ong_nombre: str, cuit: str, nombre: str, username: str, password: str) -> None:
+        """Alta pública de una ONG con su primer usuario (POST /ongs, sin token de servicio).
+        El token que devuelve Nacional no se usa: el inventario se declara con la cuenta de servicio."""
+        self._llamar_sin_servicio("POST", "/ongs", json={
             "ong_nombre": ong_nombre, "cuit": cuit, "nombre": nombre, "username": username, "password": password})
-        try:
-            return cuerpo["access_token"]
-        except (KeyError, TypeError) as exc:
-            raise NacionalError("Sistema Nacional: respuesta inválida al registrar la ONG") from exc
 
     def declarar_inventario(self, cuit: str, items: list[dict]) -> list[dict]:
         """Declara el inventario de la ONG (PUT /ongs/{cuit}/inventario): solo lo acepta la cuenta de servicio."""

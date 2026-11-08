@@ -109,7 +109,6 @@ class FakeNacional:
             raise self.falla_registro
         self.ongs_registradas.append({"ong_nombre": ong_nombre, "cuit": cuit, "nombre": nombre,
                                       "username": username, "password": password})
-        return f"tok-{cuit}"
 
     def declarar_inventario(self, cuit, items):
         self._verificar()

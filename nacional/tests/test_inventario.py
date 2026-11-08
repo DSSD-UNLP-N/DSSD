@@ -71,6 +71,13 @@ def test_una_cuenta_de_ong_no_declara_inventario_ni_el_propio(client, ong_header
     assert _inv(client)["PARAMEDICO"]["cantidad_total"] == 4
 
 
+def test_el_permiso_se_revisa_antes_que_el_cuerpo_y_el_cuit(client, ong_headers):
+    """Sin token 401 y con token de ONG 403, aunque el cuerpo sea inválido o el CUIT no exista."""
+    for ruta, cuerpo in ((CRUZ_ROJA, {"items": []}), ("/ongs/99-99999999-9/inventario", {"items": []})):
+        assert client.put(ruta, json=cuerpo, headers={"Authorization": ""}).status_code == 401
+        assert client.put(ruta, json=cuerpo, headers=ong_headers("30-54666544-5")).status_code == 403
+
+
 def test_entradas_invalidas_dan_422(client):
     for body in (
         {"items": []},

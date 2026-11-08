@@ -152,7 +152,7 @@ def _registrar(cliente=None):
 def test_registrar_ong_no_usa_token_de_servicio():
     responses.add(responses.POST, f"{BASE}/ongs", status=201,
                   json={"access_token": "t1", "token_type": "bearer", "user": {}})
-    assert _registrar() == "t1"
+    assert _registrar() is None
     assert [c.request.url for c in responses.calls] == [f"{BASE}/ongs"]
     assert _auth(0) is None
 
