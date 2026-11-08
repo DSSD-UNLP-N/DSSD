@@ -22,11 +22,15 @@ completo contra los 4 ítems de la consigna.
 
 ## 2. Herramientas y para qué se usa cada una
 
-### Plugins (se instalan desde claude.ai; quedan para las próximas sesiones)
-| Plugin | Uso en este trabajo |
+### Superpowers y modo corto
+El plugin no se puede instalar en las sesiones en la nube, así que sus skills están **copiadas al repo** en `.claude/skills/`
+(origen y licencia en `.claude/skills/SUPERPOWERS.md`). Se invocan sin prefijo: `brainstorming`, `writing-plans`, etc.
+El modo corto (estilo caveman) es una preferencia personal en el `CLAUDE.md` local, que no se versiona.
+
+| Pieza | Uso en este trabajo |
 |---|---|
 | **Superpowers** (obra) | Columna vertebral. `brainstorming` (diseño, una pregunta por vez), `writing-plans`, `using-git-worktrees` (un worktree por frente), `subagent-driven-development` (un subagente por tarea del plan, con revisión entre tareas), `test-driven-development`, `systematic-debugging` (fallos con Bonita), `dispatching-parallel-agents` (frentes independientes), `requesting-code-review`, `verification-before-completion`, `finishing-a-development-branch` (PR a `dev`). |
-| **caveman** | Respuestas cortas en el chat para ahorrar lectura y tokens. **No** se aplica a: informe, Swagger, textos de UI ni mensajes de commit. |
+| **Modo corto** (caveman) | Respuestas cortas en el chat para ahorrar lectura y tokens. **No** se aplica a: informe, Swagger, textos de UI ni mensajes de commit. |
 
 ### Skills del repo (`.claude/skills/`)
 | Skill | Cuándo |
