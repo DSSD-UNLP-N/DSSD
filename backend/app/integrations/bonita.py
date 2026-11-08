@@ -96,6 +96,21 @@ class BonitaClient:
         resp.raise_for_status()
         return resp.json()
 
+    def get_archived_flow_nodes(self, case_id) -> list[dict]:
+        """Un registro por cada cambio de estado de cada nodo del caso (abierto o archivado). Pagina de a 100."""
+        nodos: list[dict] = []
+        pagina = 0
+        while True:
+            resp = self._request(
+                "GET", "/API/bpm/archivedFlowNode", params={"f": f"caseId={case_id}", "p": pagina, "c": 100}
+            )
+            resp.raise_for_status()
+            filas = resp.json()
+            nodos.extend(filas)
+            if len(filas) < 100:
+                return nodos
+            pagina += 1
+
     def actor_names(self, process_definition_id) -> dict:
         """{id de actor: nombre} del proceso: sirve para saber a qué actor pertenece cada tarea."""
         resp = self._request(
