@@ -18,6 +18,7 @@ from app.models import (
 from app.services.ofertas import _esta_abierta
 
 NOMBRE_MIN, NOMBRE_MAX = 2, 80
+NOMBRE_REPETIDO = "Ya hay un consorcio con ese nombre en esta emergencia."
 
 
 class ConsorcioError(RuntimeError):
@@ -79,7 +80,7 @@ def crear(db: Session, *, emergencia: Emergencia, ong: Ong, nombre: str) -> Cons
         raise ConsorcioError(f"El nombre del consorcio debe tener entre {NOMBRE_MIN} y {NOMBRE_MAX} caracteres.", 422)
     # También cuenta el nombre de un consorcio disuelto: la tabla exige nombres únicos por emergencia.
     if db.scalar(select(Consorcio.id).where(Consorcio.emergencia_id == emergencia.id, Consorcio.nombre == nombre)):
-        raise ConsorcioError("Ya hay un consorcio con ese nombre en esta emergencia.")
+        raise ConsorcioError(NOMBRE_REPETIDO)
     if consorcio_de(db, emergencia.id, ong.id) is not None:
         raise ConsorcioError("Tu ONG ya está en un consorcio de esta emergencia.")
     c = Consorcio(emergencia_id=emergencia.id, nombre=nombre, ong_lider_id=ong.id, creado_en=ahora)

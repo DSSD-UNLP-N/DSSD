@@ -83,3 +83,78 @@ def test_fechas_salen_con_zona_utc(api_login, abierta):
     e = api_login("coordinador.regional").get(f"/api/emergencias/{eid}").json()
     assert e["ventana_ofertas_fin"].endswith("Z") or e["ventana_ofertas_fin"].endswith("+00:00")
     assert datetime.fromisoformat(e["creada_en"]).tzinfo is not None
+
+
+
+
+def test_miembros_ven_ofertas_del_consorcio(api_login, seeded, abierta):
+    eid, lotes = abierta
+    with seeded() as s:
+        from app.models import Ong
+        bomberos = s.query(Ong).filter_by(nombre="Bomberos Voluntarios").one().id
+    c = api_login("ong.cruzroja")
+    cid = c.post(f"/api/emergencias/{eid}/consorcios", json={"nombre": "Alianza Norte"}).json()["id"]
+    c.post(f"/api/emergencias/{eid}/ofertas", json=_items(lotes, 60, 20))
+    c.post(f"/api/consorcios/{cid}/invitaciones", json={"ong_id": bomberos})
+
+    c = api_login("ong.bomberos")
+    # Invitada sin aceptar: todavía no ve nada ajeno.
+    assert c.get(f"/api/emergencias/{eid}/ofertas").json() == []
+    c.post(f"/api/consorcios/{cid}/respuesta", json={"acepta": True})
+    ofertas = c.get(f"/api/emergencias/{eid}/ofertas").json()
+    assert [(o["ong_nombre"], o["consorcio_nombre"], o["consorcio_id"]) for o in ofertas] == [
+        ("Cruz Roja Argentina", "Alianza Norte", cid)]
+
+
+def test_ong_ajena_no_ve_ofertas_del_consorcio(api_login, seeded, abierta):
+    eid, lotes = abierta
+    with seeded() as s:
+        from app.models import Ong, Rol, Usuario
+        from app.core.security import hash_password
+        ajena = Ong(nombre="Cáritas", cuit="30-11111111-1")
+        s.add(ajena)
+        s.flush()
+        s.add(Usuario(username="ong.caritas", password_hash=hash_password(PASSWORD), nombre="Cáritas",
+                      rol=Rol.ONG, ong_id=ajena.id))
+        bomberos = s.query(Ong).filter_by(nombre="Bomberos Voluntarios").one().id
+        s.commit()
+    c = api_login("ong.cruzroja")
+    cid = c.post(f"/api/emergencias/{eid}/consorcios", json={"nombre": "Alianza Norte"}).json()["id"]
+    c.post(f"/api/emergencias/{eid}/ofertas", json=_items(lotes, 60, 20))
+    c.post(f"/api/consorcios/{cid}/invitaciones", json={"ong_id": bomberos})
+    api_login("ong.bomberos").post(f"/api/consorcios/{cid}/respuesta", json={"acepta": True})
+
+    assert api_login("ong.caritas").get(f"/api/emergencias/{eid}/ofertas").json() == []
+
+
+def test_consorcio_de_un_solo_miembro_no_abre_ofertas(api_login, seeded, abierta):
+    """Sin 2 miembros aceptados el consorcio no es válido: nadie ve ofertas ajenas."""
+    eid, lotes = abierta
+    c = api_login("ong.bomberos")
+    c.post(f"/api/emergencias/{eid}/ofertas", json=_items(lotes, 10, 5))
+    api_login("ong.cruzroja").post(f"/api/emergencias/{eid}/consorcios", json={"nombre": "Sola"})
+    assert [o["ong_nombre"] for o in api_login("ong.cruzroja").get(f"/api/emergencias/{eid}/ofertas").json()] == []
+
+
+def test_ofertas_traen_consorcio_para_el_municipio(api_login, seeded, abierta):
+    eid, lotes = abierta
+    with seeded() as s:
+        from app.models import Ong
+        bomberos = s.query(Ong).filter_by(nombre="Bomberos Voluntarios").one().id
+    c = api_login("ong.cruzroja")
+    cid = c.post(f"/api/emergencias/{eid}/consorcios", json={"nombre": "Alianza Norte"}).json()["id"]
+    c.post(f"/api/emergencias/{eid}/ofertas", json=_items(lotes, 60, 20))
+    c.post(f"/api/consorcios/{cid}/invitaciones", json={"ong_id": bomberos})
+    c = api_login("ong.bomberos")
+    c.post(f"/api/consorcios/{cid}/respuesta", json={"acepta": True})
+    c.post(f"/api/emergencias/{eid}/ofertas", json=_items(lotes, 10, 5))
+
+    ofertas = api_login("operador.municipal").get(f"/api/emergencias/{eid}/ofertas").json()
+    assert {o["ong_nombre"]: o["consorcio_nombre"] for o in ofertas} == {
+        "Cruz Roja Argentina": "Alianza Norte", "Bomberos Voluntarios": "Alianza Norte"}
+
+
+def test_oferta_sin_consorcio_trae_campos_nulos(api_login, abierta):
+    eid, lotes = abierta
+    o = api_login("ong.cruzroja").post(f"/api/emergencias/{eid}/ofertas", json=_items(lotes, 60, 20)).json()
+    assert o["consorcio_id"] is None and o["consorcio_nombre"] is None
