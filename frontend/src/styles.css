@@ -4,7 +4,6 @@
   --paper: #f2efe8;
   --field: #0d3831;
   --field-mid: #1a5c52;
-  --field-deep: #071f1b;
   --signal: #e08912;
   --signal-deep: #a35f08;
   --line: rgba(14, 34, 30, 0.12);
@@ -22,6 +21,8 @@
   --font-display: "Syne", sans-serif;
   --font-body: "Figtree", sans-serif;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Spring stiffness 500 / damping 25 (framer-motion's default for x/y), sampled. */
+  --spring: linear(0, 0.125, 0.39, 0.67, 0.895, 1.039, 1.107, 1.119, 1.099, 1.066, 1.033, 1.008, 0.993, 0.986, 0.986, 0.989, 0.993, 0.997, 1);
 }
 
 * { box-sizing: border-box; }
@@ -563,8 +564,42 @@ button, input, select, textarea { font: inherit; }
 .flow-destination-img {
   filter: saturate(1.05) contrast(1.03);
 }
+/* Travel: same 700 ms as TRAVEL_MS in FlowBubbles.tsx. */
+.flow-panorama {
+  transition: transform 700ms var(--ease), filter 700ms var(--ease), opacity 700ms var(--ease);
+}
+.flow-panorama.is-traveling {
+  transform: translate(var(--fly-x), var(--fly-y)) scale(1.22);
+  filter: blur(7px);
+  opacity: 0.45;
+}
+.flow-panorama.is-scene {
+  transform: translate(var(--fly-x), var(--fly-y)) scale(1.1);
+  filter: blur(10px);
+  opacity: 0;
+}
+/* Scenes stay mounted: enter with a keyframe, leave with a transition. */
 .flow-destination {
+  z-index: 1;
+  visibility: hidden;
+  opacity: 0;
+  transform: scale(1.04);
+  filter: blur(6px);
+  transition:
+    opacity 550ms var(--ease), transform 550ms var(--ease), filter 550ms var(--ease),
+    visibility 0s 550ms;
+}
+.flow-destination.is-on {
   z-index: 2;
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+  filter: blur(0px);
+  transition: none;
+  animation: scene-in 550ms var(--ease) backwards;
+}
+@keyframes scene-in {
+  from { opacity: 0; transform: scale(1.08); filter: blur(10px); }
 }
 .flow-travel-veil {
   position: absolute;
@@ -576,7 +611,10 @@ button, input, select, textarea { font: inherit; }
     linear-gradient(120deg, transparent 30%, rgba(246, 243, 236, 0.08) 50%, transparent 70%);
   display: grid;
   place-items: center;
+  opacity: 0;
+  transition: opacity 250ms cubic-bezier(0, 0, 0.58, 1);
 }
+.flow-travel-veil.is-on { opacity: 1; }
 .flow-travel-line {
   width: 42%;
   height: 2px;
@@ -622,38 +660,6 @@ button, input, select, textarea { font: inherit; }
 .flow-hotspot:hover .flow-hotspot-dot {
   transform: scale(1.25);
 }
-.flow-focus-card {
-  position: absolute;
-  left: 1rem;
-  bottom: 1rem;
-  z-index: 5;
-  display: grid;
-  gap: 0.15rem;
-  max-width: min(16rem, 70%);
-  padding: 0.85rem 1rem;
-  border-radius: 14px;
-  background: rgba(7, 31, 27, 0.82);
-  border: 1px solid rgba(246, 243, 236, 0.16);
-  backdrop-filter: blur(12px);
-  color: #f6f3ec;
-  pointer-events: none;
-}
-.flow-focus-kicker {
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #e08912;
-  font-weight: 700;
-}
-.flow-focus-card strong {
-  font-family: var(--font-display);
-  font-size: 1.05rem;
-  letter-spacing: -0.03em;
-}
-.flow-focus-card span:last-child {
-  font-size: 0.8rem;
-  color: rgba(246, 243, 236, 0.72);
-}
 .flow-reset {
   position: absolute;
   top: 0.85rem;
@@ -668,17 +674,19 @@ button, input, select, textarea { font: inherit; }
   font-weight: 650;
   cursor: pointer;
   backdrop-filter: blur(10px);
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 300ms cubic-bezier(0.25, 0.1, 0.35, 1), visibility 0s 300ms;
+}
+.flow-reset.is-on {
+  visibility: visible;
+  opacity: 1;
+  transition: none;
+  animation: fade-in-o 300ms cubic-bezier(0.25, 0.1, 0.35, 1) backwards, drop-8 450ms var(--spring) backwards;
 }
 .flow-reset:hover {
   border-color: rgba(224, 137, 18, 0.5);
   color: #f0b14a;
-}
-.flow-hint {
-  margin: 0;
-  font-size: 0.75rem;
-  color: rgba(246, 243, 236, 0.5);
-  letter-spacing: 0.01em;
-  text-align: center;
 }
 
 @keyframes hotspot-pulse {
@@ -770,27 +778,6 @@ button, input, select, textarea { font: inherit; }
 .flow-step:hover .flow-step-text strong {
   opacity: 1;
 }
-.flow-tooltip {
-  display: grid;
-  gap: 0.15rem;
-  padding: 0.7rem 0.9rem;
-  border-radius: 12px;
-  background: rgba(7, 31, 27, 0.72);
-  border: 1px solid rgba(246, 243, 236, 0.14);
-  backdrop-filter: blur(10px);
-  color: #f6f3ec;
-  max-width: 28rem;
-}
-.flow-tooltip strong {
-  font-family: var(--font-display);
-  font-size: 0.9rem;
-  letter-spacing: -0.02em;
-}
-.flow-tooltip span {
-  font-size: 0.8rem;
-  color: rgba(246, 243, 236, 0.75);
-  line-height: 1.4;
-}
 
 /* Page header / back */
 .page-header { margin-bottom: 0.25rem; }
@@ -854,15 +841,6 @@ button, input, select, textarea { font: inherit; }
   .field-row.two { grid-template-columns: 1fr 1fr; }
 }
 
-@keyframes float-a {
-  from { transform: translate(0, 0); }
-  to { transform: translate(12px, -18px); }
-}
-@keyframes float-b {
-  from { transform: translate(0, 0); }
-  to { transform: translate(-16px, 14px); }
-}
-
 @keyframes grid-drift {
   from { transform: translateY(0); }
   to { transform: translateY(52px); }
@@ -873,6 +851,16 @@ button, input, select, textarea { font: inherit; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Entry animations (ex framer-motion). fill-mode backwards: no transform is left behind. */
+.fade-in { animation: fade-up-14 380ms cubic-bezier(0, 0, 0.58, 1) backwards; }
+.rise-in { animation: fade-up-12 350ms cubic-bezier(0, 0, 0.58, 1) backwards; }
+.alert-in { animation: fade-in-o 300ms cubic-bezier(0.25, 0.1, 0.35, 1) backwards, drop-6 450ms var(--spring) backwards; }
+@keyframes fade-up-14 { from { opacity: 0; transform: translateY(14px); } }
+@keyframes fade-up-12 { from { opacity: 0; transform: translateY(12px); } }
+@keyframes fade-in-o { from { opacity: 0; } }
+@keyframes drop-6 { from { transform: translateY(-6px); } }
+@keyframes drop-8 { from { transform: translateY(-8px); } }
+
 @media (max-width: 900px) {
   .login-stage { grid-template-columns: 1fr; }
   .login-hero { min-height: auto; padding-bottom: 2rem; }
@@ -880,9 +868,7 @@ button, input, select, textarea { font: inherit; }
   .flow-scene { margin-bottom: 0.5rem; }
   .flow-art { min-height: 180px; }
   .flow-stage { max-height: 260px; }
-  .flow-hint { display: none; }
   .flow-step-text small { display: none; }
-  .flow-tooltip { max-width: 100%; }
   .form-side { position: static; }
 }
 

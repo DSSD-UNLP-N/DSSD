@@ -13,32 +13,18 @@ seed y sin nada comprometido. Tarda unos 3 minutos.
 """
 from __future__ import annotations
 
-import os
 import argparse
 import sys
 import time
 from datetime import datetime, timedelta
-from pathlib import Path
 
 import requests
 
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent))
-sys.path.insert(0, str(HERE))
-
-from escenario_tope import Escenario, crear_y_publicar, retirar_previas  # noqa: E402
-
-from nacional_auth import nacional_get, nacional_post  # noqa: E402
-from app.core.config import get_settings  # noqa: E402
-from app.integrations.bonita import BonitaClient  # noqa: E402
-
-CRUZ_ROJA, BOMBEROS = "30-54666544-5", "30-68522415-9"
-VENTANA_S = int(os.environ.get("ESCENARIO_VENTANA_S", 60))  # alcanza para crear las dos emergencias y cargar las ofertas
-
-
-def comprometido(nacional: str, cuit: str, tipo: str) -> int:
-    ficha = nacional_get(f"{nacional}/ongs/{cuit}", timeout=60).json()
-    return next(i["cantidad_comprometida"] for i in ficha["inventario"] if i["tipo_recurso"] == tipo)
+from comun import (BOMBEROS, CRUZ_ROJA, VENTANA_S, Escenario, admin_bonita, comprometido, crear_y_publicar,
+                   retirar_ofertas_abiertas, tareas)
+from nacional_auth import nacional_post
+from app.core.config import get_settings
+from app.integrations.bonita import BonitaClient
 
 
 def variable(admin: BonitaClient, caso: int, nombre: str):
@@ -52,8 +38,7 @@ def main() -> int:
     e = Escenario(args.app)
     cfg = get_settings()
     nacional = cfg.nacional_base_url.rstrip("/")
-    admin = BonitaClient(cfg.bonita_base_url, cfg.bonita_timeout_seconds)
-    admin.login(cfg.bonita_username, cfg.bonita_password)
+    admin = admin_bonita()
 
     print("== Preparación")
     previos = {(c, t): comprometido(nacional, c, t) for c, t in
@@ -65,7 +50,7 @@ def main() -> int:
     eb, caso_b, lb = crear_y_publicar(e, "Escenario B", "MEDIO",
                                       [("AGUA_POTABLE", 2000, "PRINCIPAL"), ("RACION_ALIMENTO", 1000, "APOYO")], fin)
     print(f"     A=#{ea} (caso {caso_a}) · B=#{eb} (caso {caso_b}) · vencen {fin:%H:%M:%S}")
-    print(f"     limpieza: {retirar_previas(e, {ea, eb})} ofertas de corridas anteriores retiradas")
+    print(f"     limpieza: {retirar_ofertas_abiertas(e.app, lambda em: em['id'] in (ea, eb))} ofertas de corridas anteriores retiradas")
 
     e.esperar("A1 Cruz Roja ofrece 4 paramédicos", e.ofrecer("ong.cruzroja", ea, (la["PARAMEDICO"], 4)), 201)
     e.esperar("A2 Bomberos ofrece 2 paramédicos", e.ofrecer("ong.bomberos", ea, (la["PARAMEDICO"], 2)), 201)
@@ -90,8 +75,7 @@ def main() -> int:
     e.check("La app recibió la evaluación de A y de B (la mandó Bonita)", len(evaluadas) == 2, sorted(evaluadas))
     if len(evaluadas) < 2:
         print("     (Bonita no evaluó a tiempo: revisá el caso en el portal y bonita.log)")
-        print(f"\n{e.ok}/{e.total} verificaciones OK")
-        return 1
+        return e.terminar()
 
     print("\n== A: cobertura parcial")
     a = evaluadas[ea]
@@ -112,7 +96,7 @@ def main() -> int:
             variable(admin, caso_a, "porcentajeCobertura"))
     tarea = admin.wait_for_task(caso_a, "Evaluar Cobertura", retries=20)
     e.check("A Bonita: el caso espera al Coordinador en 'Evaluar Cobertura…'", tarea is not None,
-            [t["displayName"] for t in admin.get_human_tasks(caso_a)])
+            tareas(admin, caso_a))
 
     print("\n== B: cobertura completa")
     b = evaluadas[eb]
@@ -125,7 +109,7 @@ def main() -> int:
             variable(admin, caso_b, "coberturaCompleta"))
     tarea = admin.wait_for_task(caso_b, "Adjudicar Ofertas", retries=20)
     e.check("B Bonita: va directo a 'Adjudicar Ofertas' (Municipio), sin pasar por el Coordinador", tarea is not None,
-            [t["displayName"] for t in admin.get_human_tasks(caso_b)])
+            tareas(admin, caso_b))
 
     print("\n== La reserva bloquea el stock para otras emergencias")
     ec, _, lc = crear_y_publicar(e, "Escenario C", "ALTO", [("PARAMEDICO", 5, "PRINCIPAL")],
@@ -145,8 +129,7 @@ def main() -> int:
     e.check("La API Nacional quedó como al empezar",
             {k: comprometido(nacional, *k) for k in previos} == previos)
 
-    print(f"\n{e.ok}/{e.total} verificaciones OK")
-    return 0 if e.ok == e.total else 1
+    return e.terminar()
 
 
 if __name__ == "__main__":

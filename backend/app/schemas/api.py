@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AfterValidator, AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 from app.models import EstadoEmergencia, EstadoOferta, Gravedad, Rol, TipoLote
 from app.schemas.evaluacion import Evaluacion
@@ -93,6 +93,12 @@ class EmergenciaOut(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+    @field_validator("evaluacion", mode="before")
+    @classmethod
+    def _sin_evaluacion_cruda(cls, v):
+        # Desde el modelo llega el JSON crudo de la columna: la evaluación la agrega aparte el detalle (y no para la ONG).
+        return None if isinstance(v, str) else v
+
 
 class DecisionIn(BaseModel):
     # PARCIAL: seguir con lo reservado. REFORMULAR: liberar todo y volver a cargar lotes (ronda siguiente).
@@ -104,6 +110,8 @@ class AdjudicarIn(BaseModel):
 
 
 class PublicarIn(BaseModel):
+    # La ventana la elige el Coordinador al publicar; el timer de Bonita la lee al activarse
+    # `Cargar Ofertas de Ayuda`, así que una fecha pasada cerraría la convocatoria al instante.
     ventana_fin: datetime
 
 
@@ -133,7 +141,7 @@ class OfertaOut(BaseModel):
     ong_id: int
     ong_nombre: str
     version_actual: int
-    items: list[OfertaItemOut]
+    items: list[OfertaItemOut] = Field(validation_alias=AliasChoices("items_vigentes", "items"))  # del modelo, solo la versión actual
     retirada: bool = False  # la versión vigente no tiene ítems
     estado: EstadoOferta = EstadoOferta.PRESENTADA
 
@@ -172,3 +180,29 @@ class AltaOngOut(BaseModel):
     cuit: str
     username: str
     rubros: list[RubroIn]
+
+
+class EmergenciaIn(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    # Largos máximos = los de las columnas (Postgres los hace cumplir; SQLite no).
+    tipo: str = Field(min_length=1, max_length=40)
+    nivel_gravedad: Gravedad
+    zona_afectada: str = Field(min_length=1, max_length=200)
+    descripcion: str = Field(min_length=1, max_length=2000)
+
+
+class LoteIn(BaseModel):
+    """El recurso se elige del catálogo del Sistema Nacional; el nombre y la unidad salen de ahí."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    tipo_recurso: str = Field(min_length=1, max_length=40)
+    detalle: str | None = Field(None, max_length=80)  # texto libre opcional, p. ej. "con equipo de trauma"
+    cantidad: int = Field(gt=0)
+    tipo: TipoLote = TipoLote.PRINCIPAL
+
+    @field_validator("detalle")
+    @classmethod
+    def _detalle_vacio_es_none(cls, v: str | None) -> str | None:
+        return v or None

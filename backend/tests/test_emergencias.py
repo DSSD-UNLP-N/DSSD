@@ -6,24 +6,20 @@ from urllib.parse import urlparse
 
 import responses
 
-from app.core.config import get_settings
 from app.models import Emergencia, Municipio
+from tests.conftest import BASE, mock_ejecutar, mock_login
 
-BASE = get_settings().bonita_base_url
 BASE_PATH = urlparse(BASE).path  # "/bonita"
 
 
 def _mock_alta_ok(case_id="4242", task_id="9001"):
     # un solo login, como el operador que hizo el alta: instancia y completa la tarea él mismo
-    responses.add(responses.POST, f"{BASE}/loginservice", status=204,
-                  headers={"Set-Cookie": "X-Bonita-API-Token=tok-muni; Path=/"})
+    mock_login("tok-muni")
     responses.add(responses.GET, f"{BASE}/API/bpm/process", json=[{"id": "555"}])
     responses.add(responses.POST, f"{BASE}/API/bpm/process/555/instantiation", json={"caseId": case_id})
     responses.add(responses.GET, f"{BASE}/API/bpm/humanTask",
                   json=[{"id": task_id, "displayName": "Registrar Emergencia"}])
-    responses.add(responses.GET, f"{BASE}/API/system/session/unusedid", json={"user_id": "77"})
-    responses.add(responses.PUT, f"{BASE}/API/bpm/userTask/{task_id}", status=200)
-    responses.add(responses.POST, f"{BASE}/API/bpm/userTask/{task_id}/execution", status=200)
+    mock_ejecutar(task_id)
 
 
 DATOS = {"tipo": "inundacion", "nivel_gravedad": "ALTO", "zona_afectada": "Centro",
@@ -104,7 +100,7 @@ def test_el_alta_se_hace_con_el_usuario_que_la_pidio_y_no_con_el_tecnico(login, 
 
 @responses.activate
 def test_si_bonita_rechaza_el_login_no_queda_emergencia_a_medias(login, seeded):
-    responses.add(responses.POST, f"{BASE}/loginservice", status=401)
+    mock_login(status=401)
     r = login("operador.municipal").post(ALTA, json=DATOS)
 
     assert r.status_code == 502
@@ -117,7 +113,7 @@ def test_si_bonita_rechaza_el_login_no_queda_emergencia_a_medias(login, seeded):
 def test_si_bonita_no_responde_a_tiempo_no_queda_emergencia_a_medias(login, seeded):
     import requests
 
-    responses.add(responses.POST, f"{BASE}/loginservice", body=requests.ConnectTimeout())
+    mock_login(body=requests.ConnectTimeout())
     r = login("operador.municipal").post(ALTA, json=DATOS)
 
     assert r.status_code == 502
@@ -127,8 +123,7 @@ def test_si_bonita_no_responde_a_tiempo_no_queda_emergencia_a_medias(login, seed
 
 def _mock_caso_sin_tarea(case_id="1"):
     """El caso se crea pero 'Registrar Emergencia' nunca aparece."""
-    responses.add(responses.POST, f"{BASE}/loginservice", status=204,
-                  headers={"Set-Cookie": "X-Bonita-API-Token=tok; Path=/"})
+    mock_login()
     responses.add(responses.GET, f"{BASE}/API/bpm/process", json=[{"id": "555"}])
     responses.add(responses.POST, f"{BASE}/API/bpm/process/555/instantiation", json={"caseId": case_id})
     responses.add(responses.GET, f"{BASE}/API/bpm/humanTask", json=[])
@@ -176,7 +171,7 @@ def test_si_tampoco_se_puede_borrar_el_caso_la_respuesta_es_la_misma(login, seed
 
 @responses.activate
 def test_si_falla_antes_de_crear_el_caso_no_se_borra_nada(login, seeded):
-    responses.add(responses.POST, f"{BASE}/loginservice", status=401)
+    mock_login(status=401)
     login("operador.municipal").post(ALTA, json=DATOS)
     assert not [c for c in responses.calls if c.request.method == "DELETE"]
 

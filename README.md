@@ -54,7 +54,7 @@ Para dar de alta una ONG de prueba hay una pantalla oculta en `http://localhost:
 | Escenarios con Bonita real (evaluación, tope, adjudicación, cierre, variantes, JWT) | `cd backend && python scripts/correr_escenarios.py` (≈ 17 min) | Bonita + app + API Nacional **locales** |
 | Recorrido completo por la interfaz, con capturas | `cd backend && python scripts/ui_parada3.py` (≈ 2-3 min; sirve contra local y contra la nube) | + front `:5173`, Chrome |
 | Todas las pruebas de interfaz a la vez | `cd backend && python scripts/correr_ui.py` (≈ 4 min; `--completo` suma el caso de cobertura parcial) | ídem |
-| Pruebas de interfaz sueltas | `scripts/e2e_ui.py`, `scripts/ui_parada2.py`, `scripts/ui_ejecucion.py` | ídem |
+| Pruebas de interfaz sueltas | `scripts/e2e_ui.py`, `scripts/ui_parada2.py` | ídem |
 
 `ESCENARIO_VENTANA_S` (por defecto 60) acorta o alarga la ventana de ofertas de los escenarios. En la nube no hace falta reponer nada (el cierre libera lo reservado); lo único que Render recuerda son las emergencias ya cerradas por número: ver las notas de [`docs/instalacion-nube.md`](docs/instalacion-nube.md).
 
@@ -71,9 +71,9 @@ backend/        App web (FastAPI + SQLAlchemy + Alembic). Ver backend/README.md.
 frontend/       SPA de React (Vite + TypeScript).
 nacional/       API Nacional (FastAPI): JWT, reservas, cierres, Dockerfile, scripts/verificar_despliegue.py.
 docs/           Guías de instalación: nube (por defecto) y local (plan B).
-bonita/         Herramientas: cliente REST y scripts que editan el .bos (conectores de cierre, login JWT, preparar_entorno.py, ver_conectores.py).
+bonita/         Scripts que editan el .bos sin abrir Studio (conectores de cierre, login JWT, preparar_entorno.py) y ver_conectores.py.
 entrega-1/      Entrega 1 (entregada): modelo BPM inicial e informe.
-entrega-2/      Entrega 2 (entregada): RescueSync.bos, ACME.xml (organización) y bitácora de cambios en Bonita.
+entrega-2/      Entrega 2 (entregada): RescueSync.bos (histórico), ACME.xml (organización vigente) y bitácora de cambios en Bonita.
 entrega-3/      Entrega 3: entrega42_local.bos y entrega42_nube.bos (el proceso vigente, local y contra la API de Render), ficha de entrega y Swagger.
 render.yaml     Blueprint de Render para la API Nacional (referencia; el servicio vivo se creó desde el repo).
 docker-compose.yml   Postgres 16 para el backend (opcional).

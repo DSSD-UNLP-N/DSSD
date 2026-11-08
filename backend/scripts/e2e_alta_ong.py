@@ -22,6 +22,7 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from comun import admin_bonita  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
 from app.integrations.bonita import BonitaClient  # noqa: E402
 
@@ -69,8 +70,7 @@ def main() -> int:
     check("La ONG entra a la app con su clave y rol ONG", login.status_code == 200 and login.json().get("rol") == "ONG", login.text[:150])
 
     print("\n== En Bonita")
-    admin = BonitaClient(cfg.bonita_base_url, cfg.bonita_timeout_seconds)
-    admin.login(cfg.bonita_username, cfg.bonita_password)
+    admin = admin_bonita()
     uid = admin.find_user_id(usuario)
     check("Existe el usuario", uid is not None)
     miembros = admin._request("GET", "/API/identity/membership", params={"p": 0, "c": 50, "f": f"user_id={uid}", "d": "group_id"}).json() if uid else []

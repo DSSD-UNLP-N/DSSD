@@ -1,6 +1,6 @@
 """La app y el modelo de Bonita deben hablar el mismo contrato.
 
-Lee entrega-2/RescueSync.bos (el export de Studio). Si alguien cambia el contrato
+Lee entrega-3/entrega42_local.bos (el export vigente de Studio). Si alguien cambia el contrato
 en Studio y no la app (o al revés), estos tests fallan.
 """
 import re
@@ -12,9 +12,9 @@ import pytest
 from app.core.config import Settings
 from app.integrations.bonita import CONTRACT_INPUTS
 
-BOS = Path(__file__).resolve().parents[2] / "entrega-2" / "RescueSync.bos"
+BOS = Path(__file__).resolve().parents[2] / "entrega-3" / "entrega42_local.bos"
 
-pytestmark = pytest.mark.skipif(not BOS.exists(), reason="no está entrega-2/RescueSync.bos")
+pytestmark = pytest.mark.skipif(not BOS.exists(), reason="no está entrega-3/entrega42_local.bos")
 
 
 @pytest.fixture(scope="module")

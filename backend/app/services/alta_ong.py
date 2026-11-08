@@ -6,7 +6,6 @@ lo local se crea al final y el usuario de Bonita se borra si algo falla después
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 
 import requests
 from sqlalchemy import or_, select
@@ -15,33 +14,20 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.security import hash_password
-from app.integrations.bonita import BonitaClient, BonitaError
-from app.integrations.nacional import NacionalClient, NacionalError
+from app.integrations.bonita import BonitaClient, BonitaError, bonita_login
+from app.integrations.nacional import NACIONAL_CAIDO, NacionalClient, NacionalError
 from app.models import Ong, Rol, Usuario
+from app.schemas.api import AltaOngIn
+from app.services import ServicioError
 
 BONITA_GRUPO_ONG = "/rescuesync/ong"
 BONITA_ROL_ONG = "representante_ong"
 
 BONITA_CAIDO = "Bonita no responde; probá de nuevo en un momento."
-NACIONAL_CAIDO = "El Sistema Nacional no responde; probá de nuevo en un momento."
 
 
-class AltaOngError(Exception):
-    """El alta no se pudo completar; `status` es el código HTTP que corresponde."""
-
-    def __init__(self, mensaje: str, status: int = 409):
-        super().__init__(mensaje)
-        self.status = status
-
-
-@dataclass
-class DatosAlta:
-    ong_nombre: str
-    cuit: str
-    nombre: str
-    username: str
-    password: str
-    rubros: list[dict]
+class AltaOngError(ServicioError):
+    status = 409
 
 
 def normalizar_cuit(cuit: str) -> str:
@@ -51,32 +37,30 @@ def normalizar_cuit(cuit: str) -> str:
     return f"{digitos[:2]}-{digitos[2:10]}-{digitos[10]}"
 
 
-def _borrar_usuario_bonita(bonita: BonitaClient, user_id: str | None) -> None:
+def _borrar_usuario_bonita(bonita: BonitaClient, user_id: str) -> None:
     """Compensación: si falla, se ignora para que se informe el error original."""
-    if user_id is None:
-        return
     try:
         bonita.delete_user(user_id)
     except (BonitaError, requests.RequestException):
         pass
 
 
-def _crear_en_bonita(settings: Settings, datos: DatosAlta) -> tuple[BonitaClient, str]:
-    bonita = BonitaClient(settings.bonita_base_url, settings.bonita_timeout_seconds)
+def _crear_en_bonita(settings: Settings, datos: AltaOngIn) -> tuple[BonitaClient, str]:
     user_id: str | None = None
     try:
-        bonita.login(settings.bonita_username, settings.bonita_password)
+        bonita = bonita_login(settings)
         if bonita.find_user_id(datos.username) is not None:
             raise AltaOngError("El usuario ya está registrado", 409)
         user_id = bonita.create_user(datos.username, settings.bonita_test_password, datos.nombre)
         bonita.add_membership(user_id, bonita.group_id(BONITA_GRUPO_ONG), bonita.role_id(BONITA_ROL_ONG))
     except (BonitaError, requests.RequestException) as exc:
-        _borrar_usuario_bonita(bonita, user_id)
+        if user_id is not None:  # solo se crea después del login: `bonita` ya existe
+            _borrar_usuario_bonita(bonita, user_id)
         raise AltaOngError(BONITA_CAIDO, 503) from exc
     return bonita, user_id
 
 
-def alta_ong(db: Session, settings: Settings, nacional: NacionalClient, datos: DatosAlta) -> Usuario:
+def alta_ong(db: Session, settings: Settings, nacional: NacionalClient, datos: AltaOngIn) -> Usuario:
     cuit = normalizar_cuit(datos.cuit)
 
     existe = db.scalar(select(Ong.id).where(or_(Ong.nombre == datos.ong_nombre, Ong.cuit == cuit)))
@@ -86,8 +70,8 @@ def alta_ong(db: Session, settings: Settings, nacional: NacionalClient, datos: D
     bonita, user_id = _crear_en_bonita(settings, datos)
 
     try:
-        token = nacional.registrar_ong(ong_nombre=datos.ong_nombre, cuit=cuit, nombre=datos.nombre,
-                                       username=datos.username, password=datos.password)
+        nacional.registrar_ong(ong_nombre=datos.ong_nombre, cuit=cuit, nombre=datos.nombre,
+                               username=datos.username, password=datos.password)
     except NacionalError as exc:
         _borrar_usuario_bonita(bonita, user_id)
         if exc.status is not None and 400 <= exc.status < 500:
@@ -95,12 +79,12 @@ def alta_ong(db: Session, settings: Settings, nacional: NacionalClient, datos: D
         raise AltaOngError(NACIONAL_CAIDO, 503) from exc
 
     try:
-        nacional.declarar_inventario(cuit, token, datos.rubros)
+        nacional.declarar_inventario(cuit, [r.model_dump() for r in datos.rubros])
     except NacionalError as exc:
         _borrar_usuario_bonita(bonita, user_id)
         raise AltaOngError(
             "La ONG quedó registrada en el Sistema Nacional pero sin rubros: completalos desde Swagger con "
-            f"PUT /ongs/{cuit}/inventario.", 502) from exc
+            f"PUT /ongs/{cuit}/inventario (con una cuenta de servicio).", 502) from exc
 
     try:
         ong = Ong(nombre=datos.ong_nombre, cuit=cuit)

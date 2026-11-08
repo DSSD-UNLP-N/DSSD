@@ -25,95 +25,22 @@ con --con-parcial, unos 4.
 from __future__ import annotations
 
 import argparse
-import re
 import sys
-import time
-from datetime import datetime
 from pathlib import Path
 
 from playwright.sync_api import Page, sync_playwright
 
+from comun import BOMBEROS, CRUZ_ROJA, admin_bonita, comprometido, tarea_activa
+import ui_comun
+from ui_comun import (PLAZO, Reporte, Ui, agregar_lote, cierre_de_ventana, esperar_estado, esperar_evaluacion,
+                      esperar_hasta, ofrecer, publicar, registrar)
+from nacional_auth import nacional_post
+from app.core.config import get_settings
+from app.integrations.bonita import BonitaClient
+
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent))
-sys.path.insert(0, str(HERE))
-
-import e2e_ui  # noqa: E402
-from e2e_ui import POLL_S, PLAZO, PLAZO_LENTO, Reporte, Ui, cierre_de_ventana, dato, esperar_hasta, tarea_activa  # noqa: E402
-
-from nacional_auth import nacional_get, nacional_post  # noqa: E402
-from app.core.config import get_settings  # noqa: E402
-from app.integrations.bonita import BonitaClient  # noqa: E402
-
-CRUZ_ROJA, BOMBEROS = "30-54666544-5", "30-68522415-9"
 IMG = HERE.parents[1] / "entrega-3" / "img" / "parada-2"
-e2e_ui.CAPTURAS = IMG
-
-
-def comprometido(nacional: str, cuit: str, tipo: str) -> int:
-    ficha = nacional_get(f"{nacional}/ongs/{cuit}", timeout=60).json()
-    return next(i["cantidad_comprometida"] for i in ficha["inventario"] if i["tipo_recurso"] == tipo)
-
-
-def registrar(u: Ui, app: str, gravedad: str, zona: str, descripcion: str, foto: str) -> tuple[int, str]:
-    p = u.page
-    p.goto(f"{app}/emergencias/nueva")
-    p.get_by_role("heading", name="Registrar emergencia").wait_for(timeout=PLAZO)
-    p.locator("select").nth(0).select_option("inundacion")
-    p.locator("select").nth(1).select_option(gravedad)
-    p.get_by_placeholder("Barrio, localidad o área").fill(zona)
-    p.get_by_placeholder("Situación inicial, impacto y necesidades estimadas").fill(descripcion)
-    u.foto(foto)
-    p.get_by_role("button", name="Registrar emergencia").click()
-    p.wait_for_url(re.compile(r"/emergencias/\d+$"), timeout=40000)
-    u.ve(zona, f"Detalle con los datos cargados ({zona})")
-    return int(p.url.rsplit("/", 1)[1]), dato(p, "Caso Bonita")
-
-
-def agregar_lote(u: Ui, recurso: str, cantidad: str, nombre: str) -> None:
-    u.page.locator("[name=tipo_recurso]").select_option(recurso)
-    u.page.locator("[name=cantidad]").fill(cantidad)
-    u.page.locator("[name=tipo]").select_option("PRINCIPAL")
-    u.page.get_by_role("button", name="Agregar lote").click()
-    u.ve(nombre, f"Lote «{nombre}» en la lista", timeout=PLAZO_LENTO)
-
-
-def publicar(u: Ui, fin: datetime) -> None:
-    u.page.locator("[name=ventana_fin]").fill(fin.strftime("%Y-%m-%dT%H:%M"))
-    u.page.get_by_role("button", name="Publicar a la red").click()
-    u.ve("Convocatoria publicada", "Publicación aceptada", timeout=40000)
-    u.ve("Convocatoria abierta", "Estado «Convocatoria abierta»")
-
-
-def ofrecer(u: Ui, app: str, emergencia: int, cantidad: str, foto: str | None = None) -> None:
-    u.abrir(app, emergencia)
-    u.page.locator("[name^=lote_]").first.fill(cantidad)
-    u.page.get_by_role("button", name="Enviar oferta").click()
-    if not u.ve("versión 1", f"Oferta de {cantidad} enviada (versión 1)"):
-        u.foto(f"error-oferta-{cantidad}")
-    if foto:
-        u.foto(foto)
-
-
-def esperar_evaluacion(u: Ui, app: str, emergencia: int, segundos: int) -> bool:
-    """El Coordinador recarga el detalle hasta que aparece la cobertura que calculó Bonita. Llamar cuando la ventana ya
-    venció (`esperar_hasta`): antes no hay nada que ver."""
-    limite = time.monotonic() + segundos
-    while time.monotonic() < limite:
-        u.abrir(app, emergencia)
-        if u.page.locator("[data-testid=cobertura-total]").count():
-            return True
-        time.sleep(POLL_S)
-    return False
-
-
-def esperar_estado(u: Ui, app: str, emergencia: int, etiqueta: str, segundos: int) -> bool:
-    limite = time.monotonic() + segundos
-    while time.monotonic() < limite:
-        u.abrir(app, emergencia)
-        if u.page.locator(".badge", has_text=etiqueta).count():
-            return True
-        time.sleep(POLL_S)
-    return False
+ui_comun.CAPTURAS = IMG
 
 
 def adjudicar(u: Ui, app: str, emergencia: int, cuit: str, foto_antes: str, foto_despues: str) -> None:
@@ -191,15 +118,14 @@ def main() -> int:
     ap.add_argument("--sin-capturas", action="store_true", help="no guardar las fotos de cada paso")
     args = ap.parse_args()
 
-    e2e_ui.SIN_CAPTURAS = args.sin_capturas
+    ui_comun.SIN_CAPTURAS = args.sin_capturas
     if not args.sin_capturas:
         IMG.mkdir(parents=True, exist_ok=True)
         for vieja in IMG.glob("*.png"):
             vieja.unlink()
     cfg = get_settings()
     nacional = cfg.nacional_base_url.rstrip("/")
-    admin = BonitaClient(cfg.bonita_base_url, cfg.bonita_timeout_seconds)
-    admin.login(cfg.bonita_username, cfg.bonita_password)
+    admin = admin_bonita()
     r = Reporte()
     app, con_a = args.app, args.con_parcial
 

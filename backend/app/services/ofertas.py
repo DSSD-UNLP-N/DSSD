@@ -16,9 +16,10 @@ from sqlalchemy.orm import Session, selectinload
 from app.integrations.nacional import NacionalClient
 from app.models import Emergencia, EstadoEmergencia, Oferta, OfertaItem, Ong
 from app.schemas.api import OfertaItemIn
+from app.services import ServicioError
 
 
-class OfertaError(RuntimeError):
+class OfertaError(ServicioError):
     """La oferta no se puede guardar (ventana cerrada, lotes inválidos, no alcanza el inventario…)."""
 
 
@@ -72,7 +73,7 @@ def publicar_oferta(
         .where(Oferta.emergencia_id == emergencia.id, Oferta.ong_id == ong.id)
         .options(selectinload(Oferta.items))
     )
-    if not items and (oferta is None or not _items_vigentes(oferta)):
+    if not items and (oferta is None or not oferta.items_vigentes):
         raise OfertaError("No tenés una oferta para retirar")
     _validar_tope(db, nacional, emergencia, ong, oferta, items, ahora)
 
@@ -90,10 +91,6 @@ def publicar_oferta(
     return oferta
 
 
-def _items_vigentes(oferta: Oferta) -> list[OfertaItem]:
-    return [i for i in oferta.items if i.version == oferta.version_actual]
-
-
 def _validar_tope(
     db: Session, nacional: NacionalClient, emergencia: Emergencia, ong: Ong,
     oferta_actual: Oferta | None, items: list[OfertaItemIn], ahora: datetime,
@@ -107,7 +104,7 @@ def _validar_tope(
             nuevos[por_lote[item.lote_id].tipo_recurso] += item.cantidad
     previos: Counter[str] = Counter()
     if oferta_actual is not None:
-        for i in _items_vigentes(oferta_actual):
+        for i in oferta_actual.items_vigentes:
             if por_lote[i.lote_id].tipo_recurso:
                 previos[por_lote[i.lote_id].tipo_recurso] += i.cantidad
 
@@ -128,7 +125,7 @@ def _validar_tope(
     for otra in otras:
         if otra.emergencia.estado not in COMPROMETEN_STOCK:
             continue
-        for i in _items_vigentes(otra):
+        for i in otra.items_vigentes:
             if i.lote.tipo_recurso in a_validar:
                 total[i.lote.tipo_recurso] += i.cantidad
 

@@ -15,7 +15,7 @@ PC está cargada y aparecen fallas de «ventana cerrada»).
     python scripts/correr_escenarios.py --sin-unitarios
 
 Requisitos: los de cada escenario (Bonita con el `.bos` de JWT, app en :8001 y API Nacional en :8002 con seed y nada comprometido).
-Los de la interfaz (e2e_ui.py, ui_parada2.py, ui_ejecucion.py) necesitan además el front en :5173 y se corren aparte.
+Los de la interfaz (e2e_ui.py, ui_parada2.py, ui_parada3.py) necesitan además el front en :5173 y se corren aparte.
 """
 from __future__ import annotations
 
@@ -31,8 +31,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 
-from app.core.config import get_settings  # noqa: E402
-from app.integrations.bonita import BonitaClient  # noqa: E402
+from comun import admin_bonita  # noqa: E402
 
 ESCENARIOS = {
     "evaluacion": "escenario_evaluacion.py",
@@ -45,9 +44,7 @@ ESCENARIOS = {
 
 
 def borrar_casos_abiertos() -> int:
-    cfg = get_settings()
-    admin = BonitaClient(cfg.bonita_base_url, cfg.bonita_timeout_seconds)
-    admin.login(cfg.bonita_username, cfg.bonita_password)
+    admin = admin_bonita()
     casos = admin._request("GET", "/API/bpm/case", params={"p": 0, "c": 200}).json()
     for c in casos:
         admin.delete_case(c["id"])
@@ -60,9 +57,9 @@ def borrar_casos_abiertos() -> int:
 
 def limpiar_previos() -> None:
     """Lo que dejó una corrida anterior y los escenarios no limpian: ofertas abiertas y reservas en la API Nacional."""
-    from correr_ui import liberar_reservas, retirar_ofertas_abiertas
+    from comun import liberar_reservas, retirar_ofertas_abiertas
 
-    print(f"Limpieza previa: {retirar_ofertas_abiertas()} ofertas abiertas retiradas; reservas de la API Nacional liberadas.", flush=True)
+    print(f"Limpieza previa: {retirar_ofertas_abiertas('http://localhost:8001')} ofertas abiertas retiradas; reservas de la API Nacional liberadas.", flush=True)
     liberar_reservas()
 
 

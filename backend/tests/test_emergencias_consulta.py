@@ -4,30 +4,25 @@ from datetime import datetime, timezone
 import pytest
 import responses
 
-from app.core.config import get_settings
-from app.models import Emergencia, EstadoEmergencia, Gravedad, Lote, Municipio, TipoLote
-
-BASE = get_settings().bonita_base_url
+from app.models import EstadoEmergencia, Gravedad, Municipio, TipoLote
+from tests.conftest import BASE, crear_emergencia, mock_login
 
 
 @pytest.fixture
 def emergencias(seeded):
     """Una emergencia del municipio del seed (registrada) y otra de otro municipio (en convocatoria)."""
+    propia, _ = crear_emergencia(seeded, EstadoEmergencia.REGISTRADA, lotes=(), ofertas=(),
+                                 descripcion="Río desbordado", bonita_case_id=11,
+                                 creada_en=datetime(2026, 9, 22, 13, 0, tzinfo=timezone.utc))
     with seeded() as s:
-        propio = s.query(Municipio).one()
         otro = Municipio(nombre="Tres Arroyos", provincia="Buenos Aires")
         s.add(otro)
-        s.flush()
-        propia = Emergencia(municipio_id=propio.id, tipo="inundacion", nivel_gravedad=Gravedad.ALTO,
-                            zona_afectada="Centro", descripcion="Río desbordado", bonita_case_id=11,
-                            creada_en=datetime(2026, 9, 22, 13, 0, tzinfo=timezone.utc))
-        ajena = Emergencia(municipio_id=otro.id, tipo="incendio", nivel_gravedad=Gravedad.CRITICO,
-                           zona_afectada="Sierra", descripcion="Foco activo", bonita_case_id=12,
-                           estado=EstadoEmergencia.CONVOCATORIA)
-        ajena.lotes = [Lote(recurso="Brigadistas", cantidad=20, unidad="personas", tipo=TipoLote.APOYO)]
-        s.add_all([propia, ajena])
         s.commit()
-        return propia.id, ajena.id
+    ajena, _ = crear_emergencia(
+        seeded, EstadoEmergencia.CONVOCATORIA, municipio_id=otro.id, tipo="incendio", nivel_gravedad=Gravedad.CRITICO,
+        zona_afectada="Sierra", descripcion="Foco activo", bonita_case_id=12, ofertas=(),
+        lotes=({"recurso": "Brigadistas", "cantidad": 20, "unidad": "personas", "tipo": TipoLote.APOYO},))
+    return propia, ajena
 
 
 def _ids(c):
@@ -85,8 +80,7 @@ def test_emergencia_inexistente_da_404(login):
 
 
 def _mock_login_y_tarea(tarea: dict | None):
-    responses.add(responses.POST, f"{BASE}/loginservice", status=204,
-                  headers={"Set-Cookie": "X-Bonita-API-Token=tok; Path=/"})
+    mock_login()
     responses.add(responses.GET, f"{BASE}/API/bpm/humanTask", json=[tarea] if tarea else [])
 
 
@@ -114,7 +108,7 @@ def test_sin_tarea_pendiente_no_hay_nada_que_mostrar(login, emergencias):
 @responses.activate
 def test_si_bonita_no_responde_el_detalle_igual_se_devuelve(login, emergencias):
     _, ajena = emergencias
-    responses.add(responses.POST, f"{BASE}/loginservice", status=500)
+    mock_login(status=500)
 
     r = login("ong.bomberos").get(f"/api/emergencias/{ajena}")
 
@@ -128,3 +122,14 @@ def test_a_otros_perfiles_y_al_listado_no_se_les_consulta_bonita(login, emergenc
         r = login(usuario).get(f"/api/emergencias/{ajena}")
         assert r.status_code == 200 and r.json()["tarea_bonita"] is None
     assert login("ong.bomberos").get("/api/emergencias").status_code == 200
+
+
+@pytest.mark.parametrize("estado", [EstadoEmergencia.EN_EVALUACION, EstadoEmergencia.REGISTRADA])
+def test_listado_con_una_evaluacion_guardada_no_la_expone(login, seeded, estado):
+    """La columna guarda la evaluación como JSON crudo (también la conserva una emergencia que volvió a REGISTRADA por
+    REFORMULAR): el listado no la serializa ni falla por ella; el detalle la arma aparte."""
+    eid, _ = crear_emergencia(seeded, estado, ofertas=(), evaluacion='{"cobertura_completa": false, "lotes": []}')
+    for usuario in ("coordinador.regional", "operador.municipal"):
+        r = login(usuario).get("/api/emergencias")
+        assert r.status_code == 200
+        assert [e["evaluacion"] for e in r.json() if e["id"] == eid] == [None]

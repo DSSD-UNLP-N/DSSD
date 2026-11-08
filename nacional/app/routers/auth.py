@@ -48,7 +48,8 @@ def registrar_ong(
     settings: Settings = Depends(get_settings),
 ):
     """Onboarding: crea la ONG (habilitada, sin certificaciones ni inventario) y su cuenta, y devuelve ya un token.
-    No requiere autenticación. Después la ONG declara su inventario con `PUT /ongs/{cuit}/inventario`."""
+    No requiere autenticación. Después el sistema (cuenta de servicio) declara su inventario con
+    `PUT /ongs/{cuit}/inventario`."""
     if db.scalar(select(Cuenta.id).where(func.lower(Cuenta.username) == body.username.lower())):
         raise HTTPException(status_code=409, detail="El nombre de usuario ya está registrado")
     if db.scalar(select(Ong.id).where(func.lower(Ong.nombre) == body.ong_nombre.lower())):

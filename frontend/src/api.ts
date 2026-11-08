@@ -114,7 +114,6 @@ export type Evaluacion = {
 
 export type Meta = {
   tipos: Record<string, string>;
-  roles: Record<string, string>;
   demo: { password: string; users: { username: string; rol: string; label: string }[] } | null;
 };
 
@@ -146,90 +145,55 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     }
   }
   if (!res.ok) {
-    let detail = text || res.statusText;
-    if (typeof data === "object" && data && "detail" in data) {
-      const raw = (data as { detail: unknown }).detail;
-      if (typeof raw === "string") detail = raw;
-      else if (Array.isArray(raw)) {
-        detail = raw
-          .map((item) =>
-            typeof item === "object" && item && "msg" in item
-              ? String((item as { msg: unknown }).msg)
-              : String(item),
-          )
-          .join(" · ");
-      }
-    }
-    throw new Error(detail);
+    // detail de FastAPI: texto, o lista de errores de validación ([{loc, msg, ...}]); otro caso, el cuerpo crudo.
+    const raw = (data as { detail?: unknown } | null)?.detail;
+    throw new Error(
+      typeof raw === "string"
+        ? raw
+        : Array.isArray(raw)
+          ? raw.map((item) => (typeof item === "object" && item && "msg" in item ? String(item.msg) : String(item))).join(" · ")
+          : text || res.statusText,
+    );
   }
   return data as T;
 }
 
+const post = <T>(path: string, body?: unknown) =>
+  request<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) });
+
+// /api/meta no cambia en la sesión: una sola petición compartida; si falla, la próxima llamada reintenta.
+let metaPromise: Promise<Meta> | null = null;
+
 export const api = {
-  meta: () => request<Meta>("/api/meta"),
+  meta: () =>
+    (metaPromise ??= request<Meta>("/api/meta").catch((err) => {
+      metaPromise = null;
+      throw err;
+    })),
   me: () => request<Usuario>("/api/auth/me"),
-  login: (username: string, password: string) =>
-    request<Usuario>("/api/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ username, password }),
-    }),
-  logout: () => request<void>("/api/auth/logout", { method: "POST" }),
+  login: (username: string, password: string) => post<Usuario>("/api/auth/login", { username, password }),
+  logout: () => post<void>("/api/auth/logout"),
   listEmergencias: () => request<Emergencia[]>("/api/emergencias"),
   getEmergencia: (id: number) => request<Emergencia>(`/api/emergencias/${id}`),
-  createEmergencia: (body: {
-    tipo: string;
-    nivel_gravedad: string;
-    zona_afectada: string;
-    descripcion: string;
-  }) =>
-    request<Emergencia>("/api/emergencias", {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
+  createEmergencia: (body: { tipo: string; nivel_gravedad: string; zona_afectada: string; descripcion: string }) =>
+    post<Emergencia>("/api/emergencias", body),
   tiposRecurso: () => request<TipoRecurso[]>("/api/tipos-recurso"),
   tiposRecursoAlta: () => request<TipoRecurso[]>("/api/ongs/alta/tipos-recurso"),
-  altaOng: (body: AltaOngIn) =>
-    request<AltaOngOut>("/api/ongs/alta", {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-  createLote: (
-    id: number,
-    body: { tipo_recurso: string; detalle?: string; cantidad: number; tipo: string },
-  ) =>
-    request<Lote>(`/api/emergencias/${id}/lotes`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-  deleteLote: (id: number, loteId: number) =>
-    request<void>(`/api/emergencias/${id}/lotes/${loteId}`, { method: "DELETE" }),
+  altaOng: (body: AltaOngIn) => post<AltaOngOut>("/api/ongs/alta", body),
+  createLote: (id: number, body: { tipo_recurso: string; detalle?: string; cantidad: number; tipo: string }) =>
+    post<Lote>(`/api/emergencias/${id}/lotes`, body),
   publicar: (id: number, ventana_fin: string) =>
-    request<Emergencia>(`/api/emergencias/${id}/publicar`, {
-      method: "POST",
-      body: JSON.stringify({ ventana_fin }),
-    }),
+    post<Emergencia>(`/api/emergencias/${id}/publicar`, { ventana_fin }),
   decidir: (id: number, decision: "PARCIAL" | "REFORMULAR") =>
-    request<Emergencia>(`/api/emergencias/${id}/decision`, {
-      method: "POST",
-      body: JSON.stringify({ decision }),
-    }),
+    post<Emergencia>(`/api/emergencias/${id}/decision`, { decision }),
   adjudicar: (id: number, cuits: string[]) =>
-    request<Emergencia>(`/api/emergencias/${id}/adjudicar`, {
-      method: "POST",
-      body: JSON.stringify({ cuits }),
-    }),
-  monitorear: (id: number) => request<Emergencia>(`/api/emergencias/${id}/monitorear`, { method: "POST" }),
-  finalizar: (id: number) => request<Emergencia>(`/api/emergencias/${id}/finalizar`, { method: "POST" }),
-  validarCierre: (id: number) => request<Emergencia>(`/api/emergencias/${id}/validar-cierre`, { method: "POST" }),
+    post<Emergencia>(`/api/emergencias/${id}/adjudicar`, { cuits }),
+  monitorear: (id: number) => post<Emergencia>(`/api/emergencias/${id}/monitorear`),
+  finalizar: (id: number) => post<Emergencia>(`/api/emergencias/${id}/finalizar`),
+  validarCierre: (id: number) => post<Emergencia>(`/api/emergencias/${id}/validar-cierre`),
   notificaciones: () => request<Notificacion[]>("/api/notificaciones"),
-  marcarLeida: (id: number) => request<Notificacion>(`/api/notificaciones/${id}/leida`, { method: "POST" }),
+  marcarLeida: (id: number) => post<Notificacion>(`/api/notificaciones/${id}/leida`),
   listOfertas: (id: number) => request<Oferta[]>(`/api/emergencias/${id}/ofertas`),
-  createOferta: (
-    id: number,
-    items: { lote_id: number; recurso: string; cantidad: number }[],
-  ) =>
-    request<Oferta>(`/api/emergencias/${id}/ofertas`, {
-      method: "POST",
-      body: JSON.stringify({ items }),
-    }),
+  createOferta: (id: number, items: { lote_id: number; recurso: string; cantidad: number }[]) =>
+    post<Oferta>(`/api/emergencias/${id}/ofertas`, { items }),
 };

@@ -36,19 +36,19 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE))
 
-import e2e_ui  # noqa: E402
-from e2e_ui import PLAZO, Reporte, Ui, cierre_de_ventana, ejecutada_por, esperar_hasta, tarea_activa  # noqa: E402
-
-from nacional_auth import nacional_get  # noqa: E402
-from ui_ejecucion import esperar_resuelta, esperar_tarea_activa, sin_tareas  # noqa: E402
-from ui_parada2 import (  # noqa: E402
-    BOMBEROS, CRUZ_ROJA, agregar_lote, comprometido, esperar_estado, esperar_evaluacion, ofrecer, publicar, registrar,
+from comun import (  # noqa: E402
+    BOMBEROS, CRUZ_ROJA, admin_bonita, comprometido, esperar_resuelta, esperar_tarea_activa, sin_tareas, tarea_activa,
 )
+import ui_comun  # noqa: E402
+from ui_comun import (  # noqa: E402
+    PLAZO, Reporte, Ui, agregar_lote, cierre_de_ventana, ejecutada_por, esperar_estado, esperar_evaluacion, esperar_hasta,
+    ofrecer, publicar, registrar,
+)
+from nacional_auth import nacional_get  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
-from app.integrations.bonita import BonitaClient  # noqa: E402
 
 IMG = HERE.parents[1] / "entrega-3" / "img" / "parada-3"
-e2e_ui.CAPTURAS = IMG
+ui_comun.CAPTURAS = IMG
 ONGS = (("ong.cruzroja", CRUZ_ROJA, "Cruz Roja"), ("ong.bomberos", BOMBEROS, "Bomberos"))
 
 
@@ -66,15 +66,14 @@ def main() -> int:
     ap.add_argument("--sin-capturas", action="store_true", help="no guardar las fotos de cada paso")
     args = ap.parse_args()
 
-    e2e_ui.SIN_CAPTURAS = args.sin_capturas
+    ui_comun.SIN_CAPTURAS = args.sin_capturas
     if not args.sin_capturas:
         IMG.mkdir(parents=True, exist_ok=True)
         for vieja in IMG.glob("*.png"):
             vieja.unlink()
     cfg = get_settings()
     nacional = cfg.nacional_base_url.rstrip("/")
-    admin = BonitaClient(cfg.bonita_base_url, cfg.bonita_timeout_seconds)
-    admin.login(cfg.bonita_username, cfg.bonita_password)
+    admin = admin_bonita()
     r = Reporte()
     app = args.app
 
@@ -205,7 +204,7 @@ def main() -> int:
             u.ve("Cierre validado", "Aparece «Cierre validado»", timeout=15000)
             r.check("«Validar Cierre» la completó coordinador.regional",
                     ejecutada_por(admin, caso, "Validar Cierre") == "coordinador.regional", ejecutada_por(admin, caso, "Validar Cierre"))
-            r.check("El caso de Bonita ya no tiene tareas pendientes", sin_tareas(admin, caso), tarea_activa(admin, caso))
+            r.check("El caso de Bonita ya no tiene tareas pendientes", sin_tareas(admin, caso, 40), tarea_activa(admin, caso))
             r.check("Bonita liberó y avisó: la app marca la emergencia RESUELTA", esperar_resuelta(args.api, emg))
             page.reload()
             u.ve("Emergencia resuelta", "La emergencia queda «Resuelta»", timeout=30000)

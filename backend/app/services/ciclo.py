@@ -13,21 +13,18 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import Settings
-from app.integrations.bonita import BonitaClient, BonitaError
+from app.integrations.bonita import BonitaError, bonita_login
 from app.integrations.nacional import NacionalClient
 from app.models import Emergencia, EstadoEmergencia, Oferta, Usuario
 from app.schemas.evaluacion import Evaluacion
+from app.services import ServicioError
 
 TAREA_EVALUAR = "Evaluar Cobertura"
 TAREA_ADJUDICAR = "Adjudicar Ofertas"
 
 
-class CicloError(RuntimeError):
-    """La operación no corresponde (estado equivocado, datos inválidos) o Bonita no pudo avanzar el caso."""
-
-    def __init__(self, mensaje: str, status: int = 409):
-        super().__init__(mensaje)
-        self.status = status
+class CicloError(ServicioError):
+    status = 409  # la operación no corresponde al estado; Bonita caída: 502
 
 
 def _evaluacion(e: Emergencia) -> Evaluacion | None:
@@ -40,10 +37,8 @@ def completar_en_bonita(settings: Settings, case_id: int | None, tarea: str, use
     if case_id is None:
         raise CicloError("La emergencia no tiene caso en Bonita.", 409)
     try:
-        admin = BonitaClient(settings.bonita_base_url, settings.bonita_timeout_seconds)
-        admin.login(settings.bonita_username, settings.bonita_password)
-        usuario = BonitaClient(settings.bonita_base_url, settings.bonita_timeout_seconds)
-        usuario.login(username, settings.bonita_test_password)
+        admin = bonita_login(settings)
+        usuario = bonita_login(settings, username)
         pendiente = admin.wait_for_task(case_id, tarea)
         if pendiente is None:
             raise CicloError(f"El caso {case_id} no está esperando la tarea '{tarea}…' en Bonita.", 409)
@@ -59,7 +54,7 @@ def _retirar_ofertas(db: Session, emergencia: Emergencia) -> None:
     """Retira las ofertas de la ronda (versión nueva sin ítems): el historial queda."""
     ofertas = db.scalars(select(Oferta).where(Oferta.emergencia_id == emergencia.id).options(selectinload(Oferta.items)))
     for o in ofertas:
-        if any(i.version == o.version_actual for i in o.items):
+        if o.items_vigentes:
             o.version_actual += 1
 
 

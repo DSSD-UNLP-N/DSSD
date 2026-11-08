@@ -1,4 +1,6 @@
 import os
+from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 # Antes de importar la app: que ningún test toque dev.db ni un Postgres real.
 os.environ["DATABASE_URL"] = "sqlite://"
@@ -8,18 +10,28 @@ os.environ["NACIONAL_BASE_URL"] = "http://nacional.test"  # nunca pegarle a una 
 os.environ["SHOW_DEMO_USERS"] = "false"  # que el .env local de cada uno no cambie lo que ven los tests
 
 import pytest  # noqa: E402
+import responses  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import create_engine  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
 from app.core import security  # noqa: E402
+from app.core.config import get_settings  # noqa: E402
 from app.db import Base, get_db  # noqa: E402
 from app.integrations.nacional import NacionalError, get_nacional, olvidar_tokens  # noqa: E402
 from app.main import app  # noqa: E402
+from app.models import (  # noqa: E402
+    Emergencia, EstadoOferta, Gravedad, Lote, Municipio, Oferta, OfertaItem, Ong,
+)
 from app.seed import DEMO_PASSWORD, seed  # noqa: E402
 
 PASSWORD = DEMO_PASSWORD
+BASE = get_settings().bonita_base_url
+CASE = 5151
+CLAVE = {"X-Api-Key": "rescuesync-dev-key"}  # la que manda Bonita a /api/bonita/...
+CRUZ_ROJA, BOMBEROS = "30-54666544-5", "30-68522415-9"  # 4 y 6 paramédicos en el FakeNacional
+PARAMEDICOS = {"recurso": "Paramédico", "tipo_recurso": "PARAMEDICO", "cantidad": 10, "unidad": "personas"}
 
 # El PBKDF2 real tarda ~0,3 s por hash y `seeded` lo paga 6 veces por test (y cada login una más): era la mayor
 # parte del tiempo de la suite. El hash guarda sus iteraciones, así que verificar también usa este valor chico.
@@ -97,9 +109,8 @@ class FakeNacional:
             raise self.falla_registro
         self.ongs_registradas.append({"ong_nombre": ong_nombre, "cuit": cuit, "nombre": nombre,
                                       "username": username, "password": password})
-        return f"tok-{cuit}"
 
-    def declarar_inventario(self, cuit, token, items):
+    def declarar_inventario(self, cuit, items):
         self._verificar()
         if self.falla_inventario:
             raise self.falla_inventario
@@ -160,3 +171,93 @@ def login(client):
         return client
 
     return _login
+
+
+# --- datos de prueba compartidos ---
+
+def crear_emergencia(seeded, estado, *, lotes=(PARAMEDICOS,), ofertas=((CRUZ_ROJA, 4), (BOMBEROS, 2)),
+                     estado_oferta=EstadoOferta.PRESENTADA, **campos):
+    """Emergencia del municipio del seed con sus lotes y una oferta (versión 1, sobre el primer lote) por cada
+    (CUIT, cantidad). `campos` pisa cualquier columna de la emergencia. Devuelve (emergencia_id, [lote_id, ...])."""
+    with seeded() as s:
+        if "municipio_id" not in campos:
+            campos["municipio_id"] = s.query(Municipio).one().id
+        datos = {"tipo": "inundacion", "nivel_gravedad": Gravedad.ALTO, "zona_afectada": "Centro", "descripcion": "d",
+                 "bonita_case_id": CASE, **campos}
+        e = Emergencia(estado=estado, **datos)
+        e.lotes = [Lote(**lote) for lote in lotes]
+        s.add(e)
+        s.flush()
+        for cuit, cantidad in ofertas:
+            o = Oferta(emergencia_id=e.id, ong_id=s.query(Ong).filter_by(cuit=cuit).one().id, estado=estado_oferta)
+            o.items = [OfertaItem(version=1, lote_id=e.lotes[0].id, recurso=e.lotes[0].recurso, cantidad=cantidad)]
+            s.add(o)
+        s.commit()
+        return e.id, [lote.id for lote in e.lotes]
+
+
+def cambiar_emergencia(seeded, emergencia_id, **cambios):
+    with seeded() as s:
+        e = s.get(Emergencia, emergencia_id)
+        for k, v in cambios.items():
+            setattr(e, k, v)
+        s.commit()
+
+
+def estado_de(seeded, emergencia_id):
+    with seeded() as s:
+        return s.get(Emergencia, emergencia_id).estado
+
+
+def sin_zona(delta):
+    """Ahora + delta en UTC sin zona, como guarda publicar_convocatoria la ventana (SQLite descarta la zona)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None) + delta
+
+
+def mock_login(token="tok", status=204, **kw):
+    """Un POST /loginservice de Bonita. Con 204 deja la cookie del token CSRF (token=None: sin cookie); otro status falla."""
+    if status == 204 and token:
+        kw["headers"] = {"Set-Cookie": f"X-Bonita-API-Token={token}; Path=/"}
+    responses.add(responses.POST, f"{BASE}/loginservice", status=status, **kw)
+
+
+def mock_ejecutar(tarea_id):
+    """complete_task_as_self: el id del usuario de la sesión, asignarle la tarea y ejecutarla."""
+    responses.add(responses.GET, f"{BASE}/API/system/session/unusedid", json={"user_id": "77"})
+    responses.add(responses.PUT, f"{BASE}/API/bpm/userTask/{tarea_id}", status=200)
+    responses.add(responses.POST, f"{BASE}/API/bpm/userTask/{tarea_id}/execution", status=200)
+
+
+def mock_tarea(nombre, tarea_id="9"):
+    """Bonita con `nombre` como única tarea pendiente del caso CASE, lista para asignarla, setear variables y completarla."""
+    mock_login("tok-admin")
+    mock_login("tok-usuario")
+    responses.add(responses.GET, f"{BASE}/API/bpm/humanTask", json=[{"id": tarea_id, "displayName": nombre}])
+    responses.add(responses.PUT, f"{BASE}/API/bpm/caseVariable/{CASE}/decisionCoordinador", status=200)
+    responses.add(responses.PUT, f"{BASE}/API/bpm/caseVariable/{CASE}/ongsAdjudicadas", status=200)
+    mock_ejecutar(tarea_id)
+
+
+def tarea_completada(tarea_id="9"):
+    return any(urlparse(c.request.url).path.endswith(f"/userTask/{tarea_id}/execution") for c in responses.calls)
+
+
+def mock_bonita_alta_ong(usuario_existente=None):
+    """Lo que el alta de una ONG le pide a Bonita: buscar/crear el usuario, el grupo, el rol y la membresía."""
+    mock_login()
+    responses.add(responses.GET, f"{BASE}/API/identity/user", json=usuario_existente or [])
+    responses.add(responses.POST, f"{BASE}/API/identity/user", json={"id": "77"})
+    responses.add(responses.GET, f"{BASE}/API/identity/group", json=[{"id": "5"}])
+    responses.add(responses.GET, f"{BASE}/API/identity/role", json=[{"id": "3"}])
+    responses.add(responses.POST, f"{BASE}/API/identity/membership", status=200, json={})
+    responses.add(responses.DELETE, f"{BASE}/API/identity/user/77", status=200)
+
+
+def body_alta_ong(**kw):
+    """Cuerpo de POST /api/ongs/alta para una ONG nueva (Techo Digno)."""
+    base = dict(ong_nombre="Techo Digno", cuit="30-71234567-8", nombre="Ana Paz", username="ong.techo",
+                password="secreto123",
+                rubros=[{"tipo_recurso": "PARAMEDICO", "cantidad_total": 4},
+                        {"tipo_recurso": "RACION_ALIMENTO", "cantidad_total": 0}])
+    base.update(kw)
+    return base

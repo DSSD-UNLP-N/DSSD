@@ -5,21 +5,20 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
-from app.errores import AUTH, errores
-from app.models import Cuenta, Inventario, Ong, OngCertificacion, TipoRecurso
-from app.routers.catalogo import inventario_out
+from app.errores import SERVICIO, errores
+from app.models import Inventario, Ong, OngCertificacion, TipoRecurso
+from app.routers.catalogo import inventario_out, ong_o_404
 from app.schemas import CuitPath, InventarioIn, InventarioOut
-from app.security import require_ong_account
+from app.security import require_servicio
 
-router = APIRouter(tags=["inventario"])
+# Solo el sistema (Bonita y la app local) carga el inventario: las ONGs no entran a esta API.
+router = APIRouter(tags=["inventario"], dependencies=[Depends(require_servicio)], responses=errores(SERVICIO))
 
 
 @router.put(
     "/ongs/{cuit}/inventario", response_model=list[InventarioOut],
-    summary="Declarar el inventario de una ONG (upsert por tipo de recurso)",
+    summary="Declarar el inventario de una ONG (upsert por tipo de recurso; solo el sistema)",
     responses=errores({
-        **AUTH,
-        403: "La cuenta no es la de la ONG de la ruta (solo se modifica el inventario propio)",
         404: "La ONG o algún tipo de recurso no existe",
         409: "Se declara menos de lo que ya está comprometido",
     }),
@@ -28,18 +27,15 @@ def declarar_inventario(
     cuit: CuitPath,
     body: InventarioIn,
     db: Session = Depends(get_db),
-    _cuenta: Cuenta = Depends(require_ong_account),
 ):
-    """Fija `cantidad_total` por tipo de recurso. No toca `cantidad_comprometida`: no se puede declarar
-    menos de lo ya comprometido (409). Devuelve el inventario completo de la ONG."""
-    ong = db.scalar(
-        select(Ong).where(Ong.cuit == cuit).options(
-            selectinload(Ong.certificaciones).selectinload(OngCertificacion.certificacion),
-            selectinload(Ong.inventario).selectinload(Inventario.tipo_recurso),
-        )
+    """Fija `cantidad_total` por tipo de recurso. Lo llama el sistema (cuenta de servicio), nunca una cuenta de ONG.
+    No toca `cantidad_comprometida`: no se puede declarar menos de lo ya comprometido (409).
+    Devuelve el inventario completo de la ONG."""
+    ong = ong_o_404(
+        db, cuit,
+        selectinload(Ong.certificaciones).selectinload(OngCertificacion.certificacion),
+        selectinload(Ong.inventario).selectinload(Inventario.tipo_recurso),
     )
-    if ong is None:
-        raise HTTPException(status_code=404, detail="ONG no registrada")
 
     codigos = [i.tipo_recurso for i in body.items]
     if len(set(codigos)) != len(codigos):
