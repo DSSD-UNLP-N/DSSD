@@ -19,6 +19,7 @@ class UsuarioOut(BaseModel):
     username: str
     nombre: str
     rol: Rol
+    ong_id: int | None = None  # ONG a la que pertenece el usuario (solo el rol ONG)
 
     model_config = ConfigDict(from_attributes=True)
 

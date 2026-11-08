@@ -774,7 +774,7 @@ export function DetallePage() {
   const [tipos, setTipos] = useState<TipoRecurso[]>([]);
   const [elegidas, setElegidas] = useState<string[]>([]);
 
-  const { consorcios, miOngId, recargar: recargarConsorcios } = useConsorcios(id, user?.rol);
+  const { consorcios, recargar: recargarConsorcios } = useConsorcios(id, user?.rol);
 
   const reload = useCallback(async () => {
     const [em, m, of] = await Promise.all([api.getEmergencia(id), api.meta(), api.listOfertas(id), recargarConsorcios()]);
@@ -933,8 +933,7 @@ export function DetallePage() {
   }
 
   // Una ONG con consorcio también recibe las ofertas de sus socios (solo lectura): la propia se busca por ONG.
-  const miOferta =
-    user!.rol === "ONG" ? (miOngId == null ? ofertas[0] : ofertas.find((o) => o.ong_id === miOngId)) : undefined;
+  const miOferta = user!.rol === "ONG" ? ofertas.find((o) => o.ong_id === user!.ong_id) : undefined;
   const ofertasVisibles = user!.rol === "ONG" ? ofertas.filter((o) => o === miOferta) : ofertas;
 
   // Retirar = reenviar la oferta sin ese lote (versión nueva); sin ningún lote, la oferta queda retirada.

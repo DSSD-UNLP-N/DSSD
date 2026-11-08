@@ -5,6 +5,7 @@ export type Usuario = {
   username: string;
   nombre: string;
   rol: Rol;
+  ong_id: number | null;
 };
 
 export type Lote = {

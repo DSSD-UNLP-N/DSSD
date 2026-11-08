@@ -1,4 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { useAuth } from "./auth";
 import { api, type Consorcio, type Emergencia, type Evaluacion, type MiembroConsorcio, type Oferta, type OngResumen, type Rol } from "./api";
 
 type OngEvaluada = Evaluacion["ongs"][number];
@@ -19,23 +20,15 @@ function etiquetaMiembro(m: MiembroConsorcio, abierta: boolean) {
   return ESTADO_MIEMBRO[m.estado];
 }
 
-// Consorcios de la emergencia. Para una ONG también resuelve cuál es su id: /api/ongs lista todas menos la propia,
-// así que la propia es el miembro de algún consorcio que falta en ese listado.
+// Consorcios de la emergencia (todos los roles pueden consultarlos).
 export function useConsorcios(emergenciaId: number, rol: Rol | undefined) {
   const [consorcios, setConsorcios] = useState<Consorcio[]>([]);
-  const [miOngId, setMiOngId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const recargar = useCallback(async () => {
     if (!rol) return;
     try {
-      const lista = await api.listConsorcios(emergenciaId);
-      setConsorcios(lista);
-      if (rol === "ONG") {
-        const otras = new Set((await api.listOngs()).map((o) => o.id));
-        const propia = lista.flatMap((c) => c.miembros).find((m) => !otras.has(m.ong_id));
-        setMiOngId(propia ? propia.ong_id : null);
-      }
+      setConsorcios(await api.listConsorcios(emergenciaId));
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error");
@@ -46,7 +39,7 @@ export function useConsorcios(emergenciaId: number, rol: Rol | undefined) {
     void recargar();
   }, [recargar]);
 
-  return { consorcios, miOngId, error, recargar };
+  return { consorcios, error, recargar };
 }
 
 export function ConsorcioPanel({
@@ -58,7 +51,9 @@ export function ConsorcioPanel({
   ofertas: Oferta[];
   onCambio: () => void | Promise<void>;
 }) {
-  const { consorcios, miOngId, error: errorCarga, recargar } = useConsorcios(e.id, "ONG");
+  const { user } = useAuth();
+  const miOngId = user?.ong_id ?? null;
+  const { consorcios, error: errorCarga, recargar } = useConsorcios(e.id, "ONG");
   const [disponibles, setDisponibles] = useState<OngResumen[]>([]);
   const [nombre, setNombre] = useState("");
   const [invitada, setInvitada] = useState("");
