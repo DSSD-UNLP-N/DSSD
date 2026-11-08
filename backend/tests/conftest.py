@@ -111,7 +111,7 @@ class FakeNacional:
                                       "username": username, "password": password})
         return f"tok-{cuit}"
 
-    def declarar_inventario(self, cuit, token, items):
+    def declarar_inventario(self, cuit, items):
         self._verificar()
         if self.falla_inventario:
             raise self.falla_inventario

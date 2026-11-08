@@ -71,11 +71,10 @@ class NacionalClient:
             except (requests.RequestException, ValueError) as exc:
                 raise NacionalError(f"Sistema Nacional: {method} {path} falló ({exc})") from exc
 
-    def _llamar_sin_servicio(self, method: str, path: str, token: str | None = None, **kwargs) -> dict | list:
-        """Llamada sin la cuenta de servicio (registro público o token de la ONG); conserva el status y el detail."""
-        headers = {"Authorization": f"Bearer {token}"} if token else {}
+    def _llamar_sin_servicio(self, method: str, path: str, **kwargs) -> dict | list:
+        """Llamada pública, sin token (el registro de ONGs); conserva el status y el detail."""
         try:
-            resp = requests.request(method, f"{self.base_url}{path}", timeout=self.timeout, headers=headers, **kwargs)
+            resp = requests.request(method, f"{self.base_url}{path}", timeout=self.timeout, **kwargs)
         except requests.RequestException as exc:
             raise NacionalError(f"Sistema Nacional: {method} {path} falló ({exc})") from exc
         if not resp.ok:
@@ -102,9 +101,9 @@ class NacionalClient:
         except (KeyError, TypeError) as exc:
             raise NacionalError("Sistema Nacional: respuesta inválida al registrar la ONG") from exc
 
-    def declarar_inventario(self, cuit: str, token: str, items: list[dict]) -> list[dict]:
-        """Declara el inventario de la ONG (PUT /ongs/{cuit}/inventario) con el token de la propia ONG."""
-        return self._llamar_sin_servicio("PUT", f"/ongs/{cuit}/inventario", token=token, json={"items": items})
+    def declarar_inventario(self, cuit: str, items: list[dict]) -> list[dict]:
+        """Declara el inventario de la ONG (PUT /ongs/{cuit}/inventario): solo lo acepta la cuenta de servicio."""
+        return self._request("PUT", f"/ongs/{cuit}/inventario", json={"items": items})
 
     def tipos_recurso(self) -> list[dict]:
         """Catálogo: [{codigo, nombre, categoria, unidad, certificacion_requerida}]."""

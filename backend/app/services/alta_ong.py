@@ -70,8 +70,8 @@ def alta_ong(db: Session, settings: Settings, nacional: NacionalClient, datos: A
     bonita, user_id = _crear_en_bonita(settings, datos)
 
     try:
-        token = nacional.registrar_ong(ong_nombre=datos.ong_nombre, cuit=cuit, nombre=datos.nombre,
-                                       username=datos.username, password=datos.password)
+        nacional.registrar_ong(ong_nombre=datos.ong_nombre, cuit=cuit, nombre=datos.nombre,
+                               username=datos.username, password=datos.password)
     except NacionalError as exc:
         _borrar_usuario_bonita(bonita, user_id)
         if exc.status is not None and 400 <= exc.status < 500:
@@ -79,12 +79,12 @@ def alta_ong(db: Session, settings: Settings, nacional: NacionalClient, datos: A
         raise AltaOngError(NACIONAL_CAIDO, 503) from exc
 
     try:
-        nacional.declarar_inventario(cuit, token, [r.model_dump() for r in datos.rubros])
+        nacional.declarar_inventario(cuit, [r.model_dump() for r in datos.rubros])
     except NacionalError as exc:
         _borrar_usuario_bonita(bonita, user_id)
         raise AltaOngError(
             "La ONG quedó registrada en el Sistema Nacional pero sin rubros: completalos desde Swagger con "
-            f"PUT /ongs/{cuit}/inventario.", 502) from exc
+            f"PUT /ongs/{cuit}/inventario (con una cuenta de servicio).", 502) from exc
 
     try:
         ong = Ong(nombre=datos.ong_nombre, cuit=cuit)

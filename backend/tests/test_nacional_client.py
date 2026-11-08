@@ -138,7 +138,7 @@ def test_get_nacional_usa_la_cuenta_de_servicio_de_la_configuracion():
     assert (c.username, c.password) == (s.nacional_service_username, s.nacional_service_password)
 
 
-# --- Alta de ONG: registro público e inventario con el token de la ONG ---------------------------------------------
+# --- Alta de ONG: registro público e inventario con la cuenta de servicio ---------------------------------------------
 
 CUIT_ONG = "30-71234567-8"
 
@@ -186,9 +186,19 @@ def test_registrar_ong_timeout_status_none():
 
 
 @responses.activate
-def test_declarar_inventario_manda_bearer_de_la_ong():
+def test_declarar_inventario_usa_la_cuenta_de_servicio():
+    _login("t1")
     responses.add(responses.PUT, f"{BASE}/ongs/{CUIT_ONG}/inventario", json=[])
     items = [{"tipo_recurso": "RACION_ALIMENTO", "cantidad_total": 0}]
-    assert _cliente().declarar_inventario(CUIT_ONG, "t1", items) == []
-    assert _auth(0) == "Bearer t1"
-    assert json.loads(responses.calls[0].request.body) == {"items": items}
+    assert _cliente().declarar_inventario(CUIT_ONG, items) == []
+    assert responses.calls[0].request.url == f"{BASE}/login"
+    assert _auth(1) == "Bearer t1"
+    assert json.loads(responses.calls[1].request.body) == {"items": items}
+
+
+@responses.activate
+def test_declarar_inventario_403_sale_como_nacional_error():
+    _login("t1")
+    responses.add(responses.PUT, f"{BASE}/ongs/{CUIT_ONG}/inventario", status=403, json={"detail": "no"})
+    with pytest.raises(NacionalError):
+        _cliente().declarar_inventario(CUIT_ONG, [{"tipo_recurso": "RACION_ALIMENTO", "cantidad_total": 1}])
