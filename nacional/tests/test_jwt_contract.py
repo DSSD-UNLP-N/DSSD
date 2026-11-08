@@ -101,26 +101,16 @@ def test_rutas_de_lectura_aceptan_jwt_de_cualquier_rol(client):
     ).status_code == 200
 
 
-def test_inventario_solo_se_actualiza_con_el_token_de_la_ong_propietaria(client):
+def test_inventario_solo_se_actualiza_con_el_token_de_servicio(client):
     body = {"items": [{"tipo_recurso": "PARAMEDICO", "cantidad_total": 4}]}
-    propia = client.put(
-        "/ongs/30-54666544-5/inventario",
-        json=body,
-        headers=_token_headers(client, "ong.cruzroja"),
-    )
-    ajena = client.put(
-        "/ongs/30-68522415-9/inventario",
-        json=body,
-        headers=_token_headers(client, "ong.cruzroja"),
-    )
-    municipal = client.put(
-        "/ongs/30-54666544-5/inventario",
-        json=body,
-        headers=_token_headers(client, "operador.municipal"),
-    )
+    settings = get_settings()
+    servicio = _token_headers(client, settings.bonita_service_username, settings.bonita_service_password)
+    de_ong = client.put("/ongs/30-54666544-5/inventario", json=body, headers=_token_headers(client, "ong.cruzroja"))
+    municipal = client.put("/ongs/30-54666544-5/inventario", json=body, headers=_token_headers(client, "operador.municipal"))
+    de_servicio = client.put("/ongs/30-54666544-5/inventario", json=body, headers=servicio)
 
-    assert propia.status_code == 200
-    assert ajena.status_code == 403
+    assert de_servicio.status_code == 200
+    assert de_ong.status_code == 403
     assert municipal.status_code == 403
 
 

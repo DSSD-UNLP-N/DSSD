@@ -34,9 +34,9 @@ def test_el_registro_rechaza_cuit_mal_formado(client, cuit):
     assert client.post("/ongs", json=_registro(cuit=cuit)).status_code == 422
 
 
-def test_la_ficha_y_el_inventario_aceptan_el_cuit_sin_guiones(client, ong_headers):
+def test_la_ficha_y_el_inventario_aceptan_el_cuit_sin_guiones(client):
     assert client.get("/ongs/30546665445").json()["cuit"] == CRUZ_ROJA
-    r = client.put("/ongs/30546665445/inventario", headers=ong_headers(CRUZ_ROJA),
+    r = client.put("/ongs/30546665445/inventario",
                    json={"items": [{"tipo_recurso": "PARAMEDICO", "cantidad_total": 6}]})
     assert r.status_code == 200, r.text
 
@@ -73,17 +73,17 @@ def test_usuario_y_nombre_de_ong_no_distinguen_mayusculas(client):
 
 # --- Enteros: más de 32 bits llegaría a Postgres y daría 500 ---
 
-def test_el_inventario_rechaza_cantidades_que_no_entran_en_la_columna(client, ong_headers):
-    r = client.put(f"/ongs/{CRUZ_ROJA}/inventario", headers=ong_headers(CRUZ_ROJA),
+def test_el_inventario_rechaza_cantidades_que_no_entran_en_la_columna(client):
+    r = client.put(f"/ongs/{CRUZ_ROJA}/inventario",
                    json={"items": [{"tipo_recurso": "FRAZADA", "cantidad_total": PASADO_DE_INT32}]})
     assert r.status_code == 422
-    r = client.put(f"/ongs/{CRUZ_ROJA}/inventario", headers=ong_headers(CRUZ_ROJA),
+    r = client.put(f"/ongs/{CRUZ_ROJA}/inventario",
                    json={"items": [{"tipo_recurso": "FRAZADA", "cantidad_total": INT32}]})
     assert r.status_code == 200
 
 
-def test_el_inventario_rechaza_tipo_vacio_con_422(client, ong_headers):
-    r = client.put(f"/ongs/{CRUZ_ROJA}/inventario", headers=ong_headers(CRUZ_ROJA),
+def test_el_inventario_rechaza_tipo_vacio_con_422(client):
+    r = client.put(f"/ongs/{CRUZ_ROJA}/inventario",
                    json={"items": [{"tipo_recurso": "", "cantidad_total": 1}]})
     assert r.status_code == 422
 
