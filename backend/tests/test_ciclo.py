@@ -311,6 +311,17 @@ def test_el_evento_de_adjudicacion_marca_las_ofertas_avisa_a_las_ongs_y_pasa_a_e
         assert por_ong[bomberos] == f"Tu oferta para la emergencia #{emergencia_id} no fue seleccionada."
 
 
+def test_registrar_adjudicacion_guarda_fecha(client, seeded, en_adjudicacion):
+    emergencia_id, _ = en_adjudicacion
+
+    _evento_adjudicacion(client, emergencia_id, [CRUZ_ROJA], [BOMBEROS])
+
+    with seeded() as s:
+        fechas = {o.ong.cuit: o.adjudicada_en for o in s.scalars(select(Oferta).where(Oferta.emergencia_id == emergencia_id))}
+        assert fechas[CRUZ_ROJA] is not None
+        assert fechas[BOMBEROS] is None
+
+
 def test_repetir_el_evento_de_adjudicacion_no_duplica_los_avisos(client, seeded, en_adjudicacion):
     emergencia_id, _ = en_adjudicacion
     _evento_adjudicacion(client, emergencia_id, [CRUZ_ROJA], [BOMBEROS])

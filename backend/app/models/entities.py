@@ -160,6 +160,7 @@ class Oferta(Base):
         _enum(EstadoOferta), default=EstadoOferta.PRESENTADA, server_default=EstadoOferta.PRESENTADA.value
     )
     creada_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    adjudicada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     emergencia: Mapped[Emergencia] = relationship(back_populates="ofertas")
     ong: Mapped[Ong] = relationship()
