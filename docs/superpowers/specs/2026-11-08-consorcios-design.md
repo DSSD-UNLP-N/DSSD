@@ -90,6 +90,18 @@ El usuario eligió la opción 1 el 8/11, apoyado en la nota del ítem 1 de la co
 - La app traduce la selección a CUIT y llama a `ciclo.adjudicar` sin cambios. Bonita no se entera de que hubo consorcio.
 - Las ONGs que no están en ningún consorcio se siguen mostrando y adjudicando una por una, como hoy.
 
+- **El backend obliga a adjudicar el consorcio entero** (decisión del diseño, para que la regla no dependa del front):
+  si la lista de CUIT incluye a un miembro aceptado de un consorcio válido, tiene que incluir a todos sus miembros con
+  estado `RESERVADA`. Si no, 409 con un mensaje que nombra el consorcio. La llamada a Bonita no cambia.
+- **Cobertura del bloque** (decisión del diseño): suma lo **reservado** de los miembros `RESERVADA`, que es lo que el
+  Municipio va a recibir. Lo ofrecido se muestra por miembro, y el miembro sin reserva aparece con 0 reservado y la
+  leyenda "sin reserva, no se adjudica". Los datos salen de la evaluación guardada (por CUIT) más la membresía.
+
+### Segunda ronda (REFORMULAR) — decisión del diseño
+- El consorcio pertenece a la emergencia, no a la ronda. Cuando el Coordinador elige REFORMULAR y se publica una ventana
+  nueva, los consorcios siguen y se vuelven a poder editar mientras esa ventana está abierta. "Fijo" significa "fijo
+  mientras la ventana está cerrada". Las ofertas de la ronda anterior se retiran como hoy, y cada miembro vuelve a ofertar.
+
 ### Trazabilidad
 - Se guarda cada membresía con: consorcio, ONG, estado (`INVITADA`, `ACEPTADA`, `RECHAZADA`, `SALIO`), quién invitó y
   las fechas de invitación, respuesta y salida. Disolver el consorcio lo marca como disuelto y no borra filas.
@@ -135,6 +147,13 @@ Emergencia #12 · Ofertas
 ```
 
 - **Coordinador y Auditor:** ven a qué consorcio pertenece cada oferta (solo lectura).
+
+### Detalles resueltos en la revisión (decisiones del diseño)
+- `GET /api/emergencias/{id}/consorcios` responde siempre (no da 409 con la ventana cerrada).
+- Las invitaciones que siguen pendientes al cerrarse la ventana quedan vencidas: no cuentan como miembros y ya no se
+  pueden aceptar.
+- El selector de ONGs para invitar excluye la propia ONG, las que ya están en otro consorcio de la emergencia y las que no
+  tienen CUIT (no se podrían adjudicar). Hace falta un endpoint de solo lectura para listar ONGs (hoy no existe).
 
 ## Queda para el builder
 - Nombres exactos de tablas, campos, schemas y componentes.
