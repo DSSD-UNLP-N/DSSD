@@ -25,9 +25,9 @@ app = FastAPI(
     "validación de ofertas por niveles de competencia y cierre operativo (libera recursos bloqueados).\n\n"
     "**Autenticación.** `POST /login` devuelve un JWT; en Swagger, botón *Authorize* y pegar el token. Todo menos "
     "`/health`, `/login` y `POST /ongs` lo exige. Los endpoints de reservas, adjudicaciones y cierres son solo de las "
-    "cuentas de servicio (Bonita y la app local); el inventario lo modifica cada ONG con su cuenta.\n\n"
+    "cuentas de servicio (Bonita y la app local), igual que la carga del inventario de las ONGs.\n\n"
     "**Cuentas de prueba (demo).** `bonita-service` / `1gom_DfYwiGTjWmBkks4MvHT` (cuenta de servicio: sirve para todos los endpoints) y "
-    "`ong.cruzroja` o `ong.bomberos` / `demo1234` (cuentas de ONG: catálogo, validaciones e inventario propio). "
+    "`ong.cruzroja` o `ong.bomberos` / `demo1234` (cuentas de ONG: solo consulta y validaciones). "
     "`POST /ongs` está abierto para registrar una ONG nueva.\n\n"
     "**Recorrido de una emergencia.** `POST /validaciones` (consulta, no guarda) → `POST /evaluaciones` (reserva el stock "
     "al vencer la ventana de ofertas) → `POST /adjudicaciones/resolucion` (confirma las elegidas y libera las demás) → "
@@ -38,7 +38,7 @@ app = FastAPI(
     openapi_tags=[
         {"name": "autenticación", "description": "Login con JWT y alta de ONGs (servicio 1)."},
         {"name": "catálogo", "description": "Tipos de recurso, certificaciones, ONGs y disponibilidad (servicio 2)."},
-        {"name": "inventario", "description": "Cada ONG declara lo que tiene (servicio 2)."},
+        {"name": "inventario", "description": "El sistema declara lo que tiene cada ONG (servicio 2)."},
         {"name": "validación", "description": "Competencia y cantidad de lo ofrecido, sin rechazos binarios (servicio 3)."},
         {"name": "reservas", "description": "Evaluación con reserva de stock y su confirmación o liberación (servicio 4)."},
         {"name": "adjudicaciones", "description": "Compromiso de inventario con bloqueo pesimista (servicio 4)."},

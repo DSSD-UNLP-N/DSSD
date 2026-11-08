@@ -137,5 +137,6 @@ def test_falla_inventario_avisa_que_quedo_sin_rubros(seeded, nacional):
     assert e.value.status == 502
     assert "sin rubros" in str(e.value)
     assert "PUT /ongs/30-71234567-8/inventario" in str(e.value)
+    assert "cuenta de servicio" in str(e.value)
     assert len(_llamadas("DELETE", "/API/identity/user/77")) == 1
     assert "30-71234567-8" not in _ongs(seeded)
