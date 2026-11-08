@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { api, type AltaOngIn, type Emergencia, type Meta, type Notificacion, type Oferta, type Rol, type TipoRecurso } from "./api";
 import { useAuth } from "./auth";
+import { agruparParaAdjudicar, BloqueConsorcio, ConsorcioPanel, useConsorcios } from "./consorcios";
 import { FlowBubbles } from "./FlowBubbles";
 import { PageHeader } from "./PageHeader";
 
@@ -773,12 +774,14 @@ export function DetallePage() {
   const [tipos, setTipos] = useState<TipoRecurso[]>([]);
   const [elegidas, setElegidas] = useState<string[]>([]);
 
+  const { consorcios, miOngId, recargar: recargarConsorcios } = useConsorcios(id, user?.rol);
+
   const reload = useCallback(async () => {
-    const [em, m, of] = await Promise.all([api.getEmergencia(id), api.meta(), api.listOfertas(id)]);
+    const [em, m, of] = await Promise.all([api.getEmergencia(id), api.meta(), api.listOfertas(id), recargarConsorcios()]);
     setE(em);
     setMeta(m);
     setOfertas(of);
-  }, [id]);
+  }, [id, recargarConsorcios]);
 
   useEffect(() => {
     void reload().catch((err) => setError(String(err.message || err)));
@@ -929,7 +932,10 @@ export function DetallePage() {
     await enviarOferta(items, (o) => `Oferta enviada (versión ${o.version_actual})`);
   }
 
-  const miOferta = user!.rol === "ONG" ? ofertas[0] : undefined;
+  // Una ONG con consorcio también recibe las ofertas de sus socios (solo lectura): la propia se busca por ONG.
+  const miOferta =
+    user!.rol === "ONG" ? (miOngId == null ? ofertas[0] : ofertas.find((o) => o.ong_id === miOngId)) : undefined;
+  const ofertasVisibles = user!.rol === "ONG" ? ofertas.filter((o) => o === miOferta) : ofertas;
 
   // Retirar = reenviar la oferta sin ese lote (versión nueva); sin ningún lote, la oferta queda retirada.
   const itemsVigentes = (miOferta && !miOferta.retirada ? miOferta.items : []).map(({ lote_id, recurso, cantidad }) => ({
@@ -942,6 +948,10 @@ export function DetallePage() {
       itemsVigentes.filter((i) => i.lote_id !== loteId),
       (o) => (o.retirada ? "Retiraste tu oferta" : `Retiraste tu oferta a ese lote (versión ${o.version_actual})`),
     );
+
+  const { bloques, sueltas } = e.evaluacion
+    ? agruparParaAdjudicar(e.evaluacion, consorcios)
+    : { bloques: [], sueltas: [] };
 
   const ventanaAbierta = !!e.ventana_ofertas_fin && new Date(e.ventana_ofertas_fin) > new Date();
   const cantidadOfrecida = (o: Oferta | undefined, loteId: number) =>
@@ -1053,7 +1063,18 @@ export function DetallePage() {
           <div className="panel" style={{ marginBottom: "1.35rem" }} data-testid="adjudicacion">
             <h3>Adjudicar ofertas</h3>
             <p>Elegí a qué ONGs aceptás. Lo elegido queda comprometido; el resto se libera.</p>
-            {e.evaluacion.ongs.filter((o) => o.estado === "RESERVADA").map((o) => (
+            {bloques.map((b) => (
+              <BloqueConsorcio
+                key={b.consorcio.id}
+                bloque={b}
+                ev={e.evaluacion!}
+                elegidas={elegidas}
+                onToggle={(cuits, marcado) =>
+                  setElegidas((prev) => [...prev.filter((c) => !cuits.includes(c)), ...(marcado ? cuits : [])])
+                }
+              />
+            ))}
+            {sueltas.map((o) => (
               <label key={o.cuit} className="lote-row" style={{ cursor: "pointer" }} data-testid={`elegir-${o.cuit}`}>
                 <span>
                   <input
@@ -1263,13 +1284,18 @@ export function DetallePage() {
           </>
         )}
 
-        {ofertas.length > 0 && (
+        {user!.rol === "ONG" && e.estado === "CONVOCATORIA" && (
+          <ConsorcioPanel e={e} ofertas={ofertas} onCambio={reload} />
+        )}
+
+        {ofertasVisibles.length > 0 && (
           <>
             <h2 className="section-title">{user!.rol === "ONG" ? "Mi oferta vigente" : "Ofertas recibidas"}</h2>
             <div className="panel" style={{ marginBottom: "1.35rem" }}>
-              {ofertas.map((o) => (
+              {ofertasVisibles.map((o) => (
                 <div key={o.id} style={{ marginBottom: "0.75rem" }}>
                   <strong>{o.ong_nombre}</strong> <span className="badge muted">v{o.version_actual}</span>
+                  {o.consorcio_nombre && <span className="badge ok">consorcio {o.consorcio_nombre}</span>}
                   {o.retirada && <span className="badge muted">retirada</span>}
                   {o.estado === "ADJUDICADA" && <span className="badge ok">adjudicada</span>}
                   {o.estado === "NO_ADJUDICADA" && <span className="badge muted">no adjudicada</span>}
