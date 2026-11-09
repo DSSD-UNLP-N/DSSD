@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.core.config import get_settings
-from app.routers import api, bonita
+from app.routers import api, bonita, indicadores
 
 settings = get_settings()
 
@@ -12,3 +12,4 @@ app.add_middleware(
 )
 app.include_router(api.router)
 app.include_router(bonita.router)
+app.include_router(indicadores.router)
