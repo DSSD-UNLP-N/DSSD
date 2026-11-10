@@ -188,7 +188,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <div className="topbar-meta">
             {user.rol === "ONG" && <Campana />}
             <span className="role-chip">{ROL_LABEL[user.rol]}</span>
-            <span>{user.nombre}</span>
+            <span className="topbar-nombre">{user.nombre}</span>
             <button className="btn btn-ghost light" type="button" onClick={() => void logout()}>
               Salir
             </button>
