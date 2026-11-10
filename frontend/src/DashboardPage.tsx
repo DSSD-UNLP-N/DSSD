@@ -135,6 +135,32 @@ function Suministros({ datos, nombres, desde, hasta }: {
   );
 }
 
+function Consorcios({ finalizadas, pct, desde, hasta }: {
+  finalizadas: Reporte["finalizadas"]; pct: number | null; desde: string; hasta: string;
+}) {
+  // Sale de las mismas emergencias resueltas de la tabla de abajo: no hace falta otro dato del backend.
+  const con = finalizadas.filter((f) => f.consorcio).length;
+  const sin = finalizadas.length - con;
+  const detalle = (etiqueta: string, n: number) =>
+    `${etiqueta}: ${num(n)} ${n === 1 ? "emergencia resuelta" : "emergencias resueltas"}${pct === null ? "" : ` (${dec(etiqueta === "Con consorcio" ? pct : 100 - pct, " %")})`}`;
+  return (
+    <Panel titulo="Resolución mediante consorcios" kicker="Resueltas" bloque="finalizadas" desde={desde} hasta={hasta}>
+      <Barras
+        color={COLOR.ambar}
+        vacio="Ninguna emergencia se resolvió en el período."
+        barras={
+          finalizadas.length === 0
+            ? []
+            : [
+                { clave: "con", label: "Con consorcio", valor: con, texto: num(con), detalle: detalle("Con consorcio", con) },
+                { clave: "sin", label: "Una sola ONG", valor: sin, texto: num(sin), detalle: detalle("Una sola ONG", sin) },
+              ]
+        }
+      />
+    </Panel>
+  );
+}
+
 export function DashboardPage() {
   const [desde, setDesde] = useState(() => haceDias(183));
   const [hasta, setHasta] = useState(() => isoLocal(new Date()));
@@ -231,26 +257,28 @@ export function DashboardPage() {
                 />
               </Panel>
             </div>
-            <Panel titulo="Tiempo promedio por etapa" kicker="Datos de Bonita" bloque="tiempos" desde={desde} hasta={hasta}>
-              {r.tiempos.disponible ? (
-                <Barras
-                  color={COLOR.bordo}
-                  vacio="Ninguna emergencia del período tiene tareas cerradas en Bonita."
-                  barras={r.tiempos.etapas.map((t) => ({
-                    clave: t.tarea,
-                    label: t.tarea,
-                    valor: t.horas_promedio,
-                    texto: horas(t.horas_promedio),
-                    detalle: `${t.tarea}: ${horas(t.horas_promedio)} en promedio, sobre ${t.emergencias} ${t.emergencias === 1 ? "emergencia" : "emergencias"}`,
-                  }))}
-                />
-              ) : (
-                <p className="chart-detalle" data-testid="tiempos-no-disponibles">
-                  Tiempos no disponibles: {r.tiempos.motivo}
-                </p>
-              )}
-            </Panel>
-            <div style={{ height: "1rem" }} />
+            <div className="dashboard-grid">
+              <Consorcios finalizadas={r.finalizadas} pct={r.kpis.pct_consorcio} desde={desde} hasta={hasta} />
+              <Panel titulo="Tiempo promedio por etapa" kicker="Datos de Bonita" bloque="tiempos" desde={desde} hasta={hasta}>
+                {r.tiempos.disponible ? (
+                  <Barras
+                    color={COLOR.bordo}
+                    vacio="Ninguna emergencia del período tiene tareas cerradas en Bonita."
+                    barras={r.tiempos.etapas.map((t) => ({
+                      clave: t.tarea,
+                      label: t.tarea,
+                      valor: t.horas_promedio,
+                      texto: horas(t.horas_promedio),
+                      detalle: `${t.tarea}: ${horas(t.horas_promedio)} en promedio, sobre ${t.emergencias} ${t.emergencias === 1 ? "emergencia" : "emergencias"}`,
+                    }))}
+                  />
+                ) : (
+                  <p className="chart-detalle" data-testid="tiempos-no-disponibles">
+                    Tiempos no disponibles: {r.tiempos.motivo}
+                  </p>
+                )}
+              </Panel>
+            </div>
             <Panel titulo="Emergencias finalizadas" kicker="Cierre bilateral" bloque="finalizadas" desde={desde} hasta={hasta}>
               {r.finalizadas.length === 0 ? (
                 <p className="chart-detalle">Ninguna emergencia se resolvió en el período.</p>
