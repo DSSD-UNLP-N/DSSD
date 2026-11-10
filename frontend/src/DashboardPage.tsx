@@ -20,7 +20,9 @@ function haceDias(dias: number) {
 const num = (v: number) => v.toLocaleString("es-AR");
 const dec = (v: number | null, sufijo = "", decimales = 1) =>
   v === null ? "—" : `${v.toLocaleString("es-AR", { maximumFractionDigits: decimales })}${sufijo}`;
-const horas = (v: number | null) => dec(v, " h", 2);
+// Las etapas reales duran horas; las corridas de prueba, segundos: por debajo de una hora se muestra en min o s.
+const horas = (v: number | null) =>
+  v === null ? "—" : v >= 1 ? dec(v, " h") : v * 60 >= 1 ? dec(v * 60, " min") : dec(v * 3600, " s", 0);
 
 function download(filename: string, content: string, type: string) {
   const url = URL.createObjectURL(new Blob([content], { type }));
@@ -263,7 +265,7 @@ export function DashboardPage() {
                         <th>Gravedad</th>
                         <th>ONGs</th>
                         <th>Consorcio</th>
-                        <th>Horas</th>
+                        <th>Duración</th>
                         <th>Cobertura</th>
                       </tr>
                     </thead>

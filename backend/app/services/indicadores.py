@@ -162,7 +162,7 @@ def _horas_por_tarea(nodos: list[dict]) -> dict[str, float]:
 
 def _horas_total_promedio(db: Session, f: Filtros) -> float | None:
     horas = [_horas(e) for e in _emergencias(db, f) if e.estado is EstadoEmergencia.RESUELTA]
-    return _promedio([h for h in horas if h is not None], 2)
+    return _promedio([h for h in horas if h is not None], 4)
 
 
 def _es_404(exc: requests.HTTPError) -> bool:
@@ -184,7 +184,7 @@ def tiempos_por_etapa(db: Session, bonita, f: Filtros) -> Tiempos:
         for tarea, horas in _horas_por_tarea(nodos).items():
             por_tarea[tarea].append(horas)
     etapas = [
-        TiempoEtapa(tarea=t, horas_promedio=_promedio(por_tarea[t], 2), emergencias=len(por_tarea[t]))
+        TiempoEtapa(tarea=t, horas_promedio=_promedio(por_tarea[t], 4), emergencias=len(por_tarea[t]))
         for t in ETAPAS if por_tarea.get(t)
     ]
     return Tiempos(disponible=True, motivo=None, etapas=etapas, horas_total_promedio=_horas_total_promedio(db, f))
@@ -203,7 +203,7 @@ def finalizadas(db: Session, f: Filtros) -> list[Finalizada]:
             gravedad=e.nivel_gravedad.value,
             ongs=sorted(_ongs_adjudicadas(db, e.id).values()),
             consorcio=_hubo_consorcio(db, e.id),
-            horas_total=round(horas, 2) if horas is not None else None,
+            horas_total=round(horas, 4) if horas is not None else None,
             cobertura=round(cobertura, 1) if cobertura is not None else None,
         ))
     return salida
