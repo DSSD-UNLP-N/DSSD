@@ -5,8 +5,11 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.security import hash_password
 from app.models import (
+    Consorcio,
+    ConsorcioMiembro,
     Emergencia,
     EstadoEmergencia,
+    EstadoMiembro,
     Gravedad,
     Lote,
     Municipio,
@@ -125,3 +128,29 @@ def test_claves_foraneas_estan_declaradas():
     assert ("oferta_item", "lote_id", "lote") in fks
     assert ("oferta_item", "oferta_id", "oferta") in fks
     assert ("emergencia", "municipio_id", "municipio") in fks
+
+
+def test_consorcio_con_miembros(db, base):
+    _, lider, e = base
+    invitada = Ong(nombre="Caritas", cuit="30-2-2")
+    db.add(invitada)
+    db.flush()
+    c = Consorcio(emergencia_id=e.id, nombre="Alianza Sur", ong_lider_id=lider.id)
+    c.miembros = [
+        ConsorcioMiembro(ong_id=lider.id, estado=EstadoMiembro.ACEPTADA, invitado_por_ong_id=lider.id),
+        ConsorcioMiembro(ong_id=invitada.id, estado=EstadoMiembro.INVITADA, invitado_por_ong_id=lider.id),
+    ]
+    db.add(c)
+    db.commit()
+    db.expire_all()
+
+    c = db.scalars(select(Consorcio)).one()
+    assert c.disuelto_en is None
+    assert c.creado_en is not None
+    por_ong = {m.ong_id: m for m in c.miembros}
+    assert por_ong[lider.id].estado is EstadoMiembro.ACEPTADA
+    assert por_ong[invitada.id].estado is EstadoMiembro.INVITADA
+    assert por_ong[invitada.id].invitado_por_ong_id == lider.id
+    assert por_ong[invitada.id].ong.nombre == "Caritas"
+    assert por_ong[invitada.id].respondido_en is None
+    assert por_ong[invitada.id].salio_en is None

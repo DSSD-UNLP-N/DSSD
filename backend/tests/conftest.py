@@ -11,6 +11,7 @@ os.environ["SHOW_DEMO_USERS"] = "false"  # que el .env local de cada uno no camb
 
 import pytest  # noqa: E402
 import responses  # noqa: E402
+import requests  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import create_engine  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
@@ -70,6 +71,28 @@ def db(session_factory):
 def seeded(session_factory):
     seed(session_factory)
     return session_factory
+
+
+class FakeBonita:
+    """Sustituye a Bonita en las lecturas del dashboard; el cliente HTTP real se prueba en test_bonita_client.py."""
+
+    def __init__(self):
+        self.nodos = {}  # case_id -> lista de registros de archivedFlowNode
+        self.falla = False  # True: cada llamada lanza requests.ConnectionError
+
+    def login(self, *args, **kwargs):
+        if self.falla:
+            raise requests.ConnectionError("Bonita caído (simulado)")
+
+    def get_archived_flow_nodes(self, case_id):
+        if self.falla:
+            raise requests.ConnectionError("Bonita caído (simulado)")
+        return self.nodos.get(case_id, [])
+
+
+@pytest.fixture
+def fake_bonita():
+    return FakeBonita()
 
 
 class FakeNacional:

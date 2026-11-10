@@ -19,6 +19,7 @@ class UsuarioOut(BaseModel):
     username: str
     nombre: str
     rol: Rol
+    ong_id: int | None = None  # ONG a la que pertenece el usuario (solo el rol ONG)
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -144,6 +145,9 @@ class OfertaOut(BaseModel):
     items: list[OfertaItemOut] = Field(validation_alias=AliasChoices("items_vigentes", "items"))  # del modelo, solo la versión actual
     retirada: bool = False  # la versión vigente no tiene ítems
     estado: EstadoOferta = EstadoOferta.PRESENTADA
+    # Consorcio válido al que pertenece la ONG en esta emergencia (None si no tiene o todavía no es válido).
+    consorcio_id: int | None = None
+    consorcio_nombre: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -242,3 +246,57 @@ class LoteIn(BaseModel):
     @classmethod
     def _detalle_vacio_es_none(cls, v: str | None) -> str | None:
         return v or None
+class ConsorcioIn(BaseModel):
+    nombre: str = Field(min_length=2, max_length=80, description="Nombre único dentro de la emergencia.")
+
+    model_config = ConfigDict(str_strip_whitespace=True, json_schema_extra={"examples": [{"nombre": "Alianza Norte"}]})
+
+
+class InvitacionIn(BaseModel):
+    ong_id: int = Field(ge=1, le=2_147_483_647, description="Id de la ONG invitada (ver GET /api/ongs).")
+
+    model_config = ConfigDict(json_schema_extra={"examples": [{"ong_id": 2}]})
+
+
+class RespuestaIn(BaseModel):
+    acepta: bool = Field(description="true acepta la invitación; false la rechaza.")
+
+    model_config = ConfigDict(json_schema_extra={"examples": [{"acepta": True}]})
+
+
+class MiembroOut(BaseModel):
+    ong_id: int
+    ong_nombre: str
+    cuit: str | None
+    estado: str = Field(description="INVITADA, ACEPTADA, RECHAZADA o SALIO.")
+    invitado_en: UtcDatetime
+    respondido_en: UtcDatetime | None
+    salio_en: UtcDatetime | None
+
+
+class ConsorcioOut(BaseModel):
+    id: int
+    emergencia_id: int
+    nombre: str
+    ong_lider_id: int
+    ong_lider_nombre: str
+    valido: bool = Field(description="Tiene 2 o más miembros aceptados y no está disuelto.")
+    disuelto: bool
+    miembros: list[MiembroOut]
+
+    model_config = ConfigDict(json_schema_extra={"examples": [{
+        "id": 1, "emergencia_id": 7, "nombre": "Alianza Norte", "ong_lider_id": 1,
+        "ong_lider_nombre": "Cruz Roja Argentina", "valido": False, "disuelto": False,
+        "miembros": [{"ong_id": 1, "ong_nombre": "Cruz Roja Argentina", "cuit": "30-54666544-5",
+                      "estado": "ACEPTADA", "invitado_en": "2026-11-08T12:00:00Z",
+                      "respondido_en": "2026-11-08T12:00:00Z", "salio_en": None}],
+    }]})
+
+
+class OngOut(BaseModel):
+    id: int
+    nombre: str
+    cuit: str | None
+
+    model_config = ConfigDict(from_attributes=True, json_schema_extra={
+        "examples": [{"id": 2, "nombre": "Bomberos Voluntarios", "cuit": "30-68522415-9"}]})

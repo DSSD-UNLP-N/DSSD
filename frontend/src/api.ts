@@ -5,6 +5,7 @@ export type Usuario = {
   username: string;
   nombre: string;
   rol: Rol;
+  ong_id: number | null;
 };
 
 export type Lote = {
@@ -126,6 +127,8 @@ export type Oferta = {
   items: { lote_id: number; recurso: string; cantidad: number; version: number }[];
   retirada: boolean;
   estado: "PRESENTADA" | "ADJUDICADA" | "NO_ADJUDICADA" | "FINALIZADA";
+  consorcio_id: number | null;
+  consorcio_nombre: string | null;
 };
 
 // Ficha de la ONG en el Sistema Nacional (GET/PUT /api/ong/inventario).
@@ -144,6 +147,29 @@ export type InventarioOng = {
     riesgo_permitido: string | null;
   }[];
 };
+
+export type MiembroConsorcio = {
+  ong_id: number;
+  ong_nombre: string;
+  cuit: string | null;
+  estado: "INVITADA" | "ACEPTADA" | "RECHAZADA" | "SALIO";
+  invitado_en: string;
+  respondido_en: string | null;
+  salio_en: string | null;
+};
+
+export type Consorcio = {
+  id: number;
+  emergencia_id: number;
+  nombre: string;
+  ong_lider_id: number;
+  ong_lider_nombre: string;
+  valido: boolean;
+  disuelto: boolean;
+  miembros: MiembroConsorcio[];
+};
+
+export type OngResumen = { id: number; nombre: string; cuit: string | null };
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
@@ -218,4 +244,12 @@ export const api = {
   listOfertas: (id: number) => request<Oferta[]>(`/api/emergencias/${id}/ofertas`),
   createOferta: (id: number, items: { lote_id: number; recurso: string; cantidad: number }[]) =>
     post<Oferta>(`/api/emergencias/${id}/ofertas`, { items }),
+  listConsorcios: (id: number) => request<Consorcio[]>(`/api/emergencias/${id}/consorcios`),
+  crearConsorcio: (id: number, nombre: string) => post<Consorcio>(`/api/emergencias/${id}/consorcios`, { nombre }),
+  invitar: (cid: number, ong_id: number) => post<Consorcio>(`/api/consorcios/${cid}/invitaciones`, { ong_id }),
+  responder: (cid: number, acepta: boolean) => post<Consorcio>(`/api/consorcios/${cid}/respuesta`, { acepta }),
+  salirConsorcio: (cid: number) => post<void>(`/api/consorcios/${cid}/salida`),
+  disolverConsorcio: (cid: number) => request<void>(`/api/consorcios/${cid}`, { method: "DELETE" }),
+  listOngs: (emergencia_id?: number) =>
+    request<OngResumen[]>(emergencia_id ? `/api/ongs?emergencia_id=${emergencia_id}` : "/api/ongs"),
 };

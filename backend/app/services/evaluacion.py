@@ -5,6 +5,8 @@ Entregarlo pasa la emergencia a EN_EVALUACION: desde ahí lo ofrecido lo reserva
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -100,9 +102,11 @@ def registrar_adjudicacion(db: Session, emergencia_id: int, adjudicadas: list[st
     if set(adjudicadas) & set(no_adjudicadas):
         raise ConsolidadoError("Una ONG no puede estar adjudicada y no adjudicada a la vez")
     ofertas = db.scalars(select(Oferta).where(Oferta.emergencia_id == e.id).options(selectinload(Oferta.ong)))
+    ahora = datetime.now(timezone.utc)
     for o in ofertas:
         if o.ong.cuit in adjudicadas:
             o.estado, texto = EstadoOferta.ADJUDICADA, f"Tu oferta para la emergencia #{e.id} fue seleccionada."
+            o.adjudicada_en = ahora
         elif o.ong.cuit in no_adjudicadas:
             o.estado, texto = EstadoOferta.NO_ADJUDICADA, f"Tu oferta para la emergencia #{e.id} no fue seleccionada."
         else:

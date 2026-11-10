@@ -13,3 +13,13 @@ TIPO_LABEL = {
     "terremoto": "Terremoto",
     "otro": "Otro",
 }
+
+ESTADO_LABEL = {
+    "REGISTRADA": "Registrada",
+    "CONVOCATORIA": "Convocatoria abierta",
+    "CERRADA": "Ventana cerrada",
+    "EN_EVALUACION": "En evaluación",
+    "ADJUDICACION": "Adjudicación",
+    "EN_EJECUCION": "En ejecución",
+    "RESUELTA": "Resuelta",
+}
