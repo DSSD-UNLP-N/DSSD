@@ -174,3 +174,15 @@ def test_bloque_invalido_da_422(indicadores_client):
     c = _login(indicadores_client, "auditor")
     r = c.get("/api/indicadores/export.csv?bloque=inexistente")
     assert r.status_code == 422
+
+
+@pytest.mark.parametrize("query", [
+    "desde=0001-01-01&hasta=2026-11-01",  # el pasaje a UTC desborda
+    "desde=2026-01-01&hasta=9999-12-31",
+    "municipio_id=2147483648",  # más que un INTEGER de Postgres
+    "municipio_id=0",
+])
+def test_entrada_fuera_de_rango_da_422(indicadores_client, query):
+    c = _login(indicadores_client, "auditor")
+    assert c.get(f"/api/indicadores?{query}").status_code == 422
+    assert c.get(f"/api/indicadores/export.csv?bloque=kpis&{query}").status_code == 422

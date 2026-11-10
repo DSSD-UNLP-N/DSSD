@@ -107,6 +107,17 @@ Inventario de la ONG: `GET` y `PUT /api/ong/inventario` (solo rol ONG, pantalla 
 la app lee la ficha (`GET /ongs/{cuit}`) y declara los rubros (`PUT /ongs/{cuit}/inventario`) con su cuenta de servicio, con el CUIT de la
 ONG del usuario logueado. Bajar un total por debajo de lo comprometido da 409; un tipo de recurso inexistente, 422.
 
+Consorcios entre ONGs (`app/services/consorcios.py`, panel en la convocatoria): `GET`/`POST /api/emergencias/{id}/consorcios`,
+`POST /api/consorcios/{id}/invitaciones`, `/respuesta`, `/salida`, `DELETE /api/consorcios/{id}` y `GET /api/ongs` (ONGs que se pueden
+invitar). Cada ONG mantiene su propia oferta y su reserva en la API Nacional; el consorcio solo las agrupa. Es válido con 2 o más
+miembros aceptados, sus miembros ven las ofertas de los demás y el Municipio lo adjudica entero (adjudicar una parte da 409). Bonita y
+la API Nacional no cambian.
+
+Indicadores del Auditor (`app/services/indicadores.py`, pantalla `/indicadores`): `GET /api/indicadores?desde=&hasta=&municipio_id=`
+y `GET /api/indicadores/export.csv?bloque=kpis|suministros|estados|tiempos|finalizadas`. Combinan datos de la base (emergencias,
+suministros adjudicados por mes, consorcios) con los tiempos por etapa que lee de Bonita (`archivedFlowNode`); si Bonita no responde,
+`tiempos.disponible` es `false` y el resto sale igual. Contrato completo en `docs/dashboard-contrato.md`.
+
 ## Sistema Nacional (nacional/)
 
 Los lotes se cargan eligiendo un tipo de recurso del catálogo del Sistema Nacional (`nacional/`, otra API; ver su README).

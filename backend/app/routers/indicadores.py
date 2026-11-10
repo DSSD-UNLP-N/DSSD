@@ -75,7 +75,12 @@ def _hace_seis_meses() -> date:
     return date.today() - timedelta(days=183)
 
 
+_FECHA_MIN, _FECHA_MAX = date(2000, 1, 1), date(2100, 12, 31)  # fuera de esto el pasaje a UTC desborda (500)
+
+
 def _validar_rango(desde: date, hasta: date) -> None:
+    if not (_FECHA_MIN <= desde and hasta <= _FECHA_MAX):
+        raise HTTPException(status_code=422, detail="Las fechas tienen que estar entre 2000-01-01 y 2100-12-31.")
     if desde > hasta:
         raise HTTPException(
             status_code=422,
@@ -213,7 +218,7 @@ _SoloAuditor = Depends(require_role(Rol.AUDITOR))
 def api_indicadores(
     desde: Annotated[date | None, Query(description="Inicio del período (YYYY-MM-DD). Por defecto: hoy menos 6 meses.")] = None,
     hasta: Annotated[date | None, Query(description="Fin del período (YYYY-MM-DD). Por defecto: hoy.")] = None,
-    municipio_id: Annotated[int | None, Query(description="Filtrar por municipio. Sin valor: todos los municipios.")] = None,
+    municipio_id: Annotated[int | None, Query(ge=1, le=2**31 - 1, description="Filtrar por municipio. Sin valor: todos los municipios.")] = None,
     user: Usuario = _SoloAuditor,
     db: Session = Depends(get_db),
     bonita=Depends(get_bonita_lectura),
@@ -245,7 +250,7 @@ def api_indicadores_csv(
     bloque: Annotated[Bloque, Query(description="Bloque a exportar: kpis | suministros | estados | tiempos | finalizadas.")],
     desde: Annotated[date | None, Query(description="Inicio del período (YYYY-MM-DD). Por defecto: hoy menos 6 meses.")] = None,
     hasta: Annotated[date | None, Query(description="Fin del período (YYYY-MM-DD). Por defecto: hoy.")] = None,
-    municipio_id: Annotated[int | None, Query(description="Filtrar por municipio. Sin valor: todos los municipios.")] = None,
+    municipio_id: Annotated[int | None, Query(ge=1, le=2**31 - 1, description="Filtrar por municipio. Sin valor: todos los municipios.")] = None,
     user: Usuario = _SoloAuditor,
     db: Session = Depends(get_db),
     bonita=Depends(get_bonita_lectura),

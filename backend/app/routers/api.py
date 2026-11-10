@@ -1,5 +1,7 @@
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
@@ -19,14 +21,14 @@ from app.schemas.api import (
     ConsorcioOut,
     DecisionIn,
     EmergenciaIn,
-    InvitacionIn,
-    MiembroOut,
     EmergenciaOut,
+    InvitacionIn,
     InventarioIn,
     InventarioOngOut,
     LoginIn,
     LoteIn,
     LoteOut,
+    MiembroOut,
     NotificacionOut,
     OfertaIn,
     OfertaOut,
@@ -54,6 +56,10 @@ from app.services.ofertas import publicar_oferta
 from app.services.lotes import agregar_lote, borrar_lote, publicar_convocatoria
 
 router = APIRouter(prefix="/api")
+
+# Ids de la ruta: enteros de 32 bits como las columnas. Con Postgres un valor más grande da 500 (el dialecto
+# psycopg castea el parámetro a INTEGER); así sale 422.
+Id = Annotated[int, Path(ge=1, le=2**31 - 1)]
 
 
 def _require_visible(db: Session, user: Usuario, emergencia_id: int) -> Emergencia:
@@ -117,7 +123,7 @@ def api_crear(
 
 @router.get("/emergencias/{emergencia_id}", response_model=EmergenciaOut)
 def api_detalle(
-    emergencia_id: int,
+    emergencia_id: Id,
     user: Usuario = Depends(require_role()),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
@@ -136,7 +142,7 @@ def _detalle_out(db: Session, emergencia: Emergencia, user: Usuario, settings: S
 
 @router.post("/emergencias/{emergencia_id}/decision", response_model=EmergenciaOut)
 def api_decidir(
-    emergencia_id: int,
+    emergencia_id: Id,
     body: DecisionIn,
     user: Usuario = Depends(require_role(Rol.COORDINADOR)),
     db: Session = Depends(get_db),
@@ -151,7 +157,7 @@ def api_decidir(
 
 @router.post("/emergencias/{emergencia_id}/adjudicar", response_model=EmergenciaOut)
 def api_adjudicar(
-    emergencia_id: int,
+    emergencia_id: Id,
     body: AdjudicarIn,
     user: Usuario = Depends(require_role(Rol.MUNICIPIO)),
     db: Session = Depends(get_db),
@@ -172,7 +178,7 @@ def _avanzar(db: Session, emergencia_id: int, user: Usuario, settings: Settings,
 
 @router.post("/emergencias/{emergencia_id}/monitorear", response_model=EmergenciaOut)
 def api_monitorear(
-    emergencia_id: int,
+    emergencia_id: Id,
     user: Usuario = Depends(require_role(Rol.COORDINADOR)),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
@@ -184,7 +190,7 @@ def api_monitorear(
 
 @router.post("/emergencias/{emergencia_id}/finalizar", response_model=EmergenciaOut)
 def api_finalizar(
-    emergencia_id: int,
+    emergencia_id: Id,
     user: Usuario = Depends(require_role(Rol.ONG)),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
@@ -196,7 +202,7 @@ def api_finalizar(
 
 @router.post("/emergencias/{emergencia_id}/validar-cierre", response_model=EmergenciaOut)
 def api_validar_cierre(
-    emergencia_id: int,
+    emergencia_id: Id,
     user: Usuario = Depends(require_role(Rol.COORDINADOR)),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
@@ -219,7 +225,7 @@ def api_notificaciones(user: Usuario = Depends(require_role()), db: Session = De
 
 @router.post("/notificaciones/{notificacion_id}/leida", response_model=NotificacionOut)
 def api_marcar_leida(
-    notificacion_id: int,
+    notificacion_id: Id,
     user: Usuario = Depends(require_role(Rol.ONG)),
     db: Session = Depends(get_db),
 ):
@@ -281,7 +287,7 @@ def api_alta_ong(
 
 @router.post("/emergencias/{emergencia_id}/lotes", response_model=LoteOut, status_code=201)
 def api_crear_lote(
-    emergencia_id: int,
+    emergencia_id: Id,
     body: LoteIn,
     user: Usuario = Depends(require_role(Rol.COORDINADOR)),
     db: Session = Depends(get_db),
@@ -293,8 +299,8 @@ def api_crear_lote(
 
 @router.delete("/emergencias/{emergencia_id}/lotes/{lote_id}", status_code=204)
 def api_borrar_lote(
-    emergencia_id: int,
-    lote_id: int,
+    emergencia_id: Id,
+    lote_id: Id,
     user: Usuario = Depends(require_role(Rol.COORDINADOR)),
     db: Session = Depends(get_db),
 ):
@@ -304,7 +310,7 @@ def api_borrar_lote(
 
 @router.post("/emergencias/{emergencia_id}/publicar", response_model=EmergenciaOut)
 def api_publicar(
-    emergencia_id: int,
+    emergencia_id: Id,
     body: PublicarIn,
     user: Usuario = Depends(require_role(Rol.COORDINADOR)),
     db: Session = Depends(get_db),
@@ -328,7 +334,7 @@ def _con_consorcio(out: OfertaOut, consorcio: Consorcio | None) -> OfertaOut:
 
 @router.get("/emergencias/{emergencia_id}/ofertas", response_model=list[OfertaOut])
 def api_listar_ofertas(
-    emergencia_id: int,
+    emergencia_id: Id,
     user: Usuario = Depends(require_role()),
     db: Session = Depends(get_db),
 ):
@@ -351,7 +357,7 @@ def api_listar_ofertas(
 
 @router.post("/emergencias/{emergencia_id}/ofertas", response_model=OfertaOut, status_code=201)
 def api_crear_oferta(
-    emergencia_id: int,
+    emergencia_id: Id,
     body: OfertaIn,
     user: Usuario = Depends(require_role(Rol.ONG)),
     db: Session = Depends(get_db),
@@ -403,7 +409,7 @@ def _consorcio_visible(db: Session, user: Usuario, consorcio_id: int) -> Consorc
     responses=_errores(_401="Sin sesión.", _404="La emergencia no existe o no es visible para el usuario."),
 )
 def api_listar_consorcios(
-    emergencia_id: int,
+    emergencia_id: Id,
     user: Usuario = Depends(require_role()),
     db: Session = Depends(get_db),
 ):
@@ -431,7 +437,7 @@ def api_listar_consorcios(
     ),
 )
 def api_crear_consorcio(
-    emergencia_id: int,
+    emergencia_id: Id,
     body: ConsorcioIn,
     user: Usuario = Depends(require_role(Rol.ONG)),
     db: Session = Depends(get_db),
@@ -458,7 +464,7 @@ def api_crear_consorcio(
     ),
 )
 def api_invitar(
-    consorcio_id: int,
+    consorcio_id: Id,
     body: InvitacionIn,
     user: Usuario = Depends(require_role(Rol.ONG)),
     db: Session = Depends(get_db),
@@ -484,7 +490,7 @@ def api_invitar(
     ),
 )
 def api_responder(
-    consorcio_id: int,
+    consorcio_id: Id,
     body: RespuestaIn,
     user: Usuario = Depends(require_role(Rol.ONG)),
     db: Session = Depends(get_db),
@@ -505,7 +511,7 @@ def api_responder(
     ),
 )
 def api_salir(
-    consorcio_id: int,
+    consorcio_id: Id,
     user: Usuario = Depends(require_role(Rol.ONG)),
     db: Session = Depends(get_db),
 ):
@@ -524,7 +530,7 @@ def api_salir(
     ),
 )
 def api_disolver(
-    consorcio_id: int,
+    consorcio_id: Id,
     user: Usuario = Depends(require_role(Rol.ONG)),
     db: Session = Depends(get_db),
 ):
@@ -542,7 +548,7 @@ def api_disolver(
     ),
 )
 def api_listar_ongs(
-    emergencia_id: int | None = None,
+    emergencia_id: Annotated[int | None, Query(ge=1, le=2**31 - 1)] = None,
     user: Usuario = Depends(require_role(Rol.ONG)),
     db: Session = Depends(get_db),
 ):

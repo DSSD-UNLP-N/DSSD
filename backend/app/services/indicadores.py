@@ -215,7 +215,7 @@ def reporte(db: Session, bonita, f: Filtros) -> Reporte:
     else:
         try:
             tiempos = tiempos_por_etapa(db, bonita, f)
-        except (requests.RequestException, BonitaError):
+        except (requests.RequestException, BonitaError, ValueError):  # ValueError: Bonita no devolvió JSON
             tiempos = _tiempos_no_disponible(db, f, "Bonita no disponible: no se pudieron leer los tiempos por etapa.")
     return Reporte(
         filtros=f,

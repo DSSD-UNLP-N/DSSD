@@ -157,3 +157,19 @@ def test_listado_de_ongs_excluye_propia_y_ocupadas(login, seeded, emergencia_id)
     assert nombres(c.get(f"/api/ongs?emergencia_id={emergencia_id}")) == ["Cáritas"]
     assert nombres(c.get("/api/ongs")) == ["Bomberos Voluntarios", "Cáritas"]
     assert c.get("/api/ongs?emergencia_id=9999").status_code == 404
+
+
+@pytest.mark.parametrize("nombre", ["Alianza\x00Norte", "Alianza\nNorte"])
+def test_nombre_con_caracteres_de_control_422(login, emergencia_id, nombre):
+    assert _crear(login("ong.cruzroja"), emergencia_id, nombre).status_code == 422
+
+
+@pytest.mark.parametrize("ruta", [
+    "/api/consorcios/2147483648/respuesta", "/api/consorcios/0/salida", "/api/emergencias/2147483648/consorcios",
+])
+def test_ids_fuera_de_int32_dan_422(login, ruta):
+    assert login("ong.cruzroja").post(ruta, json={"acepta": True, "nombre": "Alianza"}).status_code == 422
+
+
+def test_ongs_con_emergencia_fuera_de_int32_422(login):
+    assert login("ong.cruzroja").get("/api/ongs?emergencia_id=2147483648").status_code == 422
