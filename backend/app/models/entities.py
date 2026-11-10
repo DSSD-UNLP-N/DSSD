@@ -57,13 +57,6 @@ class TipoLote(str, enum.Enum):
     APOYO = "APOYO"  # apoyo secundario (consigna, etapa 3 del proceso)
 
 
-class EstadoMiembro(str, enum.Enum):
-    INVITADA = "INVITADA"
-    ACEPTADA = "ACEPTADA"
-    RECHAZADA = "RECHAZADA"
-    SALIO = "SALIO"
-
-
 class Municipio(Base):
     __tablename__ = "municipio"
 
@@ -160,7 +153,6 @@ class Oferta(Base):
         _enum(EstadoOferta), default=EstadoOferta.PRESENTADA, server_default=EstadoOferta.PRESENTADA.value
     )
     creada_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
-    adjudicada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     emergencia: Mapped[Emergencia] = relationship(back_populates="ofertas")
     ong: Mapped[Ong] = relationship()
@@ -196,39 +188,3 @@ class Notificacion(Base):
     texto: Mapped[str] = mapped_column(String(300))
     creada_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     leida: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
-
-
-class Consorcio(Base):
-    """Alianza de ONGs para presentar una oferta conjunta en una emergencia."""
-
-    __tablename__ = "consorcio"
-    __table_args__ = (UniqueConstraint("emergencia_id", "nombre"),)
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    emergencia_id: Mapped[int] = mapped_column(ForeignKey("emergencia.id"))
-    nombre: Mapped[str] = mapped_column(String(80))
-    ong_lider_id: Mapped[int] = mapped_column(ForeignKey("ong.id"))
-    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
-    disuelto_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    miembros: Mapped[list["ConsorcioMiembro"]] = relationship(
-        back_populates="consorcio", cascade="all, delete-orphan"
-    )
-
-
-class ConsorcioMiembro(Base):
-    """Participación (o invitación) de una ONG en un consorcio."""
-
-    __tablename__ = "consorcio_miembro"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    consorcio_id: Mapped[int] = mapped_column(ForeignKey("consorcio.id"))
-    ong_id: Mapped[int] = mapped_column(ForeignKey("ong.id"))
-    estado: Mapped[EstadoMiembro] = mapped_column(_enum(EstadoMiembro))
-    invitado_por_ong_id: Mapped[int] = mapped_column(ForeignKey("ong.id"))
-    invitado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
-    respondido_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    salio_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    consorcio: Mapped[Consorcio] = relationship(back_populates="miembros")
-    ong: Mapped[Ong] = relationship(foreign_keys=[ong_id])

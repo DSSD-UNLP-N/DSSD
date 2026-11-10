@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import os
 import argparse
-import signal
 import sqlite3
 import subprocess
 import sys
@@ -181,12 +180,8 @@ def en_paralelo(*llamadas):
 
 # --- apagar y levantar los servidores locales ---------------------------------------------------------------------
 def pid_en_puerto(puerto: int) -> int | None:
-    if os.name == "nt":
-        cmd = f"(Get-NetTCPConnection -LocalPort {puerto} -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess"
-        out = subprocess.run(["powershell", "-NoProfile", "-Command", cmd], capture_output=True, text=True).stdout.strip()
-    else:  # Linux/Mac: lsof
-        out = subprocess.run(["lsof", "-t", f"-iTCP:{puerto}", "-sTCP:LISTEN"], capture_output=True, text=True).stdout.split()
-        out = out[0] if out else ""
+    cmd = f"(Get-NetTCPConnection -LocalPort {puerto} -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess"
+    out = subprocess.run(["powershell", "-NoProfile", "-Command", cmd], capture_output=True, text=True).stdout.strip()
     return int(out) if out.isdigit() else None
 
 
@@ -194,10 +189,7 @@ def apagar(puerto: int) -> bool:
     pid = pid_en_puerto(puerto)
     if pid is None:
         return False
-    if os.name == "nt":
-        subprocess.run(["powershell", "-NoProfile", "-Command", f"Stop-Process -Id {pid} -Force"], capture_output=True)
-    else:
-        os.kill(pid, signal.SIGKILL)
+    subprocess.run(["powershell", "-NoProfile", "-Command", f"Stop-Process -Id {pid} -Force"], capture_output=True)
     for _ in range(20):
         if pid_en_puerto(puerto) is None:
             return True
@@ -205,15 +197,12 @@ def apagar(puerto: int) -> bool:
     return False
 
 
-# El servidor que se levanta tiene que sobrevivir al guion: en Windows, proceso desacoplado; en POSIX, sesión propia.
-DESACOPLADO = {"creationflags": 0x00000008 | 0x00000200} if os.name == "nt" else {"start_new_session": True}  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
-
-
 def levantar(directorio: str, puerto: int, ruta_salud: str) -> bool:
     log = open(Path(tempfile.gettempdir()) / f"uvicorn-variantes-{puerto}.log", "ab")
     subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "app.main:app", "--app-dir", str(REPO / directorio), "--port", str(puerto)],
-        stdout=log, stderr=log, cwd=str(REPO / directorio), close_fds=True, **DESACOPLADO,
+        stdout=log, stderr=log, cwd=str(REPO / directorio), close_fds=True,
+        creationflags=0x00000008 | 0x00000200,  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
     )
     limite = time.monotonic() + 40
     while time.monotonic() < limite:

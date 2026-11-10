@@ -11,7 +11,7 @@ from sqlalchemy import create_engine, inspect
 from app.db import Base
 
 BACKEND = Path(__file__).resolve().parents[1]
-TABLAS = {"municipio", "ong", "usuario", "emergencia", "lote", "oferta", "oferta_item", "notificacion", "consorcio", "consorcio_miembro"}
+TABLAS = {"municipio", "ong", "usuario", "emergencia", "lote", "oferta", "oferta_item", "notificacion"}
 
 
 @pytest.fixture
@@ -104,61 +104,6 @@ def test_0005_deja_ronda_1_ofertas_presentadas_y_acepta_los_estados_nuevos(cfg):
         conn.execute(text("UPDATE emergencia SET estado = 'EN_EVALUACION'"))
     with pytest.raises(IntegrityError), engine.begin() as conn:
         conn.execute(text("UPDATE emergencia SET estado = 'CUALQUIERA'"))
-
-
-def _sembrar_0007(engine):
-    from sqlalchemy import text
-
-    with engine.begin() as conn:
-        conn.execute(text("INSERT INTO municipio (id, nombre, provincia) VALUES (1, 'M', 'P')"))
-        conn.execute(text("INSERT INTO ong (id, nombre) VALUES (1, 'A')"))
-        conn.execute(text("INSERT INTO ong (id, nombre) VALUES (2, 'B')"))
-        conn.execute(text(
-            "INSERT INTO emergencia (id, municipio_id, tipo, nivel_gravedad, zona_afectada, descripcion,"
-            " estado, creada_en) VALUES (1, 1, 'x', 'ALTO', 'z', 'd', 'EN_EJECUCION', '2026-09-22')"))
-        for ong_id, estado in ((1, 'ADJUDICADA'), (2, 'NO_ADJUDICADA')):
-            conn.execute(text(
-                "INSERT INTO oferta (emergencia_id, ong_id, version_actual, estado, creada_en)"
-                f" VALUES (1, {ong_id}, 1, '{estado}', '2026-09-22')"))
-
-
-def test_backfill_toma_la_fecha_de_la_notificacion(cfg):
-    from sqlalchemy import text
-
-    command.upgrade(cfg, "0007")
-    engine = create_engine(cfg.get_main_option("sqlalchemy.url"))
-    _sembrar_0007(engine)
-    with engine.begin() as conn:
-        for texto, fecha in (
-            ("Tu oferta para la emergencia #1 fue seleccionada.", "2026-10-02 10:00:00"),
-            ("Tu oferta para la emergencia #1 fue seleccionada.", "2026-10-03 10:00:00"),
-            ("Otro aviso", "2026-09-30 10:00:00"),
-            ("Tu oferta para la emergencia #1 no fue seleccionada.", "2026-10-01 10:00:00"),
-        ):
-            conn.execute(text(
-                "INSERT INTO notificacion (ong_id, emergencia_id, texto, creada_en, leida)"
-                f" VALUES (1, 1, '{texto}', '{fecha}', 0)"))
-        conn.execute(text(
-            "INSERT INTO notificacion (ong_id, emergencia_id, texto, creada_en, leida) VALUES"
-            " (2, 1, 'Tu oferta para la emergencia #1 no fue seleccionada.', '2026-10-02 10:00:00', 0)"))
-
-    command.upgrade(cfg, "0008")
-    with engine.connect() as conn:
-        filas = dict(conn.execute(text("SELECT ong_id, adjudicada_en FROM oferta")).all())
-    assert str(filas[1]).startswith("2026-10-02 10:00:00")
-    assert filas[2] is None
-
-
-def test_backfill_sin_notificacion_queda_nulo(cfg):
-    from sqlalchemy import text
-
-    command.upgrade(cfg, "0007")
-    engine = create_engine(cfg.get_main_option("sqlalchemy.url"))
-    _sembrar_0007(engine)
-
-    command.upgrade(cfg, "0008")
-    with engine.connect() as conn:
-        assert conn.execute(text("SELECT adjudicada_en FROM oferta WHERE adjudicada_en IS NOT NULL")).all() == []
 
 
 def test_hay_una_sola_cabeza_de_migraciones():

@@ -17,7 +17,6 @@ from app.integrations.bonita import BonitaClient, BonitaError
 from app.integrations.nacional import NacionalClient
 from app.models import Emergencia, EstadoEmergencia, Oferta, Usuario
 from app.schemas.evaluacion import Evaluacion
-from app.services.consorcios import consorcios_validos, miembros_aceptados
 
 TAREA_EVALUAR = "Evaluar Cobertura"
 TAREA_ADJUDICAR = "Adjudicar Ofertas"
@@ -95,7 +94,7 @@ def decidir(db: Session, settings: Settings, nacional: NacionalClient, *, emerge
     db.commit()
 
 
-def adjudicar(db: Session, settings: Settings, *, emergencia: Emergencia, municipal: Usuario, cuits: list[str]) -> None:
+def adjudicar(settings: Settings, *, emergencia: Emergencia, municipal: Usuario, cuits: list[str]) -> None:
     """El Municipio elige entre las ofertas validadas y reservadas. La app completa "Adjudicar Ofertas"; Bonita
     confirma lo elegido, libera lo demás y le avisa a la app (que recién ahí pasa a EN_EJECUCION)."""
     ev = _evaluacion(emergencia)
@@ -108,12 +107,5 @@ def adjudicar(db: Session, settings: Settings, *, emergencia: Emergencia, munici
     if invalidas:
         raise CicloError(
             f"No se puede adjudicar a {', '.join(invalidas)}: no tiene una oferta validada con stock reservado.", 400)
-    for c in consorcios_validos(db, emergencia.id):
-        miembros = miembros_aceptados(c)
-        if not any(m.ong.cuit in cuits for m in miembros):
-            continue
-        faltan = [m.ong.nombre for m in miembros if m.ong.cuit in reservadas and m.ong.cuit not in cuits]
-        if faltan:
-            raise CicloError(f"El consorcio «{c.nombre}» se adjudica entero: falta {', '.join(faltan)}.", 409)
     completar_en_bonita(settings, emergencia.bonita_case_id, TAREA_ADJUDICAR, municipal.username,
                          {"ongsAdjudicadas": json.dumps(cuits)})

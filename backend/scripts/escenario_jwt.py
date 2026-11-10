@@ -30,7 +30,7 @@ sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE))
 
 from escenario_adjudicacion import BOMBEROS, CRUZ_ROJA, VENTANA_S, comprometido, esperar  # noqa: E402
-from escenario_cierre_variantes import CLAVES, DESACOPLADO, REPO, Ctx, apagar, levantar, recuperar_ok  # noqa: E402
+from escenario_cierre_variantes import CLAVES, REPO, Ctx, apagar, levantar, recuperar_ok  # noqa: E402
 from escenario_tope import crear_y_publicar  # noqa: E402
 
 COORDINADOR = "coordinador.regional"
@@ -52,7 +52,8 @@ def levantar_nacional_con(env_extra: dict[str, str]) -> bool:
     log = open(Path(tempfile.gettempdir()) / "uvicorn-jwt-8002.log", "ab")
     subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "app.main:app", "--app-dir", str(REPO / "nacional"), "--port", "8002"],
-        stdout=log, stderr=log, cwd=str(REPO / "nacional"), close_fds=True, env={**os.environ, **env_extra}, **DESACOPLADO,
+        stdout=log, stderr=log, cwd=str(REPO / "nacional"), close_fds=True, env={**os.environ, **env_extra},
+        creationflags=0x00000008 | 0x00000200,  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
     )
     limite = time.monotonic() + 40
     while time.monotonic() < limite:

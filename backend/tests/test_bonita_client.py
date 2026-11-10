@@ -210,18 +210,3 @@ def test_assign_task_propaga_error_http(client):
     responses.add(responses.PUT, f"{BASE}/API/bpm/userTask/9001", status=500)
     with pytest.raises(Exception):
         client.assign_task("9001", "77")
-
-
-@responses.activate
-def test_get_archived_flow_nodes_pagina(client):
-    pagina0 = [{"type": "USER_TASK", "state": "ready", "rootCaseId": "15", "n": i} for i in range(100)]
-    pagina1 = [{"type": "USER_TASK", "state": "completed", "rootCaseId": "15", "n": 100 + i} for i in range(3)]
-    responses.add(responses.GET, f"{BASE}/API/bpm/archivedFlowNode", json=pagina0)
-    responses.add(responses.GET, f"{BASE}/API/bpm/archivedFlowNode", json=pagina1)
-    nodos = client.get_archived_flow_nodes("15")
-    assert len(nodos) == 103
-    assert len(responses.calls) == 2
-    from urllib.parse import parse_qs, urlparse
-    for pagina, call in enumerate(responses.calls):
-        q = parse_qs(urlparse(call.request.url).query)
-        assert q["f"] == ["caseId=15"] and q["p"] == [str(pagina)] and q["c"] == ["100"]
