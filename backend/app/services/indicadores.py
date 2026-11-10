@@ -211,7 +211,7 @@ def finalizadas(db: Session, f: Filtros) -> list[Finalizada]:
 
 def reporte(db: Session, bonita, f: Filtros) -> Reporte:
     if bonita is None:
-        tiempos = _tiempos_no_disponible(db, f, "Bonita no configurado")
+        tiempos = _tiempos_no_disponible(db, f, "Bonita no responde: no se pudieron leer los tiempos por etapa.")
     else:
         try:
             tiempos = tiempos_por_etapa(db, bonita, f)

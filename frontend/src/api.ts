@@ -131,6 +131,40 @@ export type Oferta = {
   consorcio_nombre: string | null;
 };
 
+// Reporte del dashboard (GET /api/indicadores; contrato en docs/dashboard-contrato.md).
+export type Reporte = {
+  filtros: { desde: string; hasta: string; municipio_id: number | null };
+  generado_en: string;
+  kpis: {
+    emergencias: number;
+    resueltas: number;
+    en_curso: number;
+    pct_consorcio: number | null;
+    cobertura_promedio: number | null;
+  };
+  suministros: { mes: string; tipo_recurso: string; cantidad: number }[];
+  estados: { estado: string; etiqueta: string; cantidad: number }[];
+  tiempos: {
+    disponible: boolean;
+    motivo: string | null;
+    etapas: { tarea: string; horas_promedio: number; emergencias: number }[];
+    horas_total_promedio: number | null;
+  };
+  finalizadas: {
+    emergencia_id: number;
+    municipio: string;
+    tipo: string;
+    gravedad: string;
+    ongs: string[];
+    consorcio: boolean;
+    horas_total: number | null;
+    cobertura: number | null;
+  }[];
+};
+
+export const exportCsvUrl = (bloque: string, desde: string, hasta: string) =>
+  `/api/indicadores/export.csv?${new URLSearchParams({ bloque, desde, hasta })}`;
+
 // Ficha de la ONG en el Sistema Nacional (GET/PUT /api/ong/inventario).
 export type InventarioOng = {
   cuit: string;
@@ -236,6 +270,8 @@ export const api = {
   monitorear: (id: number) => post<Emergencia>(`/api/emergencias/${id}/monitorear`),
   finalizar: (id: number) => post<Emergencia>(`/api/emergencias/${id}/finalizar`),
   validarCierre: (id: number) => post<Emergencia>(`/api/emergencias/${id}/validar-cierre`),
+  indicadores: (desde: string, hasta: string) =>
+    request<Reporte>(`/api/indicadores?${new URLSearchParams({ desde, hasta })}`),
   inventario: () => request<InventarioOng>("/api/ong/inventario"),
   declararInventario: (rubros: { tipo_recurso: string; cantidad_total: number }[]) =>
     put<InventarioOng>("/api/ong/inventario", { rubros }),

@@ -33,6 +33,7 @@ const MENU: Record<Rol, { title: string; to: string; hint: string }[]> = {
     { title: "Mi inventario", to: "/inventario", hint: "Recursos y certificaciones en el Sistema Nacional" },
   ],
   AUDITOR: [
+    { title: "Dashboard de indicadores", to: "/indicadores", hint: "Métricas de la app y tiempos de Bonita" },
     { title: "Consulta de emergencias", to: "/emergencias", hint: "Vista de solo lectura" },
   ],
 };

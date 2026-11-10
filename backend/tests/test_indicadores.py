@@ -286,4 +286,4 @@ def test_reporte_con_bonita_caido_marca_tiempos_no_disponible(db, fake_bonita):
 
 def test_reporte_sin_bonita_configurado(db):
     r = indicadores.reporte(db, None, OCT)
-    assert not r.tiempos.disponible and r.tiempos.motivo == "Bonita no configurado"
+    assert not r.tiempos.disponible and r.tiempos.motivo == "Bonita no responde: no se pudieron leer los tiempos por etapa."

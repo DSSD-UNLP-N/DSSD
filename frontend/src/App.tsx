@@ -1,5 +1,6 @@
 import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./auth";
+import { DashboardPage } from "./DashboardPage";
 import { InventarioPage } from "./InventarioPage";
 import {
   AltaOngPage,
@@ -28,6 +29,7 @@ export default function App() {
           <Route path="/emergencias/nueva" element={<NuevaEmergenciaPage />} />
           <Route path="/emergencias/:id" element={<DetallePage />} />
           <Route path="/inventario" element={<InventarioPage />} />
+          <Route path="/indicadores" element={<DashboardPage />} />
         </Route>
         <Route path="/alta-ong" element={<AltaOngPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
