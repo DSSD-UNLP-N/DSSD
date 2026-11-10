@@ -155,6 +155,16 @@ export type Consorcio = {
 
 export type OngResumen = { id: number; nombre: string; cuit: string | null };
 
+export type ReporteIndicadoresGrafico = {
+  suministros: { mes: string; tipo_recurso: string; cantidad: number }[];
+  estados: { estado: string; etiqueta: string; cantidad: number }[];
+  tiempos: {
+    disponible: boolean;
+    motivo: string | null;
+    etapas: { tarea: string; horas_promedio: number; emergencias: number }[];
+  };
+};
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (init.body && !headers.has("Content-Type")) {
@@ -201,6 +211,7 @@ export const api = {
     }),
   logout: () => request<void>("/api/auth/logout", { method: "POST" }),
   listEmergencias: () => request<Emergencia[]>("/api/emergencias"),
+  indicadores: () => request<ReporteIndicadoresGrafico>("/api/indicadores"),
   getEmergencia: (id: number) => request<Emergencia>(`/api/emergencias/${id}`),
   createEmergencia: (body: {
     tipo: string;

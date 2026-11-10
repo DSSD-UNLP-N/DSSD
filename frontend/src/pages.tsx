@@ -1,11 +1,15 @@
-import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, type FormEvent, type ReactNode, useCallback, useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { api, type AltaOngIn, type Emergencia, type Meta, type Notificacion, type Oferta, type Rol, type TipoRecurso } from "./api";
+import { api, type AltaOngIn, type Emergencia, type Meta, type Notificacion, type Oferta, type ReporteIndicadoresGrafico, type Rol, type TipoRecurso } from "./api";
 import { useAuth } from "./auth";
 import { agruparParaAdjudicar, BloqueConsorcio, ConsorcioPanel, useConsorcios } from "./consorcios";
 import { FlowBubbles } from "./FlowBubbles";
 import { PageHeader } from "./PageHeader";
+
+const IndicadoresChart = lazy(() =>
+  import("./IndicadoresChart").then(({ IndicadoresChart: chart }) => ({ default: chart })),
+);
 
 const ROL_LABEL: Record<Rol, string> = {
   MUNICIPIO: "Operador Municipal",
@@ -344,6 +348,22 @@ export function LoginPage() {
 export function HomePage() {
   const { user } = useAuth();
   const items = MENU[user!.rol] ?? [];
+  const [reporte, setReporte] = useState<ReporteIndicadoresGrafico | null>(null);
+  const [errorIndicadores, setErrorIndicadores] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (user?.rol !== "AUDITOR") return;
+    let vigente = true;
+    void api.indicadores()
+      .then((datos) => {
+        if (vigente) setReporte(datos);
+      })
+      .catch((error: unknown) => {
+        if (vigente) setErrorIndicadores(error instanceof Error ? error.message : "No se pudieron cargar los indicadores.");
+      });
+    return () => { vigente = false; };
+  }, [user?.rol]);
+
   return (
     <Shell>
       <motion.div {...fade}>
@@ -374,6 +394,18 @@ export function HomePage() {
             </motion.div>
           ))}
         </nav>
+        {user!.rol === "AUDITOR" && (
+          <section className="panel indicadores-home" aria-label="Indicadores interactivos">
+            <h2>Indicadores del proceso</h2>
+            {errorIndicadores && <p className="alert" role="alert">{errorIndicadores}</p>}
+            {!reporte && !errorIndicadores && <p className="indicadores-chart-empty">Cargando indicadores...</p>}
+            {reporte && (
+              <Suspense fallback={<p className="indicadores-chart-empty">Preparando gráfico...</p>}>
+                <IndicadoresChart {...reporte} />
+              </Suspense>
+            )}
+          </section>
+        )}
       </motion.div>
     </Shell>
   );
