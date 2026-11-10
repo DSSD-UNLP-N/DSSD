@@ -34,6 +34,7 @@ entrega-[3-9]/*.bos
 *.bak*
 
 # Python
+.venv/
 __pycache__/
 *.pyc
 
