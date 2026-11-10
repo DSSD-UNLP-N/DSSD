@@ -29,6 +29,7 @@ const MENU: Record<Rol, { title: string; to: string; hint: string }[]> = {
   ],
   ONG: [
     { title: "Convocatorias abiertas", to: "/emergencias", hint: "Cargar ofertas de ayuda" },
+    { title: "Mi inventario", to: "/inventario", hint: "Recursos y certificaciones en el Sistema Nacional" },
   ],
   AUDITOR: [
     { title: "Consulta de emergencias", to: "/emergencias", hint: "Vista de solo lectura" },

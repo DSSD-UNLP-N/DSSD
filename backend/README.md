@@ -103,6 +103,10 @@ Sin sesión, `/api/*` responde 401 JSON; con el rol incorrecto, 403. El menú de
 Alta de ONGs: `POST /api/ongs/alta` (y `GET /api/ongs/alta/tipos-recurso` para el catálogo) son públicos y sirven a la pantalla oculta
 `/alta-ong` del front: crean la ONG en Bonita, en la API Nacional con sus rubros y en la app.
 
+Inventario de la ONG: `GET` y `PUT /api/ong/inventario` (solo rol ONG, pantalla `/inventario`). El inventario vive solo en la API Nacional:
+la app lee la ficha (`GET /ongs/{cuit}`) y declara los rubros (`PUT /ongs/{cuit}/inventario`) con su cuenta de servicio, con el CUIT de la
+ONG del usuario logueado. Bajar un total por debajo de lo comprometido da 409; un tipo de recurso inexistente, 422.
+
 ## Sistema Nacional (nacional/)
 
 Los lotes se cargan eligiendo un tipo de recurso del catálogo del Sistema Nacional (`nacional/`, otra API; ver su README).

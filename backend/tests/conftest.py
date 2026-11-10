@@ -92,6 +92,7 @@ class FakeNacional:
             ("30-54666544-5", "RACION_ALIMENTO"): 5000,
             ("30-68522415-9", "PARAMEDICO"): 6,
         }
+        self.comprometido = {}  # (CUIT, tipo) -> bloqueado por reservas; no cuenta en `inventario` (disponible)
         self.validaciones = []  # (gravedad, items) de cada llamada a validar()
         self.liberadas = []  # referencia de cada llamada a liberar()
         self.ongs_registradas = []  # kwargs de cada llamada a registrar_ong()
@@ -111,11 +112,43 @@ class FakeNacional:
                                       "username": username, "password": password})
 
     def declarar_inventario(self, cuit, items):
+        """Como la API real: upsert por tipo, 404 si el tipo no existe y 409 si queda por debajo de lo comprometido."""
         self._verificar()
         if self.falla_inventario:
             raise self.falla_inventario
+        codigos = {t["codigo"] for t in self.TIPOS}
+        for i in items:
+            if i["tipo_recurso"] not in codigos:
+                raise NacionalError(f"Tipo de recurso inexistente: {i['tipo_recurso']}", 404)
+            comprometido = self.comprometido.get((cuit, i["tipo_recurso"]), 0)
+            if i["cantidad_total"] < comprometido:
+                raise NacionalError(f"{i['tipo_recurso']}: no se puede declarar {i['cantidad_total']}, "
+                                    f"hay {comprometido} comprometidos", 409)
+        for i in items:
+            clave = (cuit, i["tipo_recurso"])
+            self.inventario[clave] = i["cantidad_total"] - self.comprometido.get(clave, 0)
         self.inventarios[cuit] = items
         return items
+
+    def ficha_ong(self, cuit):
+        """GET /ongs/{cuit}: lo que hay en `inventario` (disponible) y `comprometido`, por tipo; 404 si no la conoce."""
+        self._verificar()
+        if not any(c == cuit for c, _ in self.inventario):
+            raise NacionalError("ONG no registrada", 404)
+        tipos = {t["codigo"]: t for t in self.TIPOS}
+        inventario = []
+        for (c, codigo), disponible in sorted(self.inventario.items()):
+            if c != cuit:
+                continue
+            comprometido = self.comprometido.get((c, codigo), 0)
+            inventario.append({
+                "tipo_recurso": codigo, "nombre": tipos[codigo]["nombre"], "unidad": tipos[codigo]["unidad"],
+                "cantidad_total": disponible + comprometido, "cantidad_comprometida": comprometido,
+                "disponible": disponible, "riesgo_permitido": "CRITICO",
+            })
+        return {"cuit": cuit, "nombre": "ONG de prueba", "estado": "HABILITADA", "inventario": inventario,
+                "certificaciones": [{"codigo": "SALUD_PREHOSP", "nombre": "Atención de salud prehospitalaria",
+                                     "riesgo_max": "CRITICO", "vence_el": "2027-10-01", "vigente": True}]}
 
     def liberar(self, referencia):
         self._verificar()

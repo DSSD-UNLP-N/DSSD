@@ -59,17 +59,17 @@ class NacionalClient:
             return _TOKENS[clave]
 
     def _request(self, method: str, path: str, **kwargs) -> dict | list:
+        """Llamada con la cuenta de servicio; un error conserva el status y el detail de Nacional."""
         for renovar in (False, True):
             token = self._token(renovar)
             headers = {"Authorization": f"Bearer {token}"} if token else {}
             try:
                 resp = requests.request(method, f"{self.base_url}{path}", timeout=self.timeout, headers=headers, **kwargs)
-                if resp.status_code == 401 and token and not renovar:
-                    continue  # vencido o secreto rotado: se vuelve a entrar una sola vez
-                resp.raise_for_status()
-                return resp.json()
-            except (requests.RequestException, ValueError) as exc:
+            except requests.RequestException as exc:
                 raise NacionalError(f"Sistema Nacional: {method} {path} falló ({exc})") from exc
+            if resp.status_code == 401 and token and not renovar:
+                continue  # vencido o secreto rotado: se vuelve a entrar una sola vez
+            return self._respuesta(resp, method, path)
 
     def _llamar_sin_servicio(self, method: str, path: str, **kwargs) -> dict | list:
         """Llamada pública, sin token (el registro de ONGs); conserva el status y el detail."""
@@ -77,6 +77,10 @@ class NacionalClient:
             resp = requests.request(method, f"{self.base_url}{path}", timeout=self.timeout, **kwargs)
         except requests.RequestException as exc:
             raise NacionalError(f"Sistema Nacional: {method} {path} falló ({exc})") from exc
+        return self._respuesta(resp, method, path)
+
+    @staticmethod
+    def _respuesta(resp: requests.Response, method: str, path: str) -> dict | list:
         if not resp.ok:
             try:
                 detalle = resp.json().get("detail")
@@ -97,6 +101,10 @@ class NacionalClient:
         El token que devuelve Nacional no se usa: el inventario se declara con la cuenta de servicio."""
         self._llamar_sin_servicio("POST", "/ongs", json={
             "ong_nombre": ong_nombre, "cuit": cuit, "nombre": nombre, "username": username, "password": password})
+
+    def ficha_ong(self, cuit: str) -> dict:
+        """GET /ongs/{cuit}: certificaciones e inventario (total, comprometido, disponible) de la ONG."""
+        return self._request("GET", f"/ongs/{cuit}")
 
     def declarar_inventario(self, cuit: str, items: list[dict]) -> list[dict]:
         """Declara el inventario de la ONG (PUT /ongs/{cuit}/inventario): solo lo acepta la cuenta de servicio."""

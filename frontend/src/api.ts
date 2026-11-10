@@ -128,6 +128,23 @@ export type Oferta = {
   estado: "PRESENTADA" | "ADJUDICADA" | "NO_ADJUDICADA" | "FINALIZADA";
 };
 
+// Ficha de la ONG en el Sistema Nacional (GET/PUT /api/ong/inventario).
+export type InventarioOng = {
+  cuit: string;
+  nombre: string;
+  estado: string;
+  certificaciones: { codigo: string; nombre: string; riesgo_max: string; vence_el: string; vigente: boolean }[];
+  inventario: {
+    tipo_recurso: string;
+    nombre: string;
+    unidad: string;
+    cantidad_total: number;
+    cantidad_comprometida: number;
+    disponible: number;
+    riesgo_permitido: string | null;
+  }[];
+};
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (init.body && !headers.has("Content-Type")) {
@@ -161,6 +178,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 const post = <T>(path: string, body?: unknown) =>
   request<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) });
 
+const put = <T>(path: string, body: unknown) => request<T>(path, { method: "PUT", body: JSON.stringify(body) });
+
 // /api/meta no cambia en la sesión: una sola petición compartida; si falla, la próxima llamada reintenta.
 let metaPromise: Promise<Meta> | null = null;
 
@@ -191,6 +210,9 @@ export const api = {
   monitorear: (id: number) => post<Emergencia>(`/api/emergencias/${id}/monitorear`),
   finalizar: (id: number) => post<Emergencia>(`/api/emergencias/${id}/finalizar`),
   validarCierre: (id: number) => post<Emergencia>(`/api/emergencias/${id}/validar-cierre`),
+  inventario: () => request<InventarioOng>("/api/ong/inventario"),
+  declararInventario: (rubros: { tipo_recurso: string; cantidad_total: number }[]) =>
+    put<InventarioOng>("/api/ong/inventario", { rubros }),
   notificaciones: () => request<Notificacion[]>("/api/notificaciones"),
   marcarLeida: (id: number) => post<Notificacion>(`/api/notificaciones/${id}/leida`),
   listOfertas: (id: number) => request<Oferta[]>(`/api/emergencias/${id}/ofertas`),

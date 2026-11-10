@@ -17,6 +17,8 @@ from app.schemas.api import (
     DecisionIn,
     EmergenciaIn,
     EmergenciaOut,
+    InventarioIn,
+    InventarioOngOut,
     LoginIn,
     LoteIn,
     LoteOut,
@@ -35,6 +37,7 @@ from app.services.emergencias import (
     registrar_emergencia,
     tarea_ong_en_bonita,
 )
+from app.services import inventario
 from app.services.alta_ong import alta_ong
 from app.services.ciclo import adjudicar, decidir
 from app.services.ejecucion import finalizar, monitorear, resumen, validar_cierre
@@ -226,6 +229,26 @@ def api_tipos_recurso(
 ):
     """Catálogo de recursos del Sistema Nacional, para elegir el tipo de cada lote."""
     return nacional.tipos_recurso()
+
+
+@router.get("/ong/inventario", response_model=InventarioOngOut)
+def api_ver_inventario(
+    user: Usuario = Depends(require_role(Rol.ONG)),
+    nacional: NacionalClient = Depends(get_nacional),
+):
+    """Certificaciones e inventario de la ONG del usuario, leídos del Sistema Nacional con la cuenta de servicio."""
+    return inventario.ver(nacional, user.ong)
+
+
+@router.put("/ong/inventario", response_model=InventarioOngOut)
+def api_declarar_inventario(
+    body: InventarioIn,
+    user: Usuario = Depends(require_role(Rol.ONG)),
+    nacional: NacionalClient = Depends(get_nacional),
+):
+    """Actualiza el total de cada rubro de la ONG del usuario en el Sistema Nacional (los rubros que no vienen no
+    cambian). 409 si un total queda por debajo de lo comprometido; 422 si un tipo de recurso no existe."""
+    return inventario.declarar(nacional, user.ong, body.rubros)
 
 
 @router.get("/ongs/alta/tipos-recurso", response_model=list[TipoRecursoOut])

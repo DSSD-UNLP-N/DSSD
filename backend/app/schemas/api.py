@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Annotated, Literal
 
 from pydantic import AfterValidator, AliasChoices, BaseModel, ConfigDict, Field, field_validator
@@ -150,7 +150,14 @@ class OfertaOut(BaseModel):
 
 class RubroIn(BaseModel):
     tipo_recurso: str = Field(min_length=1)
-    cantidad_total: int = Field(ge=0)
+    cantidad_total: int = Field(ge=0, le=2**31 - 1)  # entero de 32 bits: lo que guarda Postgres en Nacional
+
+
+def _rubros_sin_repetidos(v: list[RubroIn]) -> list[RubroIn]:
+    tipos = [r.tipo_recurso for r in v]
+    if len(set(tipos)) != len(tipos):
+        raise ValueError("No repitas el mismo tipo de recurso")
+    return v
 
 
 class AltaOngIn(BaseModel):
@@ -166,13 +173,7 @@ class AltaOngIn(BaseModel):
     def _recortar(cls, v):
         return v.strip() if isinstance(v, str) else v
 
-    @field_validator("rubros")
-    @classmethod
-    def _sin_repetidos(cls, v):
-        tipos = [r.tipo_recurso for r in v]
-        if len(set(tipos)) != len(tipos):
-            raise ValueError("No repitas el mismo tipo de recurso")
-        return v
+    _sin_repetidos = field_validator("rubros")(_rubros_sin_repetidos)
 
 
 class AltaOngOut(BaseModel):
@@ -180,6 +181,41 @@ class AltaOngOut(BaseModel):
     cuit: str
     username: str
     rubros: list[RubroIn]
+
+
+class InventarioIn(BaseModel):
+    # Upsert por tipo de recurso: los tipos que no vienen quedan como están en el Sistema Nacional.
+    rubros: list[RubroIn] = Field(min_length=1)
+
+    _sin_repetidos = field_validator("rubros")(_rubros_sin_repetidos)
+
+
+class CertificacionOngOut(BaseModel):
+    codigo: str
+    nombre: str
+    riesgo_max: str
+    vence_el: date
+    vigente: bool
+
+
+class InventarioItemOut(BaseModel):
+    tipo_recurso: str
+    nombre: str
+    unidad: str
+    cantidad_total: int
+    cantidad_comprometida: int  # bloqueado por reservas y adjudicaciones abiertas
+    disponible: int
+    riesgo_permitido: str | None = None  # null: sin certificación vigente para este recurso
+
+
+class InventarioOngOut(BaseModel):
+    """La ficha de la ONG en el Sistema Nacional (GET /ongs/{cuit})."""
+
+    cuit: str
+    nombre: str
+    estado: str
+    certificaciones: list[CertificacionOngOut]
+    inventario: list[InventarioItemOut]
 
 
 class EmergenciaIn(BaseModel):
