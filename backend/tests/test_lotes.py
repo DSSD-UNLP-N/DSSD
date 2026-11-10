@@ -185,6 +185,22 @@ def test_publicar_completa_las_dos_tareas_y_setea_la_ventana(login, emergencia, 
 
 
 @responses.activate
+def test_la_ventana_se_guarda_en_los_mismos_segundos_que_recibe_bonita(login, emergencia, seeded):
+    """Bonita recibe la ventana en segundos; con milisegundos guardados, su timer vencía antes que la ventana de la
+    app y el GET de ofertas daba 409 (caso trabado, visto en la prueba con Bonita real del 10/11)."""
+    _con_lote(seeded, emergencia)
+    _mock_publicacion()
+    ventana = (datetime.now(timezone.utc) + timedelta(hours=2)).replace(microsecond=351000)
+    r = login("coordinador.regional").post(_publicar(emergencia), json={"ventana_fin": ventana.isoformat()})
+
+    assert r.status_code == 200
+    enviado = json.loads(next(c.request.body for c in responses.calls if "caseVariable" in c.request.url))["value"]
+    with seeded() as s:
+        guardada = s.get(Emergencia, emergencia).ventana_ofertas_fin.replace(tzinfo=timezone.utc)
+    assert guardada == datetime.fromisoformat(enviado) == ventana.replace(microsecond=0)
+
+
+@responses.activate
 def test_las_tareas_del_coordinador_las_ejecuta_el_coordinador_que_publica(login, emergencia, seeded):
     """Bonita registra al ejecutor: tiene que ser quien publicó, y el técnico solo lee y setea variables."""
     _con_lote(seeded, emergencia)
