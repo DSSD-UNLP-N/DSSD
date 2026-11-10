@@ -80,6 +80,9 @@ def publicar_convocatoria(
         raise PublicacionError("La emergencia no tiene caso en Bonita; no se puede publicar.")
     if ventana_fin.tzinfo is None:
         ventana_fin = ventana_fin.astimezone()
+    # A Bonita le llega en segundos (ventanaOfertasISO): si la app guardara los milisegundos, el timer vencería antes
+    # de que la app dé la ventana por cerrada y el GET de ofertas de Bonita recibiría 409 (el caso queda trabado).
+    ventana_fin = ventana_fin.replace(microsecond=0)
     if ventana_fin <= datetime.now().astimezone():
         raise PublicacionError("El cierre de la ventana tiene que ser una fecha futura.")
 

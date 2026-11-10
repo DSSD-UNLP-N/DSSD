@@ -1,4 +1,5 @@
 import hmac
+import logging
 
 from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
@@ -6,6 +7,8 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.db import get_db
 from app.models import Rol, Usuario
+
+log = logging.getLogger(__name__)
 
 
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> Usuario | None:
@@ -30,6 +33,25 @@ def require_role(*roles: Rol):
         return user
 
     return dep
+
+
+def get_bonita_lectura(settings: Settings = Depends(get_settings)):
+    """Devuelve un BonitaClient ya logueado con la cuenta técnica, o None si Bonita no responde.
+
+    La función de servicio `reporte()` maneja el caso None devolviendo tiempos.disponible=False,
+    por lo que el endpoint siempre responde 200 incluso con Bonita caído.
+    """
+    import requests as req
+
+    from app.integrations.bonita import BonitaClient, BonitaError
+
+    try:
+        client = BonitaClient(settings.bonita_base_url, timeout=settings.bonita_timeout_seconds)
+        client.login(settings.bonita_username, settings.bonita_password)
+        return client
+    except (req.RequestException, BonitaError) as exc:
+        log.warning("Bonita no disponible en get_bonita_lectura: %s", exc)
+        return None
 
 
 def require_bonita_key(

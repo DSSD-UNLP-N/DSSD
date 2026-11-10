@@ -4,7 +4,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.core.config import get_settings
 from app.integrations.nacional import NACIONAL_CAIDO, NacionalError
-from app.routers import api, bonita
+from app.routers import api, bonita, indicadores
 from app.services import ServicioError
 
 settings = get_settings()
@@ -15,6 +15,7 @@ app.add_middleware(
 )
 app.include_router(api.router)
 app.include_router(bonita.router)
+app.include_router(indicadores.router)
 
 
 @app.exception_handler(ServicioError)

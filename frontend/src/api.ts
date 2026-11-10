@@ -5,6 +5,7 @@ export type Usuario = {
   username: string;
   nombre: string;
   rol: Rol;
+  ong_id: number | null;
 };
 
 export type Lote = {
@@ -126,7 +127,83 @@ export type Oferta = {
   items: { lote_id: number; recurso: string; cantidad: number; version: number }[];
   retirada: boolean;
   estado: "PRESENTADA" | "ADJUDICADA" | "NO_ADJUDICADA" | "FINALIZADA";
+  consorcio_id: number | null;
+  consorcio_nombre: string | null;
 };
+
+// Reporte del dashboard (GET /api/indicadores; contrato en docs/dashboard-contrato.md).
+export type Reporte = {
+  filtros: { desde: string; hasta: string; municipio_id: number | null };
+  generado_en: string;
+  kpis: {
+    emergencias: number;
+    resueltas: number;
+    en_curso: number;
+    pct_consorcio: number | null;
+    cobertura_promedio: number | null;
+  };
+  suministros: { mes: string; tipo_recurso: string; cantidad: number }[];
+  estados: { estado: string; etiqueta: string; cantidad: number }[];
+  tiempos: {
+    disponible: boolean;
+    motivo: string | null;
+    etapas: { tarea: string; horas_promedio: number; emergencias: number }[];
+    horas_total_promedio: number | null;
+  };
+  finalizadas: {
+    emergencia_id: number;
+    municipio: string;
+    tipo: string;
+    gravedad: string;
+    ongs: string[];
+    consorcio: boolean;
+    horas_total: number | null;
+    cobertura: number | null;
+  }[];
+};
+
+export const exportCsvUrl = (bloque: string, desde: string, hasta: string) =>
+  `/api/indicadores/export.csv?${new URLSearchParams({ bloque, desde, hasta })}`;
+
+// Ficha de la ONG en el Sistema Nacional (GET/PUT /api/ong/inventario).
+export type InventarioOng = {
+  cuit: string;
+  nombre: string;
+  estado: string;
+  certificaciones: { codigo: string; nombre: string; riesgo_max: string; vence_el: string; vigente: boolean }[];
+  inventario: {
+    tipo_recurso: string;
+    nombre: string;
+    unidad: string;
+    cantidad_total: number;
+    cantidad_comprometida: number;
+    disponible: number;
+    riesgo_permitido: string | null;
+  }[];
+};
+
+export type MiembroConsorcio = {
+  ong_id: number;
+  ong_nombre: string;
+  cuit: string | null;
+  estado: "INVITADA" | "ACEPTADA" | "RECHAZADA" | "SALIO";
+  invitado_en: string;
+  respondido_en: string | null;
+  salio_en: string | null;
+};
+
+export type Consorcio = {
+  id: number;
+  emergencia_id: number;
+  nombre: string;
+  ong_lider_id: number;
+  ong_lider_nombre: string;
+  valido: boolean;
+  disuelto: boolean;
+  miembros: MiembroConsorcio[];
+};
+
+export type OngResumen = { id: number; nombre: string; cuit: string | null };
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
@@ -161,6 +238,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 const post = <T>(path: string, body?: unknown) =>
   request<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) });
 
+const put = <T>(path: string, body: unknown) => request<T>(path, { method: "PUT", body: JSON.stringify(body) });
+
 // /api/meta no cambia en la sesión: una sola petición compartida; si falla, la próxima llamada reintenta.
 let metaPromise: Promise<Meta> | null = null;
 
@@ -191,9 +270,22 @@ export const api = {
   monitorear: (id: number) => post<Emergencia>(`/api/emergencias/${id}/monitorear`),
   finalizar: (id: number) => post<Emergencia>(`/api/emergencias/${id}/finalizar`),
   validarCierre: (id: number) => post<Emergencia>(`/api/emergencias/${id}/validar-cierre`),
+  indicadores: (desde: string, hasta: string) =>
+    request<Reporte>(`/api/indicadores?${new URLSearchParams({ desde, hasta })}`),
+  inventario: () => request<InventarioOng>("/api/ong/inventario"),
+  declararInventario: (rubros: { tipo_recurso: string; cantidad_total: number }[]) =>
+    put<InventarioOng>("/api/ong/inventario", { rubros }),
   notificaciones: () => request<Notificacion[]>("/api/notificaciones"),
   marcarLeida: (id: number) => post<Notificacion>(`/api/notificaciones/${id}/leida`),
   listOfertas: (id: number) => request<Oferta[]>(`/api/emergencias/${id}/ofertas`),
   createOferta: (id: number, items: { lote_id: number; recurso: string; cantidad: number }[]) =>
     post<Oferta>(`/api/emergencias/${id}/ofertas`, { items }),
+  listConsorcios: (id: number) => request<Consorcio[]>(`/api/emergencias/${id}/consorcios`),
+  crearConsorcio: (id: number, nombre: string) => post<Consorcio>(`/api/emergencias/${id}/consorcios`, { nombre }),
+  invitar: (cid: number, ong_id: number) => post<Consorcio>(`/api/consorcios/${cid}/invitaciones`, { ong_id }),
+  responder: (cid: number, acepta: boolean) => post<Consorcio>(`/api/consorcios/${cid}/respuesta`, { acepta }),
+  salirConsorcio: (cid: number) => post<void>(`/api/consorcios/${cid}/salida`),
+  disolverConsorcio: (cid: number) => request<void>(`/api/consorcios/${cid}`, { method: "DELETE" }),
+  listOngs: (emergencia_id?: number) =>
+    request<OngResumen[]>(emergencia_id ? `/api/ongs?emergencia_id=${emergencia_id}` : "/api/ongs"),
 };
