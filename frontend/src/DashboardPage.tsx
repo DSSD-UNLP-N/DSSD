@@ -47,9 +47,9 @@ type Barra = { clave: string; label: string; valor: number; texto: string; detal
 
 // Barras horizontales de una sola unidad. Pasar el mouse muestra el valor exacto; tocar una barra la fija y muestra
 // su detalle abajo.
-function Barras({ barras, color, vacio }: { barras: Barra[]; color: string; vacio: string }) {
+function Barras({ barras, color, vacio, escala }: { barras: Barra[]; color: string; vacio: string; escala?: number }) {
   const [elegida, setElegida] = useState<string | null>(null);
-  const max = Math.max(...barras.map((b) => b.valor), 1);
+  const max = escala ?? (Math.max(...barras.map((b) => b.valor)) || 1); // `|| 1`: evita dividir por 0 si todo vale 0
   const detalle = barras.find((b) => b.clave === elegida)?.detalle;
   if (barras.length === 0) return <p className="chart-detalle">{vacio}</p>;
   return (
@@ -156,6 +156,53 @@ function Consorcios({ finalizadas, pct, desde, hasta }: {
                 { clave: "sin", label: "Una sola ONG", valor: sin, texto: num(sin), detalle: detalle("Una sola ONG", sin) },
               ]
         }
+      />
+    </Panel>
+  );
+}
+
+type Finalizada = Reporte["finalizadas"][number];
+
+// Una barra por emergencia resuelta; las que no tienen el dato (sin cobertura o sin cierre validado) no se dibujan.
+const etiquetaEmergencia = (f: Finalizada) => `#${f.emergencia_id} ${f.municipio}`;
+const contexto = (f: Finalizada) => `${f.tipo}, gravedad ${f.gravedad}`;
+
+function CoberturaPorEmergencia({ finalizadas, desde, hasta }: { finalizadas: Finalizada[]; desde: string; hasta: string }) {
+  return (
+    <Panel titulo="Cobertura por emergencia" kicker="Resueltas" bloque="finalizadas" desde={desde} hasta={hasta}>
+      <Barras
+        color={COLOR.verde}
+        escala={100}
+        vacio="Ninguna emergencia resuelta del período tiene cobertura calculada."
+        barras={finalizadas
+          .filter((f) => f.cobertura !== null)
+          .map((f) => ({
+            clave: String(f.emergencia_id),
+            label: etiquetaEmergencia(f),
+            valor: f.cobertura as number,
+            texto: dec(f.cobertura, " %"),
+            detalle: `${etiquetaEmergencia(f)} (${contexto(f)}): cobertura ${dec(f.cobertura, " %")} de lo pedido`,
+          }))}
+      />
+    </Panel>
+  );
+}
+
+function DuracionPorEmergencia({ finalizadas, desde, hasta }: { finalizadas: Finalizada[]; desde: string; hasta: string }) {
+  return (
+    <Panel titulo="Duración por emergencia" kicker="Alta → cierre" bloque="finalizadas" desde={desde} hasta={hasta}>
+      <Barras
+        color={COLOR.bordo}
+        vacio="Ninguna emergencia resuelta del período tiene cierre registrado."
+        barras={finalizadas
+          .filter((f) => f.horas_total !== null)
+          .map((f) => ({
+            clave: String(f.emergencia_id),
+            label: etiquetaEmergencia(f),
+            valor: f.horas_total as number,
+            texto: horas(f.horas_total),
+            detalle: `${etiquetaEmergencia(f)} (${contexto(f)}): ${horas(f.horas_total)} desde el alta hasta el cierre`,
+          }))}
       />
     </Panel>
   );
@@ -278,6 +325,10 @@ export function DashboardPage() {
                   </p>
                 )}
               </Panel>
+            </div>
+            <div className="dashboard-grid">
+              <CoberturaPorEmergencia finalizadas={r.finalizadas} desde={desde} hasta={hasta} />
+              <DuracionPorEmergencia finalizadas={r.finalizadas} desde={desde} hasta={hasta} />
             </div>
             <Panel titulo="Emergencias finalizadas" kicker="Cierre bilateral" bloque="finalizadas" desde={desde} hasta={hasta}>
               {r.finalizadas.length === 0 ? (
