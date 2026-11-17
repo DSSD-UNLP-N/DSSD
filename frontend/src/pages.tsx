@@ -821,8 +821,21 @@ export function DetallePage() {
   const decidir = (decision: "PARCIAL" | "REFORMULAR") =>
     run(
       () => api.decidir(id, decision),
-      decision === "PARCIAL" ? "Seguís con la cobertura parcial: el Municipio adjudica." : "Convocatoria reformulada: cargá los lotes y publicá de nuevo.",
+      decision === "PARCIAL" ? "Seguís con la cobertura parcial: el Municipio adjudica." : "Convocatoria reformulada: ajustá los lotes y publicá de nuevo.",
     );
+
+  function cambiarCantidad(ev: FormEvent<HTMLFormElement>, loteId: number) {
+    ev.preventDefault();
+    const cantidad = Number(new FormData(ev.currentTarget).get("cantidad"));
+    return run(() => api.cambiarCantidadLote(id, loteId, cantidad), "Cantidad del lote actualizada");
+  }
+
+  function reabrir(ev: FormEvent<HTMLFormElement>) {
+    ev.preventDefault();
+    const fd = new FormData(ev.currentTarget);
+    const iso = new Date(String(fd.get("ventana_reabrir"))).toISOString();
+    return run(() => api.decidir(id, "REABRIR", iso), "Convocatoria reabierta con los mismos lotes: las ONGs pueden ofertar hasta el nuevo cierre.");
+  }
 
   const adjudicar = () =>
     run(
@@ -951,7 +964,29 @@ export function DetallePage() {
                   </strong>{" "}
                   · {l.cantidad} {l.unidad}
                 </span>
-                <span className="badge muted">{l.tipo}</span>
+                {user!.rol === "COORDINADOR" && e.estado === "REGISTRADA" ? (
+                  <form
+                    onSubmit={(ev) => cambiarCantidad(ev, l.id)}
+                    style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}
+                    data-testid={`lote-cantidad-${l.id}`}
+                  >
+                    <input
+                      name="cantidad"
+                      type="number"
+                      min={1}
+                      step={1}
+                      defaultValue={l.cantidad}
+                      aria-label={`Cantidad del lote ${l.id}`}
+                      style={{ width: "6.5rem" }}
+                      required
+                    />
+                    <button className="btn btn-ghost" disabled={busy}>
+                      Ajustar
+                    </button>
+                  </form>
+                ) : (
+                  <span className="badge muted">{l.tipo}</span>
+                )}
               </div>
             ))
           )}
@@ -970,8 +1005,11 @@ export function DetallePage() {
             <p>
               <strong>Cobertura parcial:</strong> se sigue con lo reservado y el Municipio elige entre las ofertas.
               <br />
-              <strong>Reformular:</strong> se libera todo el stock reservado, se retiran las ofertas y se vuelve a cargar
-              lotes y publicar (ronda {e.evaluacion.ronda + 1}).
+              <strong>Reformular:</strong> Bonita libera todo el stock reservado, se retiran las ofertas y se ajustan los
+              lotes para publicar de nuevo (ronda {e.evaluacion.ronda + 1}).
+              <br />
+              <strong>Reabrir:</strong> Bonita libera lo reservado y la convocatoria vuelve a abrirse con los mismos lotes y
+              las mismas ofertas, hasta un cierre nuevo; las ONGs pueden sumar o mejorar sus ofertas.
             </p>
             <div>
               <button className="btn btn-primary" disabled={busy} onClick={() => void decidir("PARCIAL")} data-testid="decidir-parcial">
@@ -981,6 +1019,15 @@ export function DetallePage() {
                 Reformular la convocatoria
               </button>
             </div>
+            <form onSubmit={reabrir} style={{ marginTop: "1rem" }} data-testid="reabrir">
+              <div className="field">
+                <label htmlFor="ventana_reabrir">Nuevo cierre de ofertas</label>
+                <input id="ventana_reabrir" name="ventana_reabrir" type="datetime-local" required />
+              </div>
+              <button className="btn btn-ghost" disabled={busy} data-testid="decidir-reabrir">
+                Reabrir la convocatoria
+              </button>
+            </form>
           </div>
         )}
 

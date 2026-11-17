@@ -58,6 +58,19 @@ def agregar_lote(db: Session, emergencia: Emergencia, datos: LoteIn, nacional: N
     return lote
 
 
+def cambiar_cantidad(db: Session, emergencia: Emergencia, lote_id: int, cantidad: int) -> Lote:
+    """Ajusta la cantidad de un lote mientras la convocatoria no está publicada (p. ej. al reformular). A diferencia de
+    borrar, vale también para los lotes con ofertas en el historial: esas ofertas guardan su propia cantidad."""
+    _editable(emergencia)
+    lote = next((lote for lote in emergencia.lotes if lote.id == lote_id), None)
+    if lote is None:
+        raise LoteError("Ese lote no pertenece a esta emergencia.")
+    lote.cantidad = cantidad
+    db.commit()
+    db.refresh(lote)
+    return lote
+
+
 def borrar_lote(db: Session, emergencia: Emergencia, lote_id: int) -> None:
     _editable(emergencia)
     lote = next((lote for lote in emergencia.lotes if lote.id == lote_id), None)

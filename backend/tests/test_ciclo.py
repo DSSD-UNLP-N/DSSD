@@ -1,6 +1,7 @@
 """Después de la evaluación: el Coordinador decide, el Municipio adjudica y Bonita avisa lo que hizo con las reservas.
 Bonita va mockeado (`responses`); la secuencia real se prueba con scripts/escenario_adjudicacion.py."""
 import json
+from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
 import pytest
@@ -12,7 +13,8 @@ from app.models import (
     OfertaItem, Ong,
 )
 from tests.conftest import (
-    BOMBEROS, CASE, CLAVE, CRUZ_ROJA, cambiar_emergencia, crear_emergencia, estado_de, mock_tarea, tarea_completada,
+    BASE, BOMBEROS, CASE, CLAVE, CRUZ_ROJA, cambiar_emergencia, crear_emergencia, estado_de, mock_ejecutar, mock_tarea,
+    tarea_completada,
 )
 
 TAREA_EVALUAR = "Evaluar Cobertura y Definir Curso de Accion"
@@ -83,6 +85,72 @@ def test_reformular_retira_las_ofertas_y_empieza_otra_ronda_sin_llamar_a_la_naci
         assert s.query(OfertaItem).filter(OfertaItem.version == 1).count() == 2
 
 
+# --- REABRIR: mismos lotes y ofertas, ventana nueva ---
+
+def _ventana(horas=2):
+    return (datetime.now().astimezone() + timedelta(hours=horas)).replace(microsecond=0).isoformat()
+
+
+def _mock_reabrir(publicar_aparece=True):
+    """Bonita: completa «Evaluar…» (tarea 9); después del servicio de liberación aparece «Publicar…» (tarea 2)."""
+    mock_tarea(TAREA_EVALUAR)
+    tareas = [{"id": "2", "displayName": "Publicar Convocatoria y Notificar a la Red de ONGs"}] if publicar_aparece else []
+    responses.add(responses.GET, f"{BASE}/API/bpm/humanTask", json=tareas)
+    responses.add(responses.PUT, f"{BASE}/API/bpm/caseVariable/{CASE}/ventanaOfertasISO", status=200)
+    mock_ejecutar("2")
+
+
+@responses.activate
+def test_reabrir_conserva_lotes_y_ofertas_y_vuelve_a_publicar_sin_llamar_a_la_nacional(login, seeded, nacional, evaluada):
+    emergencia_id, lote = evaluada
+    _mock_reabrir()
+    nacional.caido = True  # la liberación la hace Bonita
+    ventana = _ventana()
+
+    r = login("coordinador.regional").post(f"/api/emergencias/{emergencia_id}/decision",
+                                            json={"decision": "REABRIR", "ventana_fin": ventana})
+
+    assert r.status_code == 200, r.text
+    assert r.json()["estado"] == "CONVOCATORIA" and r.json()["evaluacion"] is None
+    assert _variable_seteada("decisionCoordinador") == "REABRIR"
+    assert _variable_seteada("ventanaOfertasISO") == ventana
+    assert tarea_completada("9") and tarea_completada("2")
+    with seeded() as s:
+        e = s.get(Emergencia, emergencia_id)
+        assert e.ronda == 2 and [l.id for l in e.lotes] == [lote]
+        ofertas = s.scalars(select(Oferta).where(Oferta.emergencia_id == emergencia_id)).all()
+        assert ofertas and all(o.version_actual == 1 and o.items_vigentes for o in ofertas)  # no se retiran
+
+
+@pytest.mark.parametrize("cuerpo, status", [
+    ({"decision": "REABRIR"}, 422),
+    ({"decision": "REABRIR", "ventana_fin": "2020-01-01T10:00:00-03:00"}, 400),
+])
+@responses.activate
+def test_reabrir_sin_ventana_o_con_ventana_pasada_no_toca_bonita(login, evaluada, cuerpo, status):
+    emergencia_id, _ = evaluada
+    r = login("coordinador.regional").post(f"/api/emergencias/{emergencia_id}/decision", json=cuerpo)
+    assert r.status_code == status
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+def test_reabrir_si_bonita_no_llega_a_publicar_queda_registrada_para_publicar_a_mano(
+        login, seeded, nacional, evaluada, monkeypatch):
+    emergencia_id, _ = evaluada
+    _mock_reabrir(publicar_aparece=False)
+    monkeypatch.setattr("app.services.ciclo.ESPERA_PUBLICAR", 1)
+    monkeypatch.setattr("app.integrations.bonita.time.sleep", lambda s: None)
+
+    r = login("coordinador.regional").post(f"/api/emergencias/{emergencia_id}/decision",
+                                            json={"decision": "REABRIR", "ventana_fin": _ventana()})
+
+    assert r.status_code == 502 and "publicala desde el formulario" in r.json()["detail"]
+    with seeded() as s:
+        e = s.get(Emergencia, emergencia_id)
+        assert e.estado is EstadoEmergencia.REGISTRADA and e.ronda == 2 and e.lotes
+
+
 @responses.activate
 def test_un_lote_con_ofertas_en_el_historial_no_se_puede_borrar(login, seeded, nacional, evaluada):
     emergencia_id, lote = evaluada
@@ -93,6 +161,19 @@ def test_un_lote_con_ofertas_en_el_historial_no_se_puede_borrar(login, seeded, n
     r = c.delete(f"/api/emergencias/{emergencia_id}/lotes/{lote}")
 
     assert r.status_code == 400 and "historial" in r.json()["detail"]
+
+
+@responses.activate
+def test_al_reformular_se_ajusta_la_cantidad_del_lote_con_historial(login, seeded, nacional, evaluada):
+    """Pauta de la cátedra: reformular = ajustar necesidades/cantidades y relanzar."""
+    emergencia_id, lote = evaluada
+    mock_tarea(TAREA_EVALUAR)
+    c = login("coordinador.regional")
+    c.post(f"/api/emergencias/{emergencia_id}/decision", json={"decision": "REFORMULAR"})
+
+    r = c.patch(f"/api/emergencias/{emergencia_id}/lotes/{lote}", json={"cantidad": 6})
+
+    assert r.status_code == 200 and r.json()["cantidad"] == 6
 
 
 def test_la_decision_es_solo_del_coordinador(login, evaluada):

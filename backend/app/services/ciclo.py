@@ -7,6 +7,7 @@ Lo que sigue (confirmar y liberar las reservas, avisar a la app) lo hace Bonita 
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 import requests
 from sqlalchemy import select
@@ -18,9 +19,11 @@ from app.models import Emergencia, EstadoEmergencia, Oferta, Usuario
 from app.schemas.evaluacion import Evaluacion
 from app.services import ServicioError
 from app.services.consorcios import consorcios_validos, miembros_aceptados
+from app.services.lotes import TAREA_PUBLICAR, PublicacionError, publicar_convocatoria
 
 TAREA_EVALUAR = "Evaluar Cobertura"
 TAREA_ADJUDICAR = "Adjudicar Ofertas"
+ESPERA_PUBLICAR = 120  # intentos de 0,5 s: al reabrir, Bonita libera en la API Nacional antes de llegar a «Publicar»
 
 
 class CicloError(ServicioError):
@@ -58,28 +61,53 @@ def _retirar_ofertas(db: Session, emergencia: Emergencia) -> None:
             o.version_actual += 1
 
 
-def decidir(db: Session, settings: Settings, *, emergencia: Emergencia, coordinador: Usuario, decision: str) -> None:
-    """El Coordinador decide con la cobertura incompleta: PARCIAL sigue con lo reservado; REFORMULAR retira las
-    ofertas, sube la ronda y vuelve a REGISTRADA para cargar lotes y publicar de nuevo. Las reservas de la ronda las
-    libera Bonita (tarea de servicio en el camino REFORMULAR): la app nunca llama a la API Nacional."""
+def decidir(db: Session, settings: Settings, *, emergencia: Emergencia, coordinador: Usuario, decision: str,
+            ventana_fin: datetime | None = None) -> None:
+    """El Coordinador decide con la cobertura incompleta:
+    - PARCIAL: sigue con lo reservado (el Municipio adjudica).
+    - REFORMULAR: retira las ofertas, sube la ronda y vuelve a REGISTRADA para ajustar lotes y publicar de nuevo.
+    - REABRIR: mismos lotes y ofertas; sube la ronda y vuelve a publicar con la ventana nueva (`ventana_fin`).
+    En REFORMULAR y REABRIR las reservas de la ronda las libera Bonita (tarea de servicio «Liberar Reservas de la
+    Ronda»): la app nunca llama a la API Nacional."""
     ev = _evaluacion(emergencia)
     if emergencia.estado is not EstadoEmergencia.EN_EVALUACION or ev is None:
         raise CicloError("La emergencia no está esperando una decisión del Coordinador.")
     if ev.cobertura_completa:
         raise CicloError("La cobertura está completa: no hay nada que decidir, el Municipio adjudica.")
+    if decision == "REABRIR":
+        if ventana_fin is None:
+            raise CicloError("Para reabrir la convocatoria indicá el cierre de la nueva ventana.", 400)
+        ventana_fin = ventana_fin if ventana_fin.tzinfo else ventana_fin.astimezone()
+        if ventana_fin <= datetime.now().astimezone():
+            raise CicloError("El cierre de la nueva ventana tiene que ser una fecha futura.", 400)
 
     completar_en_bonita(settings, emergencia.bonita_case_id, TAREA_EVALUAR, coordinador.username,
-                         {"decisionCoordinador": decision})
+                        {"decisionCoordinador": decision})
 
     if decision == "PARCIAL":
         emergencia.estado = EstadoEmergencia.ADJUDICACION
-    else:
+        db.commit()
+        return
+    if decision == "REFORMULAR":
         _retirar_ofertas(db, emergencia)
-        emergencia.ronda += 1
-        emergencia.estado = EstadoEmergencia.REGISTRADA
-        emergencia.evaluacion = None
-        emergencia.ventana_ofertas_fin = None
+    emergencia.ronda += 1
+    emergencia.estado = EstadoEmergencia.REGISTRADA
+    emergencia.evaluacion = None
+    emergencia.ventana_ofertas_fin = None
     db.commit()
+    if decision == "REABRIR":
+        # Bonita libera y llega a «Publicar Convocatoria» (salta «Revisar»: los lotes no cambian). Si la publicación
+        # falla, la emergencia queda REGISTRADA con sus lotes y el Coordinador publica desde el formulario de siempre.
+        # Antes de «Publicar» Bonita llama a la API Nacional (en Render puede tardar): se espera hasta un minuto.
+        try:
+            bonita_login(settings).wait_for_task(emergencia.bonita_case_id, TAREA_PUBLICAR, retries=ESPERA_PUBLICAR)
+        except (BonitaError, requests.RequestException):
+            pass  # publicar_convocatoria lo vuelve a intentar y, si no está, informa el error
+        try:
+            publicar_convocatoria(db, settings, emergencia=emergencia, coordinador=coordinador, ventana_fin=ventana_fin)
+        except PublicacionError as exc:
+            raise CicloError("Bonita reabrió la convocatoria pero no se pudo publicar la ventana nueva: "
+                             "publicala desde el formulario de la emergencia.", 502) from exc
 
 
 def adjudicar(db: Session, settings: Settings, *, emergencia: Emergencia, municipal: Usuario, cuits: list[str]) -> None:

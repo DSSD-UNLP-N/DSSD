@@ -259,12 +259,14 @@ export const api = {
   tiposRecurso: () => request<TipoRecurso[]>("/api/tipos-recurso"),
   tiposRecursoAlta: () => request<TipoRecurso[]>("/api/ongs/alta/tipos-recurso"),
   altaOng: (body: AltaOngIn) => post<AltaOngOut>("/api/ongs/alta", body),
+  cambiarCantidadLote: (id: number, loteId: number, cantidad: number) =>
+    request<Lote>(`/api/emergencias/${id}/lotes/${loteId}`, { method: "PATCH", body: JSON.stringify({ cantidad }) }),
   createLote: (id: number, body: { tipo_recurso: string; detalle?: string; cantidad: number; tipo: string }) =>
     post<Lote>(`/api/emergencias/${id}/lotes`, body),
   publicar: (id: number, ventana_fin: string) =>
     post<Emergencia>(`/api/emergencias/${id}/publicar`, { ventana_fin }),
-  decidir: (id: number, decision: "PARCIAL" | "REFORMULAR") =>
-    post<Emergencia>(`/api/emergencias/${id}/decision`, { decision }),
+  decidir: (id: number, decision: "PARCIAL" | "REFORMULAR" | "REABRIR", ventana_fin?: string) =>
+    post<Emergencia>(`/api/emergencias/${id}/decision`, ventana_fin ? { decision, ventana_fin } : { decision }),
   adjudicar: (id: number, cuits: string[]) =>
     post<Emergencia>(`/api/emergencias/${id}/adjudicar`, { cuits }),
   monitorear: (id: number) => post<Emergencia>(`/api/emergencias/${id}/monitorear`),

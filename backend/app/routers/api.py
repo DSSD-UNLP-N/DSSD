@@ -26,6 +26,7 @@ from app.schemas.api import (
     InventarioIn,
     InventarioOngOut,
     LoginIn,
+    LoteCantidadIn,
     LoteIn,
     LoteOut,
     MiembroOut,
@@ -53,7 +54,7 @@ from app.services.ejecucion import finalizar, monitorear, resumen, validar_cierr
 from app.services import consorcios as svc_consorcios
 from app.services.consorcios import ConsorcioError
 from app.services.ofertas import publicar_oferta
-from app.services.lotes import agregar_lote, borrar_lote, publicar_convocatoria
+from app.services.lotes import agregar_lote, borrar_lote, cambiar_cantidad, publicar_convocatoria
 
 router = APIRouter(prefix="/api")
 
@@ -148,10 +149,10 @@ def api_decidir(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ):
-    """Con la cobertura incompleta: PARCIAL sigue con lo reservado; REFORMULAR empieza otra ronda (Bonita libera las
-    reservas de la anterior)."""
+    """Con la cobertura incompleta: PARCIAL sigue con lo reservado; REFORMULAR empieza otra ronda para ajustar lotes;
+    REABRIR vuelve a publicar con los mismos lotes y `ventana_fin`. En los dos últimos Bonita libera las reservas."""
     emergencia = _require_visible(db, user, emergencia_id)
-    decidir(db, settings, emergencia=emergencia, coordinador=user, decision=body.decision)
+    decidir(db, settings, emergencia=emergencia, coordinador=user, decision=body.decision, ventana_fin=body.ventana_fin)
     return _detalle_out(db, emergencia, user, settings)
 
 
@@ -295,6 +296,19 @@ def api_crear_lote(
 ):
     emergencia = _require_visible(db, user, emergencia_id)
     return agregar_lote(db, emergencia, body, nacional)
+
+
+@router.patch("/emergencias/{emergencia_id}/lotes/{lote_id}", response_model=LoteOut)
+def api_cambiar_cantidad_lote(
+    emergencia_id: Id,
+    lote_id: Id,
+    body: LoteCantidadIn,
+    user: Usuario = Depends(require_role(Rol.COORDINADOR)),
+    db: Session = Depends(get_db),
+):
+    """Ajusta la cantidad pedida de un lote antes de publicar (al reformular la convocatoria)."""
+    emergencia = _require_visible(db, user, emergencia_id)
+    return cambiar_cantidad(db, emergencia, lote_id, body.cantidad)
 
 
 @router.delete("/emergencias/{emergencia_id}/lotes/{lote_id}", status_code=204)
