@@ -211,8 +211,12 @@ def main() -> int:
             u.page.locator("[name=nueva_cantidad]").first.fill("2000")
             u.page.get_by_role("button", name="Ajustar").first.click()
             u.ve("Cantidad del lote actualizada", "B: el Coordinador ajusta el lote a 2000 raciones")
-            r.check("B: el lote quedó en 2000", "2000" in u.page.locator(".lote-row").first.inner_text(),
-                    u.page.locator(".lote-row").first.inner_text())
+            try:  # el aviso puede llegar antes de que se vuelva a pintar la lista de lotes
+                u.page.locator(".lote-row", has_text="2000 raciones").first.wait_for(timeout=PLAZO)
+                ajustado = True
+            except Exception:
+                ajustado = False
+            r.check("B: el lote quedó en 2000", ajustado, u.page.locator(".lote-row").first.inner_text())
             u.foto("coordinador-ajusta-lote-b")
             fin2 = cierre_de_ventana(30)  # solo falta que Cruz Roja ofrezca
             publicar(u, fin2)
