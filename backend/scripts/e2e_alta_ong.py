@@ -137,9 +137,6 @@ def ofertar(app: str, cfg, sesion: requests.Session) -> None:
 
     r = oferta(5)
     check("Ofrece 5 de las 20 que declaró (201)", r.status_code == 201, (r.status_code, r.text[:150]))
-    r = oferta(500)
-    check("Ofrecer 500 con 20 en el inventario → 400 «No alcanza tu inventario»",
-          r.status_code == 400 and "No alcanza tu inventario" in r.text, (r.status_code, r.text[:150]))
     print(f"    (la emergencia #{eid} queda abierta esperando ofertas)")
 
 

@@ -60,21 +60,20 @@ def test_parcial_sigue_con_lo_reservado(login, seeded, nacional, evaluada):
 
     assert r.status_code == 200 and r.json()["estado"] == "ADJUDICACION"
     assert _variable_seteada("decisionCoordinador") == "PARCIAL" and tarea_completada()
-    assert nacional.liberadas == []  # PARCIAL no libera nada
     assert r.json()["evaluacion"]["porcentaje_cobertura"] == 60.0
 
 
 @responses.activate
-def test_reformular_libera_las_reservas_retira_las_ofertas_y_empieza_otra_ronda(login, seeded, nacional, evaluada):
+def test_reformular_retira_las_ofertas_y_empieza_otra_ronda_sin_llamar_a_la_nacional(login, seeded, nacional, evaluada):
     emergencia_id, lote = evaluada
     mock_tarea(TAREA_EVALUAR)
+    nacional.caido = True  # las reservas las libera Bonita: la app no toca la API Nacional
 
     r = login("coordinador.regional").post(f"/api/emergencias/{emergencia_id}/decision", json={"decision": "REFORMULAR"})
 
     assert r.status_code == 200
     assert r.json()["estado"] == "REGISTRADA" and r.json()["evaluacion"] is None
     assert r.json()["ventana_ofertas_fin"] is None
-    assert sorted(nacional.liberadas) == [f"emg-{emergencia_id}-r1-{CRUZ_ROJA}", f"emg-{emergencia_id}-r1-{BOMBEROS}"]
     assert _variable_seteada("decisionCoordinador") == "REFORMULAR" and tarea_completada()
     with seeded() as s:
         assert s.get(Emergencia, emergencia_id).ronda == 2
@@ -115,18 +114,6 @@ def test_no_se_decide_fuera_de_la_evaluacion_ni_con_la_cobertura_completa(login,
                 evaluacion=json.dumps(_evaluacion(emergencia_id, lote, completa=True)))
     r = c.post(f"/api/emergencias/{emergencia_id}/decision", json={"decision": "REFORMULAR"})
     assert r.status_code == 409 and "cobertura está completa" in r.json()["detail"]
-
-
-@responses.activate
-def test_si_la_api_nacional_no_responde_al_reformular_no_cambia_nada(login, seeded, nacional, evaluada):
-    emergencia_id, _ = evaluada
-    nacional.caido = True
-
-    r = login("coordinador.regional").post(f"/api/emergencias/{emergencia_id}/decision", json={"decision": "REFORMULAR"})
-
-    assert r.status_code == 503
-    assert estado_de(seeded, emergencia_id) is EstadoEmergencia.EN_EVALUACION
-    assert len(responses.calls) == 0  # ni siquiera se tocó Bonita
 
 
 @responses.activate

@@ -217,9 +217,6 @@ def fase_ongs(u: Ui, app: str, emergencia_id: int) -> None:
 
     cargar_oferta(u, ["0", "0", "0", "0"])
     u.ve("al menos un lote", "Oferta vacía: pide cargar algo")
-    # Cruz Roja tiene 3000 litros de agua y 5000 raciones en el Sistema Nacional (nacional/app/seed.py).
-    cargar_oferta(u, ["0", "9000", "0", "0"])
-    u.ve("No alcanza tu inventario", "Ofrecer más agua de la que tiene: rechazado")
     cargar_oferta(u, ["0", "2500", "0", "150"])
     u.ve("versión 1", "Primer envío: versión 1")
     u.foto("ong-cruzroja-v1")

@@ -176,7 +176,7 @@ def crear_y_publicar(e: Escenario, zona: str, gravedad: str, lotes: list[tuple[s
 
 def retirar_ofertas_abiertas(app: str, saltear=lambda emergencia: False) -> int:
     """Corridas anteriores (o una que falló a medias) dejan convocatorias abiertas con ofertas de Cruz Roja y Bomberos: cada una
-    descuenta del inventario de la ONG y hace fallar al guion siguiente con «No alcanza tu inventario». Las retira por la API,
+    ensucian el recorrido siguiente (y al vencer, Bonita reserva stock por ellas). Las retira por la API,
     como la SPA (reenviando la oferta vacía), salvo en las emergencias para las que `saltear(emergencia)` es cierto. `app` es la
     base de la app (sin `/api`); devuelve cuántas retiró."""
     retiradas = 0

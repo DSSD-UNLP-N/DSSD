@@ -147,11 +147,11 @@ def api_decidir(
     user: Usuario = Depends(require_role(Rol.COORDINADOR)),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
-    nacional: NacionalClient = Depends(get_nacional),
 ):
-    """Con la cobertura incompleta: PARCIAL sigue con lo reservado; REFORMULAR libera todo y empieza otra ronda."""
+    """Con la cobertura incompleta: PARCIAL sigue con lo reservado; REFORMULAR empieza otra ronda (Bonita libera las
+    reservas de la anterior)."""
     emergencia = _require_visible(db, user, emergencia_id)
-    decidir(db, settings, nacional, emergencia=emergencia, coordinador=user, decision=body.decision)
+    decidir(db, settings, emergencia=emergencia, coordinador=user, decision=body.decision)
     return _detalle_out(db, emergencia, user, settings)
 
 
@@ -361,11 +361,11 @@ def api_crear_oferta(
     body: OfertaIn,
     user: Usuario = Depends(require_role(Rol.ONG)),
     db: Session = Depends(get_db),
-    nacional: NacionalClient = Depends(get_nacional),
 ):
-    """Cada envío es la oferta completa: una versión nueva con todos sus ítems (T-12)."""
+    """Cada envío es la oferta completa: una versión nueva con todos sus ítems (T-12). La validación contra el
+    inventario nacional la hace Bonita al vencer la ventana."""
     emergencia = _require_visible(db, user, emergencia_id)
-    return publicar_oferta(db, nacional, emergencia=emergencia, ong=user.ong, items=body.items)
+    return publicar_oferta(db, emergencia=emergencia, ong=user.ong, items=body.items)
 
 
 # --- Consorcios -----------------------------------------------------------------------------------------------

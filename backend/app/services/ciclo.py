@@ -14,7 +14,6 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import Settings
 from app.integrations.bonita import BonitaError, bonita_login
-from app.integrations.nacional import NacionalClient
 from app.models import Emergencia, EstadoEmergencia, Oferta, Usuario
 from app.schemas.evaluacion import Evaluacion
 from app.services import ServicioError
@@ -59,23 +58,16 @@ def _retirar_ofertas(db: Session, emergencia: Emergencia) -> None:
             o.version_actual += 1
 
 
-def decidir(db: Session, settings: Settings, nacional: NacionalClient, *, emergencia: Emergencia,
-            coordinador: Usuario, decision: str) -> None:
-    """El Coordinador decide con la cobertura incompleta: PARCIAL sigue con lo reservado; REFORMULAR libera las
-    reservas de la ronda, retira las ofertas, sube la ronda y vuelve a REGISTRADA para cargar lotes y publicar de nuevo.
-
-    Lanza NacionalError si la API Nacional no responde (no se cambia nada)."""
+def decidir(db: Session, settings: Settings, *, emergencia: Emergencia, coordinador: Usuario, decision: str) -> None:
+    """El Coordinador decide con la cobertura incompleta: PARCIAL sigue con lo reservado; REFORMULAR retira las
+    ofertas, sube la ronda y vuelve a REGISTRADA para cargar lotes y publicar de nuevo. Las reservas de la ronda las
+    libera Bonita (tarea de servicio en el camino REFORMULAR): la app nunca llama a la API Nacional."""
     ev = _evaluacion(emergencia)
     if emergencia.estado is not EstadoEmergencia.EN_EVALUACION or ev is None:
         raise CicloError("La emergencia no está esperando una decisión del Coordinador.")
     if ev.cobertura_completa:
         raise CicloError("La cobertura está completa: no hay nada que decidir, el Municipio adjudica.")
 
-    if decision == "REFORMULAR":
-        # Primero lo que se puede repetir sin riesgo: si algo falla, el Coordinador reintenta y nada quedó a medias.
-        for o in ev.ongs:
-            if o.referencia:
-                nacional.liberar(o.referencia)
     completar_en_bonita(settings, emergencia.bonita_case_id, TAREA_EVALUAR, coordinador.username,
                          {"decisionCoordinador": decision})
 

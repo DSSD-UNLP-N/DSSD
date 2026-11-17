@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from app.models import Emergencia, EstadoEmergencia, Gravedad, Oferta, OfertaItem, Ong
-from tests.conftest import CRUZ_ROJA, PASSWORD, crear_emergencia, sin_zona
+from tests.conftest import PASSWORD, crear_emergencia, sin_zona
 
 
 def _con_agua_y_frazadas(seeded, *, ventana_fin):
@@ -107,113 +107,14 @@ def test_fechas_salen_con_zona_utc(api_login, abierta):
     assert datetime.fromisoformat(e["creada_en"]).tzinfo is not None
 
 
-# --- tope de inventario ------------------------------------------------------
+# --- sin validación en la app ------------------------------------------------
+# La app nunca llama a la API Nacional: el inventario y la competencia los valida Bonita al vencer la ventana.
 
-def test_ofrecer_mas_de_lo_que_tiene_se_rechaza_y_no_guarda_nada(api_login, seeded):
+def test_ofertar_no_consulta_a_la_api_nacional_ni_pone_tope(api_login, seeded, nacional):
     em, (lote,) = _emergencia(seeded, ("PARAMEDICO", 20))
-    r = _ofrecer(api_login("ong.cruzroja"), em, (lote, 10))
-    assert r.status_code == 400
-    assert r.json()["detail"] == (
-        "No alcanza tu inventario. Paramédico: entre tus ofertas abiertas sumás 10 personas y tenés 4 disponibles.")
-    assert _ofertas(seeded) == 0
-
-
-def test_ofrecer_justo_lo_que_tiene_se_acepta(api_login, seeded):
-    em, (lote,) = _emergencia(seeded, ("PARAMEDICO", 20))
-    r = _ofrecer(api_login("ong.cruzroja"), em, (lote, 4))
+    nacional.caido = True  # si la app la llamara, respondería 503
+    r = _ofrecer(api_login("ong.cruzroja"), em, (lote, 10))  # tiene 4: lo resuelve la evaluación de Bonita
     assert r.status_code == 201 and r.json()["version_actual"] == 1
-
-
-def test_dos_lotes_del_mismo_recurso_se_suman(api_login, seeded):
-    em, (a, b) = _emergencia(seeded, ("PARAMEDICO", 5), ("PARAMEDICO", 5))
-    r = _ofrecer(api_login("ong.cruzroja"), em, (a, 2), (b, 3))  # 5 > 4
-    assert r.status_code == 400 and "sumás 5 personas y tenés 4" in r.json()["detail"]
-    assert _ofrecer(api_login("ong.cruzroja"), em, (a, 2), (b, 2)).status_code == 201
-
-
-def test_el_caso_de_la_demo_2_y_despues_3_entre_emergencias(api_login, seeded):
-    """Tiene 4: 2 en la emergencia 1 → ok; 3 en la 2 → rechazo (2+3=5);
-    editar la 1 a 3 reemplaza (no suma); entonces en la 2 entra 1 pero no 2."""
-    em1, (l1,) = _emergencia(seeded, ("PARAMEDICO", 10))
-    em2, (l2,) = _emergencia(seeded, ("PARAMEDICO", 10))
-    c = api_login("ong.cruzroja")
-    assert _ofrecer(c, em1, (l1, 2)).status_code == 201
-    r = _ofrecer(c, em2, (l2, 3))
-    assert r.status_code == 400 and "sumás 5 personas y tenés 4" in r.json()["detail"]
-    assert _ofrecer(c, em1, (l1, 3)).status_code == 201
-    assert _ofrecer(c, em2, (l2, 2)).status_code == 400
-    assert _ofrecer(c, em2, (l2, 1)).status_code == 201
-
-
-def test_cada_ong_tiene_su_propio_inventario(api_login, seeded):
-    em, (lote,) = _emergencia(seeded, ("PARAMEDICO", 20))
-    assert _ofrecer(api_login("ong.cruzroja"), em, (lote, 4)).status_code == 201
-    assert _ofrecer(api_login("ong.bomberos"), em, (lote, 6)).status_code == 201  # Bomberos tiene 6
-    assert _ofrecer(api_login("ong.bomberos"), em, (lote, 7)).status_code == 400
-
-
-def test_una_convocatoria_vencida_sin_evaluar_sigue_comprometiendo_el_stock(api_login, seeded):
-    vencida, (lv,) = _emergencia(seeded, ("PARAMEDICO", 10))
-    em, (lote,) = _emergencia(seeded, ("PARAMEDICO", 10))
-    assert _ofrecer(api_login("ong.cruzroja"), vencida, (lv, 4)).status_code == 201
-    with seeded() as s:  # la ventana vence después de haber ofertado; Bonita todavía no pidió el consolidado
-        s.get(Emergencia, vencida).ventana_ofertas_fin = sin_zona(-timedelta(minutes=1))
-        s.commit()
-    assert _ofrecer(api_login("ong.cruzroja"), em, (lote, 1)).status_code == 400
-
-
-def test_en_evaluacion_la_reserva_ya_esta_en_la_api_nacional_y_no_cuenta_dos_veces(api_login, seeded):
-    evaluada, (lv,) = _emergencia(seeded, ("PARAMEDICO", 10))
-    em, (lote,) = _emergencia(seeded, ("PARAMEDICO", 10))
-    assert _ofrecer(api_login("ong.cruzroja"), evaluada, (lv, 4)).status_code == 201
-    with seeded() as s:
-        e = s.get(Emergencia, evaluada)
-        e.ventana_ofertas_fin = sin_zona(-timedelta(minutes=1))
-        e.estado = EstadoEmergencia.EN_EVALUACION
-        s.commit()
-    assert _ofrecer(api_login("ong.cruzroja"), em, (lote, 4)).status_code == 201
-
-
-def test_se_valida_contra_la_gravedad_de_la_emergencia_y_el_cuit_de_la_ong(api_login, seeded, nacional):
-    em, (lote,) = _emergencia(seeded, ("PARAMEDICO", 10), gravedad=Gravedad.CRITICO)
-    _ofrecer(api_login("ong.cruzroja"), em, (lote, 2))
-    ((gravedad, items),) = nacional.validaciones
-    assert gravedad == "CRITICO"
-    assert items == [{"cuit": CRUZ_ROJA, "tipo_recurso": "PARAMEDICO", "cantidad": 2}]
-
-
-def test_bajar_o_repetir_la_oferta_no_consulta_al_sistema_nacional(api_login, seeded, nacional):
-    em, (lote,) = _emergencia(seeded, ("PARAMEDICO", 10))
-    c = api_login("ong.cruzroja")
-    assert _ofrecer(c, em, (lote, 3)).status_code == 201
-    assert len(nacional.validaciones) == 1
-    assert _ofrecer(c, em, (lote, 3)).status_code == 201  # igual
-    assert _ofrecer(c, em, (lote, 1)).status_code == 201  # menos
-    assert len(nacional.validaciones) == 1
-
-
-def test_los_lotes_sin_tipo_no_se_validan(api_login, seeded, nacional):
-    em, (libre, tipado) = _emergencia(seeded, (None, 1000), ("PARAMEDICO", 10))
-    assert _ofrecer(api_login("ong.cruzroja"), em, (libre, 999), (tipado, 2)).status_code == 201
-    ((_, items),) = nacional.validaciones
-    assert items == [{"cuit": CRUZ_ROJA, "tipo_recurso": "PARAMEDICO", "cantidad": 2}]
-
-
-def test_con_el_sistema_nacional_caido_no_se_publica_nada(api_login, seeded, nacional):
-    em, (lote,) = _emergencia(seeded, ("PARAMEDICO", 10))
-    nacional.caido = True
-    r = _ofrecer(api_login("ong.cruzroja"), em, (lote, 1))
-    assert r.status_code == 503 and "Sistema Nacional no responde" in r.json()["detail"]
-    assert _ofertas(seeded) == 0
-
-
-def test_sin_cuit_no_se_puede_validar_el_inventario(api_login, seeded):
-    em, (lote,) = _emergencia(seeded, ("PARAMEDICO", 10))
-    with seeded() as s:
-        s.query(Ong).filter_by(nombre="Cruz Roja Argentina").one().cuit = None
-        s.commit()
-    r = _ofrecer(api_login("ong.cruzroja"), em, (lote, 1))
-    assert r.status_code == 400 and "CUIT" in r.json()["detail"]
 
 
 # --- retirar ---------------------------------------------------------------
@@ -242,26 +143,6 @@ def test_retirar_toda_la_oferta(api_login, seeded):
     assert oferta["retirada"] is True
 
 
-def test_retirar_libera_el_cupo_para_otra_convocatoria(api_login, seeded):
-    em1, (l1,) = _emergencia(seeded, ("PARAMEDICO", 10))
-    em2, (l2,) = _emergencia(seeded, ("PARAMEDICO", 10))
-    c = api_login("ong.cruzroja")
-    assert _ofrecer(c, em1, (l1, 4)).status_code == 201
-    assert _ofrecer(c, em2, (l2, 3)).status_code == 400  # 4 + 3 > 4
-    assert _ofrecer(c, em1).status_code == 201  # retira
-    assert _ofrecer(c, em2, (l2, 3)).status_code == 201
-
-
-def test_volver_a_ofertar_despues_de_retirar_se_valida_de_nuevo(api_login, seeded, nacional):
-    em, (lote,) = _emergencia(seeded, ("PARAMEDICO", 10))
-    c = api_login("ong.cruzroja")
-    _ofrecer(c, em, (lote, 2))
-    _ofrecer(c, em)
-    assert _ofrecer(c, em, (lote, 9)).status_code == 400
-    r = _ofrecer(c, em, (lote, 4))
-    assert (r.status_code, r.json()["version_actual"], r.json()["retirada"]) == (201, 3, False)
-
-
 def test_retirar_no_depende_del_sistema_nacional(api_login, seeded, nacional):
     em, (lote,) = _emergencia(seeded, ("PARAMEDICO", 10))
     c = api_login("ong.cruzroja")
@@ -269,7 +150,6 @@ def test_retirar_no_depende_del_sistema_nacional(api_login, seeded, nacional):
     nacional.caido = True
     r = _ofrecer(c, em)
     assert r.status_code == 201 and r.json()["retirada"] is True
-    assert len(nacional.validaciones) == 1  # solo la del alta
 
 
 def test_no_se_puede_retirar_lo_que_no_se_ofreci(api_login, seeded):

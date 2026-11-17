@@ -129,10 +129,10 @@ antes de llamar a Nacional. El token se pide una vez por proceso y se renueva so
 depende de Nacional. Contra Render (que duerme y tarda en despertar) hace falta un `NACIONAL_TIMEOUT_SECONDS` alto: `.env.nube` ya lo trae.
 Los tests la reemplazan por `FakeNacional` (`tests/conftest.py`).
 
-Tope de ofertas (`app/services/ofertas.py`): al enviar una oferta se suma lo que la ONG ofrece de cada recurso con lo que ya ofreció en sus otras
-convocatorias abiertas y se valida contra su inventario en el Sistema Nacional (`POST /validaciones`); si no alcanza, 400 y no se guarda nada.
-Reducir o retirar nunca consulta a la API. Retirar un lote = reenviar la oferta sin él; retirarla toda = reenviarla vacía (versión sin ítems,
-`retirada: true`); el historial de versiones no se toca.
+Ofertas (`app/services/ofertas.py`): la app **no** valida contra el Sistema Nacional (la arquitectura exige que solo Bonita llame a la API
+Nacional): guarda cada versión y, al vencer la ventana, Bonita valida competencia e inventario y reserva. Retirar un lote = reenviar la oferta
+sin él; retirarla toda = reenviarla vacía (versión sin ítems, `retirada: true`); el historial de versiones no se toca. Al REFORMULAR, las
+reservas de la ronda también las libera Bonita.
 
 ## Bonita
 
