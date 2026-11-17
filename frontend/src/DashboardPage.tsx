@@ -247,7 +247,7 @@ export function DashboardPage() {
           label="Volver al panel"
           kicker="Auditor / Directivo"
           title="Dashboard de indicadores"
-          lede="Datos de la app (emergencias, ofertas, consorcios) combinados con los tiempos de cada etapa registrados por Bonita."
+          lede="Datos de la app (emergencias, ofertas, consorcios) cruzados con lo que registró Bonita: tiempos por etapa, cursos de acción y estado de cada caso."
           action={
             r && (
               <div className="export-actions">
@@ -323,6 +323,53 @@ export function DashboardPage() {
                   <p className="chart-detalle" data-testid="tiempos-no-disponibles">
                     Tiempos no disponibles: {r.tiempos.motivo}
                   </p>
+                )}
+              </Panel>
+            </div>
+            <div className="dashboard-grid">
+              <Panel titulo="Cursos de acción tomados" kicker="Bonita + cobertura de la app" bloque="cursos" desde={desde} hasta={hasta}>
+                {r.cursos.disponible ? (
+                  <Barras
+                    color={COLOR.petroleo}
+                    vacio="Ninguna emergencia del período llegó a una decisión."
+                    barras={r.cursos.filas.map((c) => ({
+                      clave: c.curso,
+                      label: c.etiqueta,
+                      valor: c.emergencias,
+                      texto: num(c.emergencias),
+                      detalle: `${c.etiqueta}: ${num(c.emergencias)} ${c.emergencias === 1 ? "emergencia" : "emergencias"}`
+                        + (c.veces > c.emergencias ? ` (${num(c.veces)} veces)` : "")
+                        + `, cobertura final promedio ${dec(c.cobertura_promedio, " %")}`,
+                    }))}
+                  />
+                ) : (
+                  <p className="chart-detalle" data-testid="cursos-no-disponibles">Cursos no disponibles: {r.cursos.motivo}</p>
+                )}
+              </Panel>
+              <Panel titulo="Casos en Bonita y en la app" kicker="Consistencia" bloque="casos" desde={desde} hasta={hasta}>
+                {r.casos.disponible ? (
+                  <div data-testid="casos">
+                    <Barras
+                      color={COLOR.verde}
+                      vacio="Ninguna emergencia del período tiene caso en Bonita."
+                      barras={r.casos.abiertos + r.casos.archivados + r.casos.inconsistentes.length === 0 ? [] : [
+                        { clave: "abiertos", label: "Casos abiertos", valor: r.casos.abiertos, texto: num(r.casos.abiertos),
+                          detalle: `${num(r.casos.abiertos)} casos en curso en Bonita` },
+                        { clave: "archivados", label: "Casos archivados", valor: r.casos.archivados, texto: num(r.casos.archivados),
+                          detalle: `${num(r.casos.archivados)} casos terminados en Bonita` },
+                        { clave: "consistentes", label: "Coinciden con la app", valor: r.casos.consistentes, texto: num(r.casos.consistentes),
+                          detalle: "Resuelta en la app con el caso archivado, o en curso con el caso abierto" },
+                      ]}
+                    />
+                    <p className="chart-detalle">
+                      Resolución promedio según Bonita: {horas(r.casos.horas_resolucion_promedio)}.{" "}
+                      {r.casos.inconsistentes.length === 0
+                        ? "Todas las emergencias coinciden con su caso."
+                        : `No coinciden: ${r.casos.inconsistentes.map((id) => `#${id}`).join(", ")}.`}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="chart-detalle" data-testid="casos-no-disponibles">Casos no disponibles: {r.casos.motivo}</p>
                 )}
               </Panel>
             </div>

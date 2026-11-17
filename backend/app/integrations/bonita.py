@@ -89,6 +89,11 @@ class BonitaClient:
     def get_case(self, case_id) -> dict:
         return self._json("GET", f"/API/bpm/case/{case_id}")
 
+    def get_archived_case(self, case_id) -> dict | None:
+        """El caso terminado (trae 'start' y 'end_date'), o None si no está archivado."""
+        filas = self._json("GET", "/API/bpm/archivedCase", params={"f": f"sourceObjectId={case_id}", "p": 0, "c": 1})
+        return filas[0] if filas else None
+
     def get_archived_human_tasks(self, case_id) -> list:
         """Tareas ya completadas del caso. Traen 'executedBy': con quién las ejecutó el motor."""
         return self._json("GET", "/API/bpm/archivedHumanTask", params={"f": f"caseId={case_id}", "p": 0, "c": 100})

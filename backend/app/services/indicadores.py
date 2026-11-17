@@ -1,12 +1,12 @@
 """Métricas del dashboard de indicadores: una función por bloque, todas con los mismos `Filtros`.
 
 El rango de fechas se aplica sobre `creada_en` de la emergencia (suministros usa `adjudicada_en` de la oferta), en la
-hora de Argentina. Los tiempos por etapa salen de Bonita; el resto, de la base de la app.
+hora de Argentina. Tiempos por etapa, cursos de acción y casos cruzan la base con Bonita; el resto sale solo de la base.
 """
 from __future__ import annotations
 
 import json
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -18,7 +18,7 @@ from app.core.labels import ESTADO_LABEL, TIPO_LABEL
 from app.integrations.bonita import BonitaError
 from app.models import Emergencia, EstadoEmergencia, EstadoOferta, Lote, Oferta, OfertaItem
 from app.schemas.indicadores import (
-    EstadoCantidad, Filtros, Finalizada, Kpis, Reporte, SuministroMes, TiempoEtapa, Tiempos,
+    Casos, CursoAccion, Cursos, EstadoCantidad, Filtros, Finalizada, Kpis, Reporte, SuministroMes, TiempoEtapa, Tiempos,
 )
 from app.services.consorcios import consorcios_validos, miembros_aceptados
 
@@ -35,6 +35,13 @@ ETAPAS = [
     "Validar Cierre Operativo Bilateral",
 ]
 _ADJUDICADAS = (EstadoOferta.ADJUDICADA, EstadoOferta.FINALIZADA)
+REVISAR, PUBLICAR, EVALUAR, ADJUDICAR = ETAPAS[0], ETAPAS[1], ETAPAS[3], ETAPAS[4]
+CURSOS = [
+    ("TOTAL", "Cobertura total: directo a adjudicar"),
+    ("PARCIAL", "Continuar con cobertura parcial"),
+    ("REFORMULAR", "Reformular lotes"),
+    ("REABRIR", "Reabrir convocatoria"),
+]
 
 
 def _utc(dt: datetime) -> datetime:
@@ -169,25 +176,101 @@ def _es_404(exc: requests.HTTPError) -> bool:
     return exc.response is not None and exc.response.status_code == 404
 
 
-def tiempos_por_etapa(db: Session, bonita, f: Filtros) -> Tiempos:
-    """Promedio por tarea entre las emergencias que la tienen. Deja subir los errores de Bonita (salvo caso 404)."""
-    por_tarea: dict[str, list[float]] = defaultdict(list)
-    for e in _emergencias(db, f):
+def _nodos(bonita, emergencias: list[Emergencia]) -> dict[int, list[dict]]:
+    """Historial de Bonita de cada emergencia con caso (id de emergencia -> nodos). Saltea los casos que Bonita no conoce
+    (404) y deja subir los demás errores."""
+    salida = {}
+    for e in emergencias:
         if e.bonita_case_id is None:
             continue
         try:
-            nodos = bonita.get_archived_flow_nodes(str(e.bonita_case_id))
+            salida[e.id] = bonita.get_archived_flow_nodes(str(e.bonita_case_id))
         except requests.HTTPError as exc:
-            if _es_404(exc):
-                continue
-            raise
-        for tarea, horas in _horas_por_tarea(nodos).items():
+            if not _es_404(exc):
+                raise
+    return salida
+
+
+def tiempos_por_etapa(db: Session, bonita, f: Filtros, nodos: dict[int, list[dict]] | None = None) -> Tiempos:
+    """Promedio por tarea entre las emergencias que la tienen. Deja subir los errores de Bonita (salvo caso 404)."""
+    if nodos is None:
+        nodos = _nodos(bonita, _emergencias(db, f))
+    por_tarea: dict[str, list[float]] = defaultdict(list)
+    for historial in nodos.values():
+        for tarea, horas in _horas_por_tarea(historial).items():
             por_tarea[tarea].append(horas)
     etapas = [
         TiempoEtapa(tarea=t, horas_promedio=_promedio(por_tarea[t], 4), emergencias=len(por_tarea[t]))
         for t in ETAPAS if por_tarea.get(t)
     ]
     return Tiempos(disponible=True, motivo=None, etapas=etapas, horas_total_promedio=_horas_total_promedio(db, f))
+
+
+def _recorrido(nodos: list[dict]) -> Counter:
+    """Cursos de acción que tomó un caso, deducidos de las tareas humanas que completó en Bonita: cada REFORMULAR vuelve
+    a «Revisar», cada REABRIR vuelve a «Publicar» sin pasar por «Revisar», y el caso llega a «Adjudicar» con cobertura
+    total (sin «Evaluar» en la última ronda) o porque el Coordinador eligió PARCIAL."""
+    hechas = Counter(n.get("name") for n in nodos if n.get("type") == "USER_TASK" and n.get("state") == "completed")
+    cursos = Counter(REFORMULAR=max(hechas[REVISAR] - 1, 0), REABRIR=max(hechas[PUBLICAR] - hechas[REVISAR], 0))
+    if any(n.get("name") == ADJUDICAR for n in nodos):  # «Adjudicar» activada (pendiente o hecha)
+        cursos["PARCIAL" if hechas[EVALUAR] > cursos["REFORMULAR"] + cursos["REABRIR"] else "TOTAL"] = 1
+    return +cursos  # sin los que quedaron en cero
+
+
+def cursos_de_accion(db: Session, bonita, f: Filtros, nodos: dict[int, list[dict]] | None = None) -> Cursos:
+    """Por cuál de los cursos de acción pasó cada emergencia (Bonita) y con qué cobertura terminó (base de la app)."""
+    es = {e.id: e for e in _emergencias(db, f)}
+    if nodos is None:
+        nodos = _nodos(bonita, list(es.values()))
+    emergencias: dict[str, list[Emergencia]] = defaultdict(list)
+    veces: Counter = Counter()
+    for emergencia_id, historial in nodos.items():
+        for curso, n in _recorrido(historial).items():
+            emergencias[curso].append(es[emergencia_id])
+            veces[curso] += n
+    filas = [
+        CursoAccion(curso=c, etiqueta=etiqueta, emergencias=len(emergencias[c]), veces=veces[c],
+                    cobertura_promedio=_promedio([x for x in map(_cobertura, emergencias[c]) if x is not None], 1))
+        for c, etiqueta in CURSOS
+    ]
+    return Cursos(disponible=True, motivo=None, filas=filas)
+
+
+def _caso(bonita, case_id: int) -> tuple[bool, dict | None]:
+    """(abierto, caso archivado). Bonita contesta 404 por un caso que ya terminó; ahí se busca en los archivados."""
+    try:
+        bonita.get_case(str(case_id))
+        return True, None
+    except requests.HTTPError as exc:
+        if not _es_404(exc):
+            raise
+    return False, bonita.get_archived_case(str(case_id))
+
+
+def casos_en_bonita(db: Session, bonita, f: Filtros) -> Casos:
+    """Si el caso de cada emergencia está abierto o archivado en Bonita y si eso coincide con la app (resuelta = caso
+    archivado; cualquier otro estado = caso abierto). Promedia la duración de los casos archivados según el motor."""
+    abiertos, archivados, consistentes = 0, 0, 0
+    inconsistentes: list[int] = []
+    horas: list[float] = []
+    for e in _emergencias(db, f):
+        if e.bonita_case_id is None:
+            continue
+        abierto, archivado = _caso(bonita, e.bonita_case_id)
+        abiertos += abierto
+        archivados += archivado is not None
+        if archivado is not None:
+            try:
+                horas.append((_fecha_bonita(archivado["end_date"]) - _fecha_bonita(archivado["start"])) / timedelta(hours=1))
+            except (KeyError, ValueError, TypeError):
+                pass
+        resuelta = e.estado is EstadoEmergencia.RESUELTA
+        if (resuelta and archivado is not None) or (not resuelta and abierto):
+            consistentes += 1
+        else:
+            inconsistentes.append(e.id)
+    return Casos(disponible=True, motivo=None, abiertos=abiertos, archivados=archivados, consistentes=consistentes,
+                 inconsistentes=inconsistentes, horas_resolucion_promedio=_promedio(horas, 4))
 
 
 def finalizadas(db: Session, f: Filtros) -> list[Finalizada]:
@@ -210,13 +293,20 @@ def finalizadas(db: Session, f: Filtros) -> list[Finalizada]:
 
 
 def reporte(db: Session, bonita, f: Filtros) -> Reporte:
-    if bonita is None:
-        tiempos = _tiempos_no_disponible(db, f, "Bonita no responde: no se pudieron leer los tiempos por etapa.")
-    else:
+    motivo = "Bonita no responde: no se pudieron leer los datos del motor." if bonita is None else None
+    if bonita is not None:
         try:
-            tiempos = tiempos_por_etapa(db, bonita, f)
+            nodos = _nodos(bonita, _emergencias(db, f))  # una sola lectura del historial para tiempos y cursos
+            tiempos = tiempos_por_etapa(db, bonita, f, nodos)
+            cursos = cursos_de_accion(db, bonita, f, nodos)
+            casos = casos_en_bonita(db, bonita, f)
         except (requests.RequestException, BonitaError, ValueError):  # ValueError: Bonita no devolvió JSON
-            tiempos = _tiempos_no_disponible(db, f, "Bonita no disponible: no se pudieron leer los tiempos por etapa.")
+            motivo = "Bonita no disponible: no se pudieron leer los datos del motor."
+    if motivo:
+        tiempos = _tiempos_no_disponible(db, f, motivo)
+        cursos = Cursos(disponible=False, motivo=motivo, filas=[])
+        casos = Casos(disponible=False, motivo=motivo, abiertos=0, archivados=0, consistentes=0, inconsistentes=[],
+                      horas_resolucion_promedio=None)
     return Reporte(
         filtros=f,
         generado_en=datetime.now(timezone.utc),
@@ -224,6 +314,8 @@ def reporte(db: Session, bonita, f: Filtros) -> Reporte:
         suministros=suministros_por_mes(db, f),
         estados=emergencias_por_estado(db, f),
         tiempos=tiempos,
+        cursos=cursos,
+        casos=casos,
         finalizadas=finalizadas(db, f),
     )
 

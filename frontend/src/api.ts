@@ -150,6 +150,20 @@ export type Reporte = {
     etapas: { tarea: string; horas_promedio: number; emergencias: number }[];
     horas_total_promedio: number | null;
   };
+  cursos: {
+    disponible: boolean;
+    motivo: string | null;
+    filas: { curso: string; etiqueta: string; emergencias: number; veces: number; cobertura_promedio: number | null }[];
+  };
+  casos: {
+    disponible: boolean;
+    motivo: string | null;
+    abiertos: number;
+    archivados: number;
+    consistentes: number;
+    inconsistentes: number[];
+    horas_resolucion_promedio: number | null;
+  };
   finalizadas: {
     emergencia_id: number;
     municipio: string;

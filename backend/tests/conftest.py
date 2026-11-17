@@ -78,6 +78,8 @@ class FakeBonita:
 
     def __init__(self):
         self.nodos = {}  # case_id -> lista de registros de archivedFlowNode
+        self.abiertos = set()  # case_id de los casos en curso
+        self.archivados = {}  # case_id -> registro de archivedCase (con 'start' y 'end_date')
         self.falla = False  # True: cada llamada lanza requests.ConnectionError
 
     def login(self, *args, **kwargs):
@@ -88,6 +90,18 @@ class FakeBonita:
         if self.falla:
             raise requests.ConnectionError("Bonita caído (simulado)")
         return self.nodos.get(case_id, [])
+
+    def get_case(self, case_id):
+        if self.falla:
+            raise requests.ConnectionError("Bonita caído (simulado)")
+        if case_id not in self.abiertos:
+            resp = requests.Response()
+            resp.status_code = 404
+            raise requests.HTTPError("404", response=resp)
+        return {"id": case_id, "state": "started"}
+
+    def get_archived_case(self, case_id):
+        return self.archivados.get(case_id)
 
 
 @pytest.fixture

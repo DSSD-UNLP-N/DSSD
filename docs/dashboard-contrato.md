@@ -35,7 +35,7 @@ Reporte completo en JSON.
 
 **Notas**
 - `municipio_id` inexistente → **200** con todo en cero, no 404.
-- Bonita caído → **200** con `tiempos.disponible = false` y `motivo` descriptivo; el resto del reporte llega igual.
+- Bonita caído → **200** con `tiempos`, `cursos` y `casos` en `disponible = false` y `motivo` descriptivo; el resto del reporte llega igual.
 
 ---
 
@@ -47,7 +47,7 @@ CSV de un bloque del reporte.
 
 | Parámetro    | Tipo     | Requerido | Descripción                                               |
 |--------------|----------|-----------|-----------------------------------------------------------|
-| `bloque`     | `string` | Sí        | Uno de: `kpis`, `suministros`, `estados`, `tiempos`, `finalizadas` |
+| `bloque`     | `string` | Sí        | Uno de: `kpis`, `suministros`, `estados`, `tiempos`, `cursos`, `casos`, `finalizadas` |
 | `desde`      | `date`   | No        | Igual que el endpoint JSON                                |
 | `hasta`      | `date`   | No        | Igual que el endpoint JSON                                |
 | `municipio_id` | `int`  | No        | Igual que el endpoint JSON                                |
@@ -74,6 +74,8 @@ CSV de un bloque del reporte.
 | `suministros`| Mes, Tipo de recurso, Cantidad                                                |
 | `estados`    | Estado, Etiqueta, Cantidad                                                    |
 | `tiempos`    | Tarea, Horas promedio, Emergencias                                            |
+| `cursos`     | Curso, Etiqueta, Emergencias, Veces, Cobertura promedio (%)                   |
+| `casos`      | Casos abiertos, Casos archivados, Consistentes, Inconsistentes (ids), Horas de resolución (Bonita) |
 | `finalizadas`| ID, Municipio, Tipo, Gravedad, ONGs, Consorcio, Horas total (h), Cobertura (%)|
 
 ---
@@ -120,6 +122,35 @@ interface Tiempos {
   horas_total_promedio: number | null; // promedio de alta→cierre de las resueltas
 }
 
+// De dónde sale: las tareas humanas completadas de cada caso en Bonita (archivedFlowNode) dicen qué curso tomó;
+// la cobertura final sale de la base de la app. Cada REFORMULAR vuelve a «Revisar», cada REABRIR vuelve a «Publicar» sin
+// «Revisar»; al llegar a «Adjudicar» el caso cuenta como TOTAL (sin «Evaluar» en la última ronda) o PARCIAL.
+interface CursoAccion {
+  curso: "TOTAL" | "PARCIAL" | "REFORMULAR" | "REABRIR";  // siempre los cuatro, en este orden
+  etiqueta: string;
+  emergencias: number;              // emergencias que pasaron por ese curso
+  veces: number;                    // una emergencia puede reformular o reabrir más de una vez
+  cobertura_promedio: number | null; // cobertura final (app) de esas emergencias
+}
+
+interface Cursos {
+  disponible: boolean;
+  motivo: string | null;
+  filas: CursoAccion[];             // vacío cuando disponible=false
+}
+
+// Estado del caso en Bonita (GET /API/bpm/case/{id}; si da 404, /API/bpm/archivedCase) contra la app:
+// resuelta en la app = caso archivado; cualquier otro estado = caso abierto.
+interface Casos {
+  disponible: boolean;
+  motivo: string | null;
+  abiertos: number;
+  archivados: number;
+  consistentes: number;
+  inconsistentes: number[];         // ids de emergencia que no coinciden (o cuyo caso Bonita ya no conoce)
+  horas_resolucion_promedio: number | null; // Bonita: end_date - start de los casos archivados
+}
+
 interface Finalizada {
   emergencia_id: number;
   municipio: string;
@@ -138,6 +169,8 @@ interface Reporte {
   suministros: SuministroMes[];
   estados: EstadoCantidad[];
   tiempos: Tiempos;
+  cursos: Cursos;
+  casos: Casos;
   finalizadas: Finalizada[];
 }
 ```
@@ -192,6 +225,20 @@ Período con datos, Bonita disponible:
     ],
     "horas_total_promedio": 48.3
   },
+  "cursos": {
+    "disponible": true,
+    "motivo": null,
+    "filas": [
+      { "curso": "TOTAL",      "etiqueta": "Cobertura total: directo a adjudicar", "emergencias": 5, "veces": 5, "cobertura_promedio": 100.0 },
+      { "curso": "PARCIAL",    "etiqueta": "Continuar con cobertura parcial",      "emergencias": 2, "veces": 2, "cobertura_promedio": 60.0 },
+      { "curso": "REFORMULAR", "etiqueta": "Reformular lotes",                     "emergencias": 1, "veces": 1, "cobertura_promedio": 100.0 },
+      { "curso": "REABRIR",    "etiqueta": "Reabrir convocatoria",                 "emergencias": 2, "veces": 3, "cobertura_promedio": 85.0 }
+    ]
+  },
+  "casos": {
+    "disponible": true, "motivo": null, "abiertos": 5, "archivados": 9, "consistentes": 14,
+    "inconsistentes": [], "horas_resolucion_promedio": 47.9
+  },
   "finalizadas": [
     {
       "emergencia_id": 3,
@@ -217,13 +264,13 @@ Período con datos, Bonita disponible:
 }
 ```
 
-Período con datos, Bonita no disponible (bloque `tiempos` degradado):
+Período con datos, Bonita no disponible (`tiempos` degradado; `cursos` y `casos` llegan igual con `disponible: false`, sin datos):
 
 ```json
 {
   "tiempos": {
     "disponible": false,
-    "motivo": "Bonita no disponible: no se pudieron leer los tiempos por etapa.",
+    "motivo": "Bonita no disponible: no se pudieron leer los datos del motor.",
     "etapas": [],
     "horas_total_promedio": 48.3
   }
