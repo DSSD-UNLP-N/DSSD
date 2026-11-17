@@ -3,7 +3,11 @@
 Uso (después de `alembic upgrade head`):  python -m app.seed
 Es idempotente: lo que ya existe (por código o CUIT) no se toca. Las fechas son relativas a hoy
 para que la demo siempre tenga certificaciones vigentes y una vencida.
+
+`python -m app.seed --demo` suma, sobre lo anterior, la precarga del coloquio (pauta 2: certificaciones vigentes y stock
+suficiente): ver DEMO. Los tests y los escenarios usan el seed base, que tiene los casos borde a propósito.
 """
+import sys
 from datetime import date, timedelta
 
 from sqlalchemy import select
@@ -75,6 +79,31 @@ ONGS = [
         {"RACION_ALIMENTO": 800},
     ),
 ]
+
+
+# Precarga del coloquio. Bomberos renueva SALUD_PREHOSP (en el seed base está vencida) y las dos ONGs tienen más
+# paramédicos, para correr los cuatro recorridos y alguna emergencia en vivo sin quedarse sin stock. Cruz Roja sigue con
+# SALUD_PREHOSP hasta riesgo MEDIO: en una emergencia ALTO o CRITICO participa como PARCIAL, el caso que muestra los niveles
+# de competencia. La ONG suspendida queda: sirve para mostrar que la Nacional rechaza a una ONG no habilitada.
+DEMO = {
+    "30-54666544-5": ({}, {"PARAMEDICO": 10, "AMBULANCIA": 4}),
+    "30-68522415-9": ({"SALUD_PREHOSP": (Riesgo.ALTO, 365)}, {"PARAMEDICO": 10}),
+}
+
+
+def demo(session_factory=SessionLocal) -> None:
+    """Aplica DEMO sobre el seed base. Idempotente: fija valores, no suma."""
+    seed(session_factory)
+    hoy = date.today()
+    with session_factory() as db:
+        for cuit, (certificaciones, inventario) in DEMO.items():
+            ong = db.scalar(select(Ong).where(Ong.cuit == cuit))
+            for codigo, (riesgo, dias) in certificaciones.items():
+                oc = next(c for c in ong.certificaciones if c.certificacion.codigo == codigo)
+                oc.riesgo_max, oc.vence_el = riesgo, hoy + timedelta(days=dias)
+            for tipo, cantidad in inventario.items():
+                next(i for i in ong.inventario if i.tipo_recurso.codigo == tipo).cantidad_total = cantidad
+        db.commit()
 
 
 def seed(session_factory=SessionLocal) -> None:
@@ -151,5 +180,9 @@ def seed(session_factory=SessionLocal) -> None:
 
 
 if __name__ == "__main__":
-    seed()
-    print("Seed del Sistema Nacional listo.")
+    if "--demo" in sys.argv:
+        demo()
+        print("Seed del Sistema Nacional listo, con la precarga del coloquio.")
+    else:
+        seed()
+        print("Seed del Sistema Nacional listo.")

@@ -90,6 +90,8 @@ class Ui:
         if SIN_CAPTURAS:
             return
         CAPTURAS.mkdir(exist_ok=True)
+        # El fondo es `fixed`: en la captura de página completa se pintaría solo el alto de la ventana y abajo quedaría blanco.
+        self.page.evaluate("document.body.style.backgroundAttachment = 'scroll'")
         self.page.screenshot(path=str(CAPTURAS / f"{self.n:02d}-{nombre}.png"), full_page=True)
 
     def entrar(self, app: str, usuario: str, clave: str = DEMO_PASSWORD, esperar: bool = True) -> None:

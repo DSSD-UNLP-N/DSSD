@@ -48,3 +48,19 @@ def test_insumos_no_requieren_certificacion(session_factory):
         assert raciones.certificacion is None
         assert paramedico.certificacion.codigo == "SALUD_PREHOSP"
         assert db.scalar(select(func.count()).select_from(Inventario)) > 0
+
+
+def test_demo_tiene_certificaciones_vigentes_y_mas_stock(session_factory):
+    from app.seed import demo
+
+    demo(session_factory)
+    demo(session_factory)  # idempotente
+    with session_factory() as db:
+        cruz = db.scalar(select(Ong).where(Ong.cuit == "30-54666544-5"))
+        bomberos = db.scalar(select(Ong).where(Ong.cuit == "30-68522415-9"))
+        for ong in (cruz, bomberos):
+            assert all(c.vence_el >= date.today() for c in ong.certificaciones)
+            assert next(i for i in ong.inventario if i.tipo_recurso.codigo == "PARAMEDICO").cantidad_total == 10
+        # Queda un caso de competencia parcial para mostrar los niveles: Cruz Roja hasta riesgo MEDIO.
+        assert cruz.certificaciones[0].riesgo_max.value == "MEDIO"
+        assert db.scalar(select(func.count()).select_from(Ong)) == len(ONGS)
