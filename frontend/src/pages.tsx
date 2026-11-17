@@ -826,7 +826,7 @@ export function DetallePage() {
 
   function cambiarCantidad(ev: FormEvent<HTMLFormElement>, loteId: number) {
     ev.preventDefault();
-    const cantidad = Number(new FormData(ev.currentTarget).get("cantidad"));
+    const cantidad = Number(new FormData(ev.currentTarget).get("nueva_cantidad"));
     return run(() => api.cambiarCantidadLote(id, loteId, cantidad), "Cantidad del lote actualizada");
   }
 
@@ -971,7 +971,7 @@ export function DetallePage() {
                     data-testid={`lote-cantidad-${l.id}`}
                   >
                     <input
-                      name="cantidad"
+                      name="nueva_cantidad"
                       type="number"
                       min={1}
                       step={1}

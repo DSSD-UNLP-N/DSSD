@@ -111,15 +111,12 @@ def main() -> int:
     e.check("B Bonita: va directo a 'Adjudicar Ofertas' (Municipio), sin pasar por el Coordinador", tarea is not None,
             tareas(admin, caso_b))
 
-    print("\n== La reserva bloquea el stock para otras emergencias")
+    print("\n== La app no pone tope: el stock lo controla la API Nacional cuando evalúa Bonita")
     ec, _, lc = crear_y_publicar(e, "Escenario C", "ALTO", [("PARAMEDICO", 5, "PRINCIPAL")],
                                  datetime.now().astimezone() + timedelta(hours=2))
-    e.esperar("C1 Cruz Roja ya no tiene paramédicos disponibles (los reservó A) → 400",
-              e.ofrecer("ong.cruzroja", ec, (lc["PARAMEDICO"], 1)), 400, "tenés 0 disponibles")
-    e.esperar("C2 Bomberos sí tiene 4 disponibles (reservó 2 de 6) → 201",
-              e.ofrecer("ong.bomberos", ec, (lc["PARAMEDICO"], 4)), 201)
-    e.esperar("C3 …pero no 5 → 400", e.ofrecer("ong.bomberos", ec, (lc["PARAMEDICO"], 5)), 400, "tenés 4 disponibles")
-    e.ofrecer("ong.bomberos", ec)  # retira la oferta de la prueba
+    e.esperar("C1 Cruz Roja puede ofertar aunque A le reservó todo (la app no consulta a la Nacional) → 201",
+              e.ofrecer("ong.cruzroja", ec, (lc["PARAMEDICO"], 1)), 201)
+    e.ofrecer("ong.cruzroja", ec)  # retira la oferta de la prueba
 
     print("\n== Limpieza: se liberan las reservas de la prueba")
     for emergencia in (ea, eb):

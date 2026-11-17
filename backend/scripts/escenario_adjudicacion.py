@@ -5,8 +5,9 @@
      Esperado: Cruz Roja queda ADJUDICADA (4 comprometidos), Bomberos LIBERADA (0), la emergencia pasa a EN_EJECUCION
      y el caso de Bonita espera en "Monitorear Ejecucion del Despliegue".
   B) reformulación: pide 3000 L de agua; Cruz Roja ofrece 2000 (66,7 %). El Coordinador elige REFORMULAR.
-     Esperado: se libera la reserva, vuelve a REGISTRADA con la ronda 2, el Coordinador publica de nuevo, Cruz Roja ofrece
-     los 3000 L, la evaluación de la ronda 2 cubre todo, va directo a adjudicación y el Municipio adjudica.
+     Esperado: Bonita libera la reserva (tarea «Liberar Reservas de la Ronda»), vuelve a REGISTRADA con la ronda 2, el
+     Coordinador ajusta el lote a 2000 L y publica de nuevo, Cruz Roja ofrece los 2000 L, la evaluación de la ronda 2
+     cubre todo, va directo a adjudicación y el Municipio adjudica.
 
 Requisitos: Bonita con el proceso desplegado, incluidos los conectores de "Notificar Adjudicacion y Registrar Compromiso
 Nacional"; app en :8001; API Nacional en :8002 con el seed y nada comprometido. Tarda unos 8 minutos.
@@ -20,8 +21,8 @@ import argparse
 import sys
 from datetime import datetime, timedelta
 
-from comun import (BOMBEROS, CRUZ_ROJA, VENTANA_S, Escenario, admin_bonita, comprometido, crear_y_publicar, esperar_detalle,
-                   tareas)
+from comun import (BOMBEROS, CRUZ_ROJA, VENTANA_S, Escenario, admin_bonita, comprometido, crear_y_publicar, esperar,
+                   esperar_detalle, tareas)
 from nacional_auth import nacional_post
 from app.core.config import get_settings
 
@@ -95,18 +96,24 @@ def main() -> int:
     r = e.post("coordinador.regional", f"/emergencias/{eb}/decision", {"decision": "REFORMULAR"})
     e.check("B4 REFORMULAR → vuelve a REGISTRADA, ronda 2, sin evaluación",
             r.status_code == 200 and r.json()["estado"] == "REGISTRADA" and r.json()["evaluacion"] is None, r.text)
-    e.check("B5 Nacional: se liberó la reserva del agua", comprometido(nacional, CRUZ_ROJA, "AGUA_POTABLE") == 0)
+    e.check("B5 Nacional: Bonita liberó la reserva del agua (la app no llama a la Nacional)",
+            bool(esperar(lambda: comprometido(nacional, CRUZ_ROJA, "AGUA_POTABLE") == 0, 60)),
+            comprometido(nacional, CRUZ_ROJA, "AGUA_POTABLE"))
     o = e.get("coordinador.regional", f"/emergencias/{eb}/ofertas").json()
     e.check("B6 La oferta de la ronda 1 quedó retirada (con su historial)", len(o) == 1 and o[0]["retirada"] is True, o)
     tarea = admin.wait_for_task(caso_b, "Revisar Informacion", retries=20)
     e.check("B7 Bonita: el caso volvió a 'Revisar Informacion y Generar Lotes' (camino REFORMULAR)", tarea is not None,
             tareas(admin, caso_b))
 
-    print("\n== B: segunda ronda")
+    print("\n== B: segunda ronda (con el lote ajustado)")
+    r = e.como("coordinador.regional").patch(f"{e.app}/api/emergencias/{eb}/lotes/{lb['AGUA_POTABLE']}", json={"cantidad": 2000},
+                                              timeout=60)
+    e.check("B7b El Coordinador ajusta el lote de 3000 a 2000 L (reformular = ajustar cantidades)",
+            r.status_code == 200 and r.json()["cantidad"] == 2000, r.text)
     fin2 = datetime.now().astimezone() + timedelta(seconds=RONDA2_S)
     r = e.post("coordinador.regional", f"/emergencias/{eb}/publicar", {"ventana_fin": fin2.isoformat(timespec="seconds")})
     e.check("B8 El Coordinador publica de nuevo", r.status_code == 200 and r.json()["estado"] == "CONVOCATORIA", r.text)
-    e.esperar("B9 Cruz Roja ofrece los 3000 L completos", e.ofrecer("ong.cruzroja", eb, (lb["AGUA_POTABLE"], 3000)), 201)
+    e.esperar("B9 Cruz Roja ofrece los 2000 L del lote ajustado", e.ofrecer("ong.cruzroja", eb, (lb["AGUA_POTABLE"], 2000)), 201)
     print(f"     la ronda 2 vence {fin2:%H:%M:%S}")
     d = esperar_detalle(e, eb, lambda d: d["evaluacion"] is not None, 200, desde=fin2)
     e.check("B10 La evaluación de la ronda 2 cubre todo y va directo a ADJUDICACION",
@@ -122,7 +129,7 @@ def main() -> int:
         e.check("B13 El Municipio adjudica", r.status_code == 200, r.text)
         d = esperar_detalle(e, eb, lambda d: d["estado"] == "EN_EJECUCION", 90)
         e.check("B14 La emergencia pasa a EN_EJECUCION", d is not None, d and d["estado"])
-        e.check("B15 Nacional: 3000 L de agua adjudicados", comprometido(nacional, CRUZ_ROJA, "AGUA_POTABLE") == 3000)
+        e.check("B15 Nacional: 2000 L de agua adjudicados", comprometido(nacional, CRUZ_ROJA, "AGUA_POTABLE") == 2000)
 
     print("\n== Limpieza: se liberan las reservas de la prueba (el cierre todavía no existe)")
     for ref in (f"emg-{ea}-r1-{CRUZ_ROJA}", f"emg-{eb}-r2-{CRUZ_ROJA}"):
