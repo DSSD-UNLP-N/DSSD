@@ -32,7 +32,7 @@ from pathlib import Path
 
 from playwright.sync_api import Page, sync_playwright
 
-from comun import BOMBEROS, CRUZ_ROJA, admin_bonita, comprometido, tarea_activa
+from comun import BOMBEROS, CRUZ_ROJA, admin_bonita, comprometido, esperar, tarea_activa
 import ui_comun
 from ui_comun import (PLAZO, Reporte, Ui, agregar_lote, cierre_de_ventana, esperar_estado, esperar_evaluacion,
                       esperar_hasta, ofrecer, publicar, registrar)
@@ -204,8 +204,11 @@ def main() -> int:
             u.ve("Convocatoria reformulada", "El Coordinador reformuló la convocatoria")
             u.abrir(app, eb)
             r.check("B: vuelve a «Registrada»", u.page.locator(".badge", has_text="Registrada").count() > 0)
-            r.check("B: Nacional liberó la reserva", comprometido(nacional, CRUZ_ROJA, "RACION_ALIMENTO") == 0)
-            r.check("B: Bonita volvió a «Revisar Informacion»", tarea_activa(admin, caso_b).startswith("Revisar Informacion"),
+            # Bonita libera por su cuenta: contra Render tarda más que el aviso a la pantalla, así que se espera
+            r.check("B: Nacional liberó la reserva",
+                    bool(esperar(lambda: comprometido(nacional, CRUZ_ROJA, "RACION_ALIMENTO") == 0, 60)))
+            r.check("B: Bonita volvió a «Revisar Informacion»",
+                    bool(esperar(lambda: tarea_activa(admin, caso_b).startswith("Revisar Informacion"), 60)),
                     tarea_activa(admin, caso_b))
             u.foto("coordinador-reformulada-b")
             u.page.locator("[name=nueva_cantidad]").first.fill("2000")
