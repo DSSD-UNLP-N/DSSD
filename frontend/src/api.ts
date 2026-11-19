@@ -5,6 +5,7 @@ export type Usuario = {
   username: string;
   nombre: string;
   rol: Rol;
+  ong_id: number | null;
 };
 
 export type Lote = {
@@ -114,7 +115,6 @@ export type Evaluacion = {
 
 export type Meta = {
   tipos: Record<string, string>;
-  roles: Record<string, string>;
   demo: { password: string; users: { username: string; rol: string; label: string }[] } | null;
 };
 
@@ -127,7 +127,97 @@ export type Oferta = {
   items: { lote_id: number; recurso: string; cantidad: number; version: number }[];
   retirada: boolean;
   estado: "PRESENTADA" | "ADJUDICADA" | "NO_ADJUDICADA" | "FINALIZADA";
+  consorcio_id: number | null;
+  consorcio_nombre: string | null;
 };
+
+// Reporte del dashboard (GET /api/indicadores; contrato en docs/dashboard-contrato.md).
+export type Reporte = {
+  filtros: { desde: string; hasta: string; municipio_id: number | null };
+  generado_en: string;
+  kpis: {
+    emergencias: number;
+    resueltas: number;
+    en_curso: number;
+    pct_consorcio: number | null;
+    cobertura_promedio: number | null;
+  };
+  suministros: { mes: string; tipo_recurso: string; cantidad: number }[];
+  estados: { estado: string; etiqueta: string; cantidad: number }[];
+  tiempos: {
+    disponible: boolean;
+    motivo: string | null;
+    etapas: { tarea: string; horas_promedio: number; emergencias: number }[];
+    horas_total_promedio: number | null;
+  };
+  cursos: {
+    disponible: boolean;
+    motivo: string | null;
+    filas: { curso: string; etiqueta: string; emergencias: number; veces: number; cobertura_promedio: number | null }[];
+  };
+  casos: {
+    disponible: boolean;
+    motivo: string | null;
+    abiertos: number;
+    archivados: number;
+    consistentes: number;
+    inconsistentes: number[];
+    horas_resolucion_promedio: number | null;
+  };
+  finalizadas: {
+    emergencia_id: number;
+    municipio: string;
+    tipo: string;
+    gravedad: string;
+    ongs: string[];
+    consorcio: boolean;
+    horas_total: number | null;
+    cobertura: number | null;
+  }[];
+};
+
+export const exportCsvUrl = (bloque: string, desde: string, hasta: string) =>
+  `/api/indicadores/export.csv?${new URLSearchParams({ bloque, desde, hasta })}`;
+
+// Ficha de la ONG en el Sistema Nacional (GET/PUT /api/ong/inventario).
+export type InventarioOng = {
+  cuit: string;
+  nombre: string;
+  estado: string;
+  certificaciones: { codigo: string; nombre: string; riesgo_max: string; vence_el: string; vigente: boolean }[];
+  inventario: {
+    tipo_recurso: string;
+    nombre: string;
+    unidad: string;
+    cantidad_total: number;
+    cantidad_comprometida: number;
+    disponible: number;
+    riesgo_permitido: string | null;
+  }[];
+};
+
+export type MiembroConsorcio = {
+  ong_id: number;
+  ong_nombre: string;
+  cuit: string | null;
+  estado: "INVITADA" | "ACEPTADA" | "RECHAZADA" | "SALIO";
+  invitado_en: string;
+  respondido_en: string | null;
+  salio_en: string | null;
+};
+
+export type Consorcio = {
+  id: number;
+  emergencia_id: number;
+  nombre: string;
+  ong_lider_id: number;
+  ong_lider_nombre: string;
+  valido: boolean;
+  disuelto: boolean;
+  miembros: MiembroConsorcio[];
+};
+
+export type OngResumen = { id: number; nombre: string; cuit: string | null };
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
@@ -146,90 +236,72 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     }
   }
   if (!res.ok) {
-    let detail = text || res.statusText;
-    if (typeof data === "object" && data && "detail" in data) {
-      const raw = (data as { detail: unknown }).detail;
-      if (typeof raw === "string") detail = raw;
-      else if (Array.isArray(raw)) {
-        detail = raw
-          .map((item) =>
-            typeof item === "object" && item && "msg" in item
-              ? String((item as { msg: unknown }).msg)
-              : String(item),
-          )
-          .join(" · ");
-      }
-    }
-    throw new Error(detail);
+    // detail de FastAPI: texto, o lista de errores de validación ([{loc, msg, ...}]); otro caso, el cuerpo crudo.
+    const raw = (data as { detail?: unknown } | null)?.detail;
+    throw new Error(
+      typeof raw === "string"
+        ? raw
+        : Array.isArray(raw)
+          ? raw.map((item) => (typeof item === "object" && item && "msg" in item ? String(item.msg) : String(item))).join(" · ")
+          : text || res.statusText,
+    );
   }
   return data as T;
 }
 
+const post = <T>(path: string, body?: unknown) =>
+  request<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) });
+
+const put = <T>(path: string, body: unknown) => request<T>(path, { method: "PUT", body: JSON.stringify(body) });
+
+// /api/meta no cambia en la sesión: una sola petición compartida; si falla, la próxima llamada reintenta.
+let metaPromise: Promise<Meta> | null = null;
+
 export const api = {
-  meta: () => request<Meta>("/api/meta"),
+  meta: () =>
+    (metaPromise ??= request<Meta>("/api/meta").catch((err) => {
+      metaPromise = null;
+      throw err;
+    })),
   me: () => request<Usuario>("/api/auth/me"),
-  login: (username: string, password: string) =>
-    request<Usuario>("/api/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ username, password }),
-    }),
-  logout: () => request<void>("/api/auth/logout", { method: "POST" }),
+  login: (username: string, password: string) => post<Usuario>("/api/auth/login", { username, password }),
+  logout: () => post<void>("/api/auth/logout"),
   listEmergencias: () => request<Emergencia[]>("/api/emergencias"),
   getEmergencia: (id: number) => request<Emergencia>(`/api/emergencias/${id}`),
-  createEmergencia: (body: {
-    tipo: string;
-    nivel_gravedad: string;
-    zona_afectada: string;
-    descripcion: string;
-  }) =>
-    request<Emergencia>("/api/emergencias", {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
+  createEmergencia: (body: { tipo: string; nivel_gravedad: string; zona_afectada: string; descripcion: string }) =>
+    post<Emergencia>("/api/emergencias", body),
   tiposRecurso: () => request<TipoRecurso[]>("/api/tipos-recurso"),
   tiposRecursoAlta: () => request<TipoRecurso[]>("/api/ongs/alta/tipos-recurso"),
-  altaOng: (body: AltaOngIn) =>
-    request<AltaOngOut>("/api/ongs/alta", {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-  createLote: (
-    id: number,
-    body: { tipo_recurso: string; detalle?: string; cantidad: number; tipo: string },
-  ) =>
-    request<Lote>(`/api/emergencias/${id}/lotes`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-  deleteLote: (id: number, loteId: number) =>
-    request<void>(`/api/emergencias/${id}/lotes/${loteId}`, { method: "DELETE" }),
+  altaOng: (body: AltaOngIn) => post<AltaOngOut>("/api/ongs/alta", body),
+  cambiarCantidadLote: (id: number, loteId: number, cantidad: number) =>
+    request<Lote>(`/api/emergencias/${id}/lotes/${loteId}`, { method: "PATCH", body: JSON.stringify({ cantidad }) }),
+  createLote: (id: number, body: { tipo_recurso: string; detalle?: string; cantidad: number; tipo: string }) =>
+    post<Lote>(`/api/emergencias/${id}/lotes`, body),
   publicar: (id: number, ventana_fin: string) =>
-    request<Emergencia>(`/api/emergencias/${id}/publicar`, {
-      method: "POST",
-      body: JSON.stringify({ ventana_fin }),
-    }),
-  decidir: (id: number, decision: "PARCIAL" | "REFORMULAR") =>
-    request<Emergencia>(`/api/emergencias/${id}/decision`, {
-      method: "POST",
-      body: JSON.stringify({ decision }),
-    }),
+    post<Emergencia>(`/api/emergencias/${id}/publicar`, { ventana_fin }),
+  decidir: (id: number, decision: "PARCIAL" | "REFORMULAR" | "REABRIR", ventana_fin?: string) =>
+    post<Emergencia>(`/api/emergencias/${id}/decision`, ventana_fin ? { decision, ventana_fin } : { decision }),
   adjudicar: (id: number, cuits: string[]) =>
-    request<Emergencia>(`/api/emergencias/${id}/adjudicar`, {
-      method: "POST",
-      body: JSON.stringify({ cuits }),
-    }),
-  monitorear: (id: number) => request<Emergencia>(`/api/emergencias/${id}/monitorear`, { method: "POST" }),
-  finalizar: (id: number) => request<Emergencia>(`/api/emergencias/${id}/finalizar`, { method: "POST" }),
-  validarCierre: (id: number) => request<Emergencia>(`/api/emergencias/${id}/validar-cierre`, { method: "POST" }),
+    post<Emergencia>(`/api/emergencias/${id}/adjudicar`, { cuits }),
+  monitorear: (id: number) => post<Emergencia>(`/api/emergencias/${id}/monitorear`),
+  finalizar: (id: number) => post<Emergencia>(`/api/emergencias/${id}/finalizar`),
+  validarCierre: (id: number) => post<Emergencia>(`/api/emergencias/${id}/validar-cierre`),
+  indicadores: (desde: string, hasta: string) =>
+    request<Reporte>(`/api/indicadores?${new URLSearchParams({ desde, hasta })}`),
+  inventario: () => request<InventarioOng>("/api/ong/inventario"),
+  declararInventario: (rubros: { tipo_recurso: string; cantidad_total: number }[]) =>
+    put<InventarioOng>("/api/ong/inventario", { rubros }),
   notificaciones: () => request<Notificacion[]>("/api/notificaciones"),
-  marcarLeida: (id: number) => request<Notificacion>(`/api/notificaciones/${id}/leida`, { method: "POST" }),
+  marcarLeida: (id: number) => post<Notificacion>(`/api/notificaciones/${id}/leida`),
   listOfertas: (id: number) => request<Oferta[]>(`/api/emergencias/${id}/ofertas`),
-  createOferta: (
-    id: number,
-    items: { lote_id: number; recurso: string; cantidad: number }[],
-  ) =>
-    request<Oferta>(`/api/emergencias/${id}/ofertas`, {
-      method: "POST",
-      body: JSON.stringify({ items }),
-    }),
+  createOferta: (id: number, items: { lote_id: number; recurso: string; cantidad: number }[]) =>
+    post<Oferta>(`/api/emergencias/${id}/ofertas`, { items }),
+  listConsorcios: (id: number) => request<Consorcio[]>(`/api/emergencias/${id}/consorcios`),
+  crearConsorcio: (id: number, nombre: string) => post<Consorcio>(`/api/emergencias/${id}/consorcios`, { nombre }),
+  invitar: (cid: number, ong_id: number) => post<Consorcio>(`/api/consorcios/${cid}/invitaciones`, { ong_id }),
+  responder: (cid: number, acepta: boolean) => post<Consorcio>(`/api/consorcios/${cid}/respuesta`, { acepta }),
+  salirConsorcio: (cid: number) => post<void>(`/api/consorcios/${cid}/salida`),
+  disolverConsorcio: (cid: number) => request<void>(`/api/consorcios/${cid}`, { method: "DELETE" }),
+  listOngs: (emergencia_id?: number) =>
+    request<OngResumen[]>(emergencia_id ? `/api/ongs?emergencia_id=${emergencia_id}` : "/api/ongs"),
 };

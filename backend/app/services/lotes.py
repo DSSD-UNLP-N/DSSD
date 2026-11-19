@@ -14,20 +14,21 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.integrations.bonita import BonitaClient, BonitaError
+from app.integrations.bonita import BonitaError, bonita_login
 from app.integrations.nacional import NacionalClient
 from app.models import Emergencia, EstadoEmergencia, Lote, OfertaItem, Usuario
-from app.schemas.lotes import LoteIn
+from app.schemas.api import LoteIn
+from app.services import ServicioError
 
 TAREA_REVISAR = "Revisar Informacion"
 TAREA_PUBLICAR = "Publicar Convocatoria"
 
 
-class LoteError(RuntimeError):
+class LoteError(ServicioError):
     """Operación inválida sobre los lotes (estado equivocado, lote inexistente…)."""
 
 
-class PublicacionError(RuntimeError):
+class PublicacionError(ServicioError):
     """La convocatoria no pudo publicarse; la emergencia queda como estaba."""
 
 
@@ -37,7 +38,7 @@ def _editable(emergencia: Emergencia) -> None:
 
 
 def agregar_lote(db: Session, emergencia: Emergencia, datos: LoteIn, nacional: NacionalClient) -> Lote:
-    """Lanza NacionalError si el catálogo no responde (el router lo traduce a 503)."""
+    """Lanza NacionalError si el catálogo no responde (main.py lo traduce a 503)."""
     _editable(emergencia)
     tipo = next((t for t in nacional.tipos_recurso() if t["codigo"] == datos.tipo_recurso), None)
     if tipo is None:
@@ -52,6 +53,19 @@ def agregar_lote(db: Session, emergencia: Emergencia, datos: LoteIn, nacional: N
         tipo=datos.tipo,
     )
     db.add(lote)
+    db.commit()
+    db.refresh(lote)
+    return lote
+
+
+def cambiar_cantidad(db: Session, emergencia: Emergencia, lote_id: int, cantidad: int) -> Lote:
+    """Ajusta la cantidad de un lote mientras la convocatoria no está publicada (p. ej. al reformular). A diferencia de
+    borrar, vale también para los lotes con ofertas en el historial: esas ofertas guardan su propia cantidad."""
+    _editable(emergencia)
+    lote = next((lote for lote in emergencia.lotes if lote.id == lote_id), None)
+    if lote is None:
+        raise LoteError("Ese lote no pertenece a esta emergencia.")
+    lote.cantidad = cantidad
     db.commit()
     db.refresh(lote)
     return lote
@@ -79,6 +93,9 @@ def publicar_convocatoria(
         raise PublicacionError("La emergencia no tiene caso en Bonita; no se puede publicar.")
     if ventana_fin.tzinfo is None:
         ventana_fin = ventana_fin.astimezone()
+    # A Bonita le llega en segundos (ventanaOfertasISO): si la app guardara los milisegundos, el timer vencería antes
+    # de que la app dé la ventana por cerrada y el GET de ofertas de Bonita recibiría 409 (el caso queda trabado).
+    ventana_fin = ventana_fin.replace(microsecond=0)
     if ventana_fin <= datetime.now().astimezone():
         raise PublicacionError("El cierre de la ventana tiene que ser una fecha futura.")
 
@@ -103,10 +120,8 @@ def publicar_en_bonita(settings: Settings, case_id: int, ventana_fin: datetime, 
 
     Lo administrativo (leer tareas, setear la variable) va con el usuario técnico; las tareas
     humanas las ejecuta el coordinador que publicó, para que el motor lo registre a él."""
-    admin = BonitaClient(settings.bonita_base_url, settings.bonita_timeout_seconds)
-    admin.login(settings.bonita_username, settings.bonita_password)
-    coordinador = BonitaClient(settings.bonita_base_url, settings.bonita_timeout_seconds)
-    coordinador.login(coordinador_username, settings.bonita_test_password)
+    admin = bonita_login(settings)
+    coordinador = bonita_login(settings, coordinador_username)
 
     # Si un intento anterior se cortó después de completar "Revisar…", el caso ya está en
     # "Publicar…": se sigue desde ahí en vez de fallar.

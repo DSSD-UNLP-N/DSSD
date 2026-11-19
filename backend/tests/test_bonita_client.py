@@ -4,8 +4,8 @@ import requests
 import responses
 
 from app.integrations.bonita import BonitaClient, BonitaError, CONTRACT_INPUTS
+from tests.conftest import BASE, mock_ejecutar, mock_login
 
-BASE = "http://bonita.test/bonita"
 CONTRATO = {"emergenciaId": 1, "municipioId": 2, "nivelGravedad": "ALTO",
             "ventanaOfertasISO": "2026-10-01T10:00:00-03:00"}
 
@@ -15,14 +15,9 @@ def client():
     return BonitaClient(BASE + "/")  # con barra final: debe normalizarse
 
 
-def _login_ok(rsps):
-    rsps.add(responses.POST, f"{BASE}/loginservice", status=204,
-             headers={"Set-Cookie": "X-Bonita-API-Token=tok123; Path=/"})
-
-
 @responses.activate
 def test_login_guarda_el_token_csrf_como_header(client):
-    _login_ok(responses)
+    mock_login("tok123")
     client.login("walter.bates", "bpm")
     assert client.session.headers["X-Bonita-API-Token"] == "tok123"
     body = responses.calls[0].request.body
@@ -31,14 +26,14 @@ def test_login_guarda_el_token_csrf_como_header(client):
 
 @responses.activate
 def test_login_sin_cookie_de_token_falla(client):
-    responses.add(responses.POST, f"{BASE}/loginservice", status=204)
+    mock_login(token=None)
     with pytest.raises(BonitaError):
         client.login("u", "p")
 
 
 @responses.activate
 def test_login_rechazado_propaga_error_http(client):
-    responses.add(responses.POST, f"{BASE}/loginservice", status=401)
+    mock_login(status=401)
     with pytest.raises(Exception):
         client.login("u", "mal")
 
@@ -115,6 +110,16 @@ def test_get_archived_human_tasks_trae_el_ejecutor(client):
 
 
 @responses.activate
+def test_get_archived_case_busca_por_id_original_y_devuelve_none_si_no_esta(client):
+    responses.add(responses.GET, f"{BASE}/API/bpm/archivedCase",
+                  json=[{"sourceObjectId": "1001", "start": "2026-11-17 12:03:40.305", "end_date": "2026-11-17 12:05:21.647"}])
+    responses.add(responses.GET, f"{BASE}/API/bpm/archivedCase", json=[])
+    assert client.get_archived_case("1001")["end_date"].startswith("2026-11-17")
+    assert "sourceObjectId%3D1001" in responses.calls[0].request.url or "sourceObjectId=1001" in responses.calls[0].request.url
+    assert client.get_archived_case("1002") is None
+
+
+@responses.activate
 def test_actor_names_mapea_id_de_actor_a_nombre(client):
     responses.add(responses.GET, f"{BASE}/API/bpm/actor",
                   json=[{"id": "620", "name": "centro de controlador regional"}, {"id": "621", "name": "Municipio"}])
@@ -164,9 +169,7 @@ def test_find_task_devuelve_none_si_no_esta(client):
 def test_complete_task_as_self_asigna_y_ejecuta(client):
     import json
 
-    responses.add(responses.GET, f"{BASE}/API/system/session/unusedid", json={"user_id": "77"})
-    responses.add(responses.PUT, f"{BASE}/API/bpm/userTask/9001", status=200)
-    responses.add(responses.POST, f"{BASE}/API/bpm/userTask/9001/execution", status=200)
+    mock_ejecutar("9001")
 
     client.complete_task_as_self("9001")
 
@@ -210,3 +213,18 @@ def test_assign_task_propaga_error_http(client):
     responses.add(responses.PUT, f"{BASE}/API/bpm/userTask/9001", status=500)
     with pytest.raises(Exception):
         client.assign_task("9001", "77")
+
+
+@responses.activate
+def test_get_archived_flow_nodes_pagina(client):
+    pagina0 = [{"type": "USER_TASK", "state": "ready", "rootCaseId": "15", "n": i} for i in range(100)]
+    pagina1 = [{"type": "USER_TASK", "state": "completed", "rootCaseId": "15", "n": 100 + i} for i in range(3)]
+    responses.add(responses.GET, f"{BASE}/API/bpm/archivedFlowNode", json=pagina0)
+    responses.add(responses.GET, f"{BASE}/API/bpm/archivedFlowNode", json=pagina1)
+    nodos = client.get_archived_flow_nodes("15")
+    assert len(nodos) == 103
+    assert len(responses.calls) == 2
+    from urllib.parse import parse_qs, urlparse
+    for pagina, call in enumerate(responses.calls):
+        q = parse_qs(urlparse(call.request.url).query)
+        assert q["f"] == ["caseId=15"] and q["p"] == [str(pagina)] and q["c"] == ["100"]

@@ -1,24 +1,14 @@
 import responses
 
-from app.core.config import get_settings
-from tests.test_alta_ong import _mock_bonita_ok
+from tests.conftest import body_alta_ong, mock_bonita_alta_ong
 
 URL = "/api/ongs/alta"
 
 
-def _body(**kw):
-    base = dict(ong_nombre="Techo Digno", cuit="30-71234567-8", nombre="Ana Paz", username="ong.techo",
-                password="secreto123",
-                rubros=[{"tipo_recurso": "PARAMEDICO", "cantidad_total": 4},
-                        {"tipo_recurso": "RACION_ALIMENTO", "cantidad_total": 0}])
-    base.update(kw)
-    return base
-
-
 @responses.activate
 def test_alta_sin_sesion_201(client, seeded, nacional):
-    _mock_bonita_ok()
-    r = client.post(URL, json=_body())
+    mock_bonita_alta_ong()
+    r = client.post(URL, json=body_alta_ong())
     assert r.status_code == 201
     assert r.json()["cuit"] == "30-71234567-8"
     login = client.post("/api/auth/login", json={"username": "ong.techo", "password": "secreto123"})
@@ -28,28 +18,28 @@ def test_alta_sin_sesion_201(client, seeded, nacional):
 
 @responses.activate
 def test_alta_recorta_espacios(client, seeded, nacional):
-    _mock_bonita_ok()
-    r = client.post(URL, json=_body(username="  ong.caritas "))
+    mock_bonita_alta_ong()
+    r = client.post(URL, json=body_alta_ong(username="  ong.caritas "))
     assert r.status_code == 201
     assert nacional.ongs_registradas[0]["username"] == "ong.caritas"
 
 
 def test_alta_rubros_repetidos_422(client, seeded, nacional):
     rubros = [{"tipo_recurso": "PARAMEDICO", "cantidad_total": 1}] * 2
-    assert client.post(URL, json=_body(rubros=rubros)).status_code == 422
+    assert client.post(URL, json=body_alta_ong(rubros=rubros)).status_code == 422
 
 
 def test_alta_sin_rubros_422(client, seeded, nacional):
-    assert client.post(URL, json=_body(rubros=[])).status_code == 422
+    assert client.post(URL, json=body_alta_ong(rubros=[])).status_code == 422
 
 
 def test_alta_cantidad_negativa_422(client, seeded, nacional):
     rubros = [{"tipo_recurso": "PARAMEDICO", "cantidad_total": -1}]
-    assert client.post(URL, json=_body(rubros=rubros)).status_code == 422
+    assert client.post(URL, json=body_alta_ong(rubros=rubros)).status_code == 422
 
 
 def test_alta_duplicado_409_detail_en_espanol(client, seeded, nacional):
-    r = client.post(URL, json=_body(username="ong.cruzroja"))
+    r = client.post(URL, json=body_alta_ong(username="ong.cruzroja"))
     assert r.status_code == 409
     assert "ya está registrado" in r.json()["detail"]
 
@@ -64,4 +54,4 @@ def test_tipos_recurso_publico(client, seeded, nacional):
 
 def test_alta_username_con_caracteres_que_la_api_nacional_rechaza_422(client, seeded, nacional):
     for username in ("ana paz", "ana@mail", "ñandú"):
-        assert client.post(URL, json=_body(username=username)).status_code == 422, username
+        assert client.post(URL, json=body_alta_ong(username=username)).status_code == 422, username

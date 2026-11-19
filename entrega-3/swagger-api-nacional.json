@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Sistema Nacional de Gestión de Recursos y Riesgos",
-    "description": "API del Sistema Nacional: catálogo de recursos y certificaciones, inventario de las ONGs, validación de ofertas por niveles de competencia y cierre operativo (libera recursos bloqueados).\n\n**Autenticación.** `POST /login` devuelve un JWT; en Swagger, botón *Authorize* y pegar el token. Todo menos `/health`, `/login` y `POST /ongs` lo exige. Los endpoints de reservas, adjudicaciones y cierres son solo de las cuentas de servicio (Bonita y la app local); el inventario lo modifica cada ONG con su cuenta.\n\n**Cuentas de prueba (demo).** `bonita-service` / `1gom_DfYwiGTjWmBkks4MvHT` (cuenta de servicio: sirve para todos los endpoints) y `ong.cruzroja` o `ong.bomberos` / `demo1234` (cuentas de ONG: catálogo, validaciones e inventario propio). `POST /ongs` está abierto para registrar una ONG nueva.\n\n**Recorrido de una emergencia.** `POST /validaciones` (consulta, no guarda) → `POST /evaluaciones` (reserva el stock al vencer la ventana de ofertas) → `POST /adjudicaciones/resolucion` (confirma las elegidas y libera las demás) → `POST /cierres/lote` (cierra y devuelve lo comprometido).\n\n**Errores.** Siempre `{\"detail\": ...}`. Datos mal formados: 422 (nada se guarda). Sin token o vencido: 401. Cuenta sin permiso: 403. No existe: 404. Choca con el estado actual: 409. Las operaciones de reserva y cierre son idempotentes: repetirlas devuelve el mismo resultado sin volver a restar stock.",
+    "description": "API del Sistema Nacional: catálogo de recursos y certificaciones, inventario de las ONGs, validación de ofertas por niveles de competencia y cierre operativo (libera recursos bloqueados).\n\n**Autenticación.** `POST /login` devuelve un JWT; en Swagger, botón *Authorize* y pegar el token. Todo menos `/health`, `/login` y `POST /ongs` lo exige. Los endpoints de reservas, adjudicaciones y cierres son solo de las cuentas de servicio (Bonita y la app local), igual que la carga del inventario de las ONGs.\n\n**Cuentas de prueba (demo).** `bonita-service` / `1gom_DfYwiGTjWmBkks4MvHT` (cuenta de servicio: sirve para todos los endpoints) y `ong.cruzroja` o `ong.bomberos` / `demo1234` (cuentas de ONG: solo consulta y validaciones). `POST /ongs` está abierto para registrar una ONG nueva.\n\n**Recorrido de una emergencia.** `POST /validaciones` (consulta, no guarda) → `POST /evaluaciones` (reserva el stock al vencer la ventana de ofertas) → `POST /adjudicaciones/resolucion` (confirma las elegidas y libera las demás) → `POST /cierres/lote` (cierra y devuelve lo comprometido).\n\n**Errores.** Siempre `{\"detail\": ...}`. Datos mal formados: 422 (nada se guarda). Sin token o vencido: 401. Cuenta sin permiso: 403. No existe: 404. Choca con el estado actual: 409. Las operaciones de reserva y cierre son idempotentes: repetirlas devuelve el mismo resultado sin volver a restar stock.",
     "version": "1.0.0"
   },
   "paths": {
@@ -64,7 +64,7 @@
           "autenticación"
         ],
         "summary": "Registrar una ONG y su cuenta",
-        "description": "Onboarding: crea la ONG (habilitada, sin certificaciones ni inventario) y su cuenta, y devuelve ya un token.\nNo requiere autenticación. Después la ONG declara su inventario con `PUT /ongs/{cuit}/inventario`.",
+        "description": "Onboarding: crea la ONG (habilitada, sin certificaciones ni inventario) y su cuenta, y devuelve ya un token.\nNo requiere autenticación. Después el sistema (cuenta de servicio) declara su inventario con\n`PUT /ongs/{cuit}/inventario`.",
         "operationId": "registrar_ong_ongs_post",
         "requestBody": {
           "required": true,
@@ -426,8 +426,8 @@
         "tags": [
           "inventario"
         ],
-        "summary": "Declarar el inventario de una ONG (upsert por tipo de recurso)",
-        "description": "Fija `cantidad_total` por tipo de recurso. No toca `cantidad_comprometida`: no se puede declarar\nmenos de lo ya comprometido (409). Devuelve el inventario completo de la ONG.",
+        "summary": "Declarar el inventario de una ONG (upsert por tipo de recurso; solo el sistema)",
+        "description": "Fija `cantidad_total` por tipo de recurso. Lo llama el sistema (cuenta de servicio), nunca una cuenta de ONG.\nNo toca `cantidad_comprometida`: no se puede declarar menos de lo ya comprometido (409).\nDevuelve el inventario completo de la ONG.",
         "operationId": "declarar_inventario_ongs__cuit__inventario_put",
         "security": [
           {
@@ -486,7 +486,7 @@
             }
           },
           "403": {
-            "description": "La cuenta no es la de la ONG de la ruta (solo se modifica el inventario propio)",
+            "description": "La cuenta no es de servicio (`bonita-service` o `app-service`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -3328,7 +3328,7 @@
     },
     {
       "name": "inventario",
-      "description": "Cada ONG declara lo que tiene (servicio 2)."
+      "description": "El sistema declara lo que tiene cada ONG (servicio 2)."
     },
     {
       "name": "validación",

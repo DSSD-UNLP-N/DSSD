@@ -17,6 +17,7 @@ sys.path.insert(0, str(RAIZ / "bonita" / "scripts"))
 
 import agregar_conector_cierre  # noqa: E402
 import agregar_login_nacional  # noqa: E402
+import agregar_reabrir_y_liberar  # noqa: E402
 import preparar_entorno  # noqa: E402
 
 pytestmark = pytest.mark.skipif(not BOS.exists(), reason="no está entrega-3/entrega42_local.bos")
@@ -52,7 +53,7 @@ def _nombre(conector: str) -> str:
 
 def test_las_tareas_que_llaman_a_nacional_empiezan_con_el_login(jwt_bos):
     con_nacional = {t: cs for t, cs in _tareas_de_servicio(_proc(jwt_bos)).items() if any(":8002/" in c for c in cs)}
-    assert set(con_nacional) == set(agregar_login_nacional.TAREAS)
+    assert set(con_nacional) == set(agregar_login_nacional.TAREAS) | {agregar_reabrir_y_liberar.LIBERAR}
     for tarea, conectores in con_nacional.items():
         assert _nombre(conectores[0]) == "loginNacional", tarea
         assert "http://localhost:8002/login" in conectores[0]
@@ -103,8 +104,8 @@ def test_confirmar_finalizacion_es_tarea_estandar(jwt_bos):
 def test_preparar_entorno_apunta_a_la_nube_con_otra_clave(jwt_bos):
     nube = preparar_entorno.nacional(_proc(jwt_bos), "https://api.ejemplo.com/", "clave-de-la-nube")
     assert "localhost:8002" not in nube and "change-me" not in nube
-    assert nube.count("&quot;https://api.ejemplo.com/") == 6  # 3 logins + evaluar, resolver y cerrar
-    assert nube.count("password: &quot;clave-de-la-nube&quot;") == 3
+    assert nube.count("&quot;https://api.ejemplo.com/") == 8  # 4 logins + evaluar, resolver, liberar y cerrar
+    assert nube.count("password: &quot;clave-de-la-nube&quot;") == 4
     assert nube.count("localhost:8001") == _proc(jwt_bos).count("localhost:8001")  # la app no cambia
 
 
@@ -120,6 +121,40 @@ def test_el_bos_de_la_nube_es_el_local_apuntando_a_render():
         pytest.skip("no está entrega42_nube.bos")
     local, nube = _proc(BOS), _proc(nube_bos)
     assert "localhost:8002" not in nube and "change-me" not in nube
-    assert nube.count("&quot;https://rescuesync-nacional.onrender.com/") == 6
+    assert nube.count("&quot;https://rescuesync-nacional.onrender.com/") == 8
     assert re.sub(r"https://rescuesync-nacional\.onrender\.com|http://localhost:8002", "X", re.sub(r"password: &quot;[^&]+&quot;", "P", nube)) == \
         re.sub(r"https://rescuesync-nacional\.onrender\.com|http://localhost:8002", "X", re.sub(r"password: &quot;[^&]+&quot;", "P", local))
+
+
+def _flujos(proc: str) -> dict[tuple[str, str], str]:
+    """(origen, destino) -> condición, por nombre de nodo."""
+    nombres = dict(re.findall(r'<elements xmi:type="process:\w+" xmi:id="([^"]+)" name="([^"]+)"', proc))
+    flujos = {}
+    for m in re.finditer(r'<connections [^>]*target="([^"]+)" source="([^"]+)"', proc):
+        fin = agregar_conector_cierre.bloque(proc, m.start(), "connections")
+        cond = re.search(r'<condition [^>]*content="([^"]*)"', proc[m.start():fin])
+        flujos[(nombres.get(m.group(2)), nombres.get(m.group(1)))] = cond.group(1) if cond else ""
+    return flujos
+
+
+def test_reformular_y_reabrir_liberan_en_bonita_antes_de_volver_a_convocar(jwt_bos):
+    """Pauta de la cátedra: la liberación la hace Bonita, no la app. REABRIR vuelve a publicar con los mismos lotes."""
+    proc = _proc(jwt_bos)
+    f = _flujos(proc)
+    q = "&quot;"
+    assert f[("Curso de accion", "Liberar Reservas de la Ronda")] ==         f"decisionCoordinador == {q}REFORMULAR{q} || decisionCoordinador == {q}REABRIR{q}"
+    assert f[("Curso de accion", "Adjudicar Ofertas")] == f"decisionCoordinador == {q}PARCIAL{q}"
+    assert ("Liberar Reservas de la Ronda", "Reformular o reabrir") in f
+    assert f[("Reformular o reabrir", "Revisar Informacion y Generar Lotes de Necesidades")] == f"decisionCoordinador == {q}REFORMULAR{q}"
+    assert f[("Reformular o reabrir", "Publicar Convocatoria y Notificar a la Red de ONGs")] == f"decisionCoordinador == {q}REABRIR{q}"
+    assert ("Curso de accion", "Revisar Informacion y Generar Lotes de Necesidades") not in f
+
+    login, liberar = _tareas_de_servicio(proc)["Liberar Reservas de la Ronda"]
+    assert _nombre(login) == "loginNacional" and _nombre(liberar) == "liberarReservas"
+    assert "http://localhost:8002/adjudicaciones/resolucion" in liberar
+    assert "confirmar: []" in liberar and "it.referencia" in liberar
+
+
+def test_agregar_reabrir_no_se_aplica_dos_veces(jwt_bos, tmp_path):
+    with pytest.raises(ValueError):
+        agregar_reabrir_y_liberar.main(str(jwt_bos), str(tmp_path / "otra.bos"))

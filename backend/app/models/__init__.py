@@ -1,6 +1,9 @@
 from app.models.entities import (  # noqa: F401  (importar registra las tablas en Base.metadata)
+    Consorcio,
+    ConsorcioMiembro,
     Emergencia,
     EstadoEmergencia,
+    EstadoMiembro,
     EstadoOferta,
     Gravedad,
     Lote,

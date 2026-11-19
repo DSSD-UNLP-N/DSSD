@@ -1,6 +1,6 @@
 """Resume el estado del modelo Bonita dentro de un .bos sin abrir Studio.
 
-Uso: python inspect_bos.py [ruta al .bos]   (default: entrega-2/RescueSync.bos)
+Uso: python inspect_bos.py [ruta al .bos]   (default: entrega-3/entrega42_local.bos)
 Solo lectura. La raiz interna del zip cambia (entrega4/, entrega41/...), asi que
 se busca por sufijo en vez de hardcodear el nombre.
 """

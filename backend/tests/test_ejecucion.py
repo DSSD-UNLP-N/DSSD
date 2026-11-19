@@ -1,6 +1,7 @@
 """Después de adjudicar: monitoreo, finalización de cada ONG, cierre bilateral, evento CIERRE y avisos.
 Bonita va mockeado (`responses`); la secuencia real se prueba con los escenarios contra Bonita."""
 import threading
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 import pytest
@@ -10,12 +11,12 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import get_settings
 from app.db import Base
-from app.models import (
-    Emergencia, EstadoEmergencia, EstadoOferta, Gravedad, Lote, Municipio, Notificacion, Oferta, OfertaItem, Ong, Usuario,
-)
+from app.models import Emergencia, EstadoEmergencia, EstadoOferta, Notificacion, Oferta, Ong, Usuario
 from app.seed import seed
 from app.services import ejecucion
-from tests.test_ciclo import BASE, CASE, CLAVE, BOMBEROS, CRUZ_ROJA, _estado, _mock_tarea, _tarea_completada
+from tests.conftest import (
+    BOMBEROS, CLAVE, CRUZ_ROJA, cambiar_emergencia, crear_emergencia, estado_de, mock_tarea, tarea_completada,
+)
 
 TAREA_MONITOREAR = "Monitorear Ejecucion del Despliegue"
 TAREA_FINALIZAR = "Confirmar Finalizacion de Actividades"
@@ -25,28 +26,7 @@ TAREA_VALIDAR = "Validar Cierre Operativo Bilateral"
 @pytest.fixture
 def en_ejecucion(seeded):
     """Emergencia EN_EJECUCION con las dos ONGs adjudicadas (4 y 2 paramédicos)."""
-    with seeded() as s:
-        e = Emergencia(municipio_id=s.query(Municipio).one().id, tipo="inundacion", nivel_gravedad=Gravedad.ALTO,
-                       zona_afectada="Centro", descripcion="d", bonita_case_id=CASE,
-                       estado=EstadoEmergencia.EN_EJECUCION)
-        e.lotes = [Lote(recurso="Paramédico", tipo_recurso="PARAMEDICO", cantidad=10, unidad="personas")]
-        s.add(e)
-        s.flush()
-        for cuit, cantidad in ((CRUZ_ROJA, 4), (BOMBEROS, 2)):
-            o = Oferta(emergencia_id=e.id, ong_id=s.query(Ong).filter_by(cuit=cuit).one().id,
-                       estado=EstadoOferta.ADJUDICADA)
-            o.items = [OfertaItem(version=1, lote_id=e.lotes[0].id, recurso="Paramédico", cantidad=cantidad)]
-            s.add(o)
-        s.commit()
-        return e.id
-
-
-def _cambiar(seeded, emergencia_id, **cambios):
-    with seeded() as s:
-        e = s.get(Emergencia, emergencia_id)
-        for k, v in cambios.items():
-            setattr(e, k, v)
-        s.commit()
+    return crear_emergencia(seeded, EstadoEmergencia.EN_EJECUCION, estado_oferta=EstadoOferta.ADJUDICADA)[0]
 
 
 def _estado_oferta(seeded, emergencia_id, cuit):
@@ -60,11 +40,10 @@ def _logins(username):
 
 
 def _monitoreando(seeded, emergencia_id):
-    _cambiar(seeded, emergencia_id, monitoreo_iniciado_en=_ahora())
+    cambiar_emergencia(seeded, emergencia_id, monitoreo_iniciado_en=_ahora())
 
 
 def _ahora():
-    from datetime import datetime, timezone
     return datetime.now(timezone.utc)
 
 
@@ -82,7 +61,7 @@ def test_el_detalle_muestra_la_ejecucion_y_la_ong_solo_ve_la_suya(login, en_ejec
 
 
 def test_antes_de_adjudicar_no_hay_ejecucion(login, seeded, en_ejecucion):
-    _cambiar(seeded, en_ejecucion, estado=EstadoEmergencia.ADJUDICACION)
+    cambiar_emergencia(seeded, en_ejecucion, estado=EstadoEmergencia.ADJUDICACION)
     assert login("coordinador.regional").get(f"/api/emergencias/{en_ejecucion}").json()["ejecucion"] is None
 
 
@@ -90,19 +69,19 @@ def test_antes_de_adjudicar_no_hay_ejecucion(login, seeded, en_ejecucion):
 
 @responses.activate
 def test_el_coordinador_monitorea_y_se_completa_la_tarea_de_bonita(login, seeded, en_ejecucion):
-    _mock_tarea(TAREA_MONITOREAR)
+    mock_tarea(TAREA_MONITOREAR)
 
     r = login("coordinador.regional").post(f"/api/emergencias/{en_ejecucion}/monitorear")
 
     assert r.status_code == 200 and r.json()["ejecucion"]["monitoreo_iniciado"] is True
-    assert _tarea_completada() and len(_logins("coordinador.regional")) == 1
+    assert tarea_completada() and len(_logins("coordinador.regional")) == 1
     r = login("coordinador.regional").post(f"/api/emergencias/{en_ejecucion}/monitorear")
     assert r.status_code == 409 and "ya empezó" in r.json()["detail"]
 
 
 @responses.activate
 def test_si_bonita_no_tiene_la_tarea_de_monitoreo_no_cambia_nada(login, seeded, en_ejecucion):
-    _mock_tarea("Otra tarea")
+    mock_tarea("Otra tarea")
 
     r = login("coordinador.regional").post(f"/api/emergencias/{en_ejecucion}/monitorear")
 
@@ -114,7 +93,7 @@ def test_si_bonita_no_tiene_la_tarea_de_monitoreo_no_cambia_nada(login, seeded, 
 def test_el_monitoreo_es_del_coordinador_y_de_una_emergencia_en_ejecucion(login, seeded, en_ejecucion):
     for usuario in ("operador.municipal", "ong.cruzroja", "auditor"):
         assert login(usuario).post(f"/api/emergencias/{en_ejecucion}/monitorear").status_code == 403, usuario
-    _cambiar(seeded, en_ejecucion, estado=EstadoEmergencia.ADJUDICACION)
+    cambiar_emergencia(seeded, en_ejecucion, estado=EstadoEmergencia.ADJUDICACION)
     assert login("coordinador.regional").post(f"/api/emergencias/{en_ejecucion}/monitorear").status_code == 409
 
 
@@ -123,13 +102,13 @@ def test_el_monitoreo_es_del_coordinador_y_de_una_emergencia_en_ejecucion(login,
 @responses.activate
 def test_cada_ong_finaliza_y_al_terminar_todas_se_completa_la_tarea_de_bonita(login, seeded, en_ejecucion):
     _monitoreando(seeded, en_ejecucion)
-    _mock_tarea(TAREA_FINALIZAR)
+    mock_tarea(TAREA_FINALIZAR)
 
     primera = login("ong.cruzroja").post(f"/api/emergencias/{en_ejecucion}/finalizar")
 
     assert primera.status_code == 200 and primera.json()["ejecucion"]["todas_finalizadas"] is False
     assert _estado_oferta(seeded, en_ejecucion, CRUZ_ROJA) is EstadoOferta.FINALIZADA
-    assert not _tarea_completada()  # todavía falta Bomberos
+    assert not tarea_completada()  # todavía falta Bomberos
     logins_antes = len(_logins("ong.cruzroja"))
     logins_antes_bomberos = len(_logins("ong.bomberos"))
 
@@ -137,7 +116,7 @@ def test_cada_ong_finaliza_y_al_terminar_todas_se_completa_la_tarea_de_bonita(lo
 
     assert ultima.status_code == 200 and ultima.json()["ejecucion"]["todas_finalizadas"] is True
     assert _estado_oferta(seeded, en_ejecucion, BOMBEROS) is EstadoOferta.FINALIZADA
-    assert _tarea_completada()
+    assert tarea_completada()
     # la tarea la completa con su propio usuario la ONG que terminó última
     assert len(_logins("ong.bomberos")) > logins_antes_bomberos
     assert len(_logins("ong.cruzroja")) == logins_antes
@@ -171,7 +150,7 @@ def test_no_se_finaliza_sin_monitoreo_ni_sin_estar_adjudicada(login, seeded, en_
 def test_si_bonita_falla_al_finalizar_la_ultima_la_oferta_no_queda_marcada(login, seeded, en_ejecucion):
     _monitoreando(seeded, en_ejecucion)
     login("ong.bomberos").post(f"/api/emergencias/{en_ejecucion}/finalizar")
-    _mock_tarea("Otra tarea")
+    mock_tarea("Otra tarea")
 
     r = login("ong.cruzroja").post(f"/api/emergencias/{en_ejecucion}/finalizar")
 
@@ -187,19 +166,8 @@ def test_dos_ongs_que_finalizan_a_la_vez_completan_la_tarea_de_bonita_una_sola_v
     Base.metadata.create_all(engine)
     sf = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
     seed(sf)
-    with sf() as s:
-        e = Emergencia(municipio_id=s.query(Municipio).one().id, tipo="inundacion", nivel_gravedad=Gravedad.ALTO,
-                       zona_afectada="Centro", descripcion="d", bonita_case_id=CASE,
-                       estado=EstadoEmergencia.EN_EJECUCION, monitoreo_iniciado_en=_ahora())
-        e.lotes = [Lote(recurso="Paramédico", tipo_recurso="PARAMEDICO", cantidad=10, unidad="personas")]
-        s.add(e)
-        s.flush()
-        for cuit in (CRUZ_ROJA, BOMBEROS):
-            o = Oferta(emergencia_id=e.id, ong_id=s.query(Ong).filter_by(cuit=cuit).one().id, estado=EstadoOferta.ADJUDICADA)
-            o.items = [OfertaItem(version=1, lote_id=e.lotes[0].id, recurso="Paramédico", cantidad=1)]
-            s.add(o)
-        s.commit()
-        emergencia_id = e.id
+    emergencia_id, _ = crear_emergencia(sf, EstadoEmergencia.EN_EJECUCION, ofertas=((CRUZ_ROJA, 1), (BOMBEROS, 1)),
+                                        estado_oferta=EstadoOferta.ADJUDICADA, monitoreo_iniciado_en=_ahora())
 
     completadas, errores = [], []
     monkeypatch.setattr(ejecucion, "completar_en_bonita", lambda *args, **kwargs: completadas.append(args[2]))
@@ -247,14 +215,14 @@ def _finalizadas(seeded, emergencia_id):
 def test_el_coordinador_valida_el_cierre_cuando_todas_finalizaron(login, seeded, en_ejecucion):
     _monitoreando(seeded, en_ejecucion)
     _finalizadas(seeded, en_ejecucion)
-    _mock_tarea(TAREA_VALIDAR)
+    mock_tarea(TAREA_VALIDAR)
 
     r = login("coordinador.regional").post(f"/api/emergencias/{en_ejecucion}/validar-cierre")
 
     assert r.status_code == 200 and r.json()["ejecucion"]["cierre_validado"] is True
-    assert _tarea_completada() and len(_logins("coordinador.regional")) == 1
+    assert tarea_completada() and len(_logins("coordinador.regional")) == 1
     # Bonita libera y avisa: hasta ese evento la emergencia sigue en ejecución
-    assert _estado(seeded, en_ejecucion) is EstadoEmergencia.EN_EJECUCION
+    assert estado_de(seeded, en_ejecucion) is EstadoEmergencia.EN_EJECUCION
     again = login("coordinador.regional").post(f"/api/emergencias/{en_ejecucion}/validar-cierre")
     assert again.status_code == 409 and "ya fue validado" in again.json()["detail"]
 
@@ -282,7 +250,7 @@ def _evento_cierre(client, emergencia_id, cuits, clave=CLAVE):
 def test_el_evento_de_cierre_resuelve_la_emergencia_y_avisa_a_las_ongs_cerradas(client, seeded, en_ejecucion):
     assert _evento_cierre(client, en_ejecucion, [CRUZ_ROJA]).status_code == 204
 
-    assert _estado(seeded, en_ejecucion) is EstadoEmergencia.RESUELTA
+    assert estado_de(seeded, en_ejecucion) is EstadoEmergencia.RESUELTA
     with seeded() as s:
         avisos = s.scalars(select(Notificacion)).all()
         assert [a.ong_id for a in avisos] == [s.query(Ong).filter_by(cuit=CRUZ_ROJA).one().id]
@@ -302,7 +270,7 @@ def test_el_evento_de_cierre_exige_la_clave_el_estado_y_datos(client, seeded, en
     assert _evento_cierre(client, en_ejecucion, [CRUZ_ROJA], clave={}).status_code == 401
     assert _evento_cierre(client, en_ejecucion, []).status_code == 422
     assert _evento_cierre(client, 9999, [CRUZ_ROJA]).status_code == 404
-    _cambiar(seeded, en_ejecucion, estado=EstadoEmergencia.ADJUDICACION)
+    cambiar_emergencia(seeded, en_ejecucion, estado=EstadoEmergencia.ADJUDICACION)
     assert _evento_cierre(client, en_ejecucion, [CRUZ_ROJA]).status_code == 409
 
 

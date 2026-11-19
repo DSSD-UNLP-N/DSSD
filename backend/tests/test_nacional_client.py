@@ -38,39 +38,6 @@ def test_cualquier_falla_sale_como_nacional_error(falla):
         NacionalClient(BASE).tipos_recurso()
 
 
-@responses.activate
-def test_validar_manda_la_gravedad_y_los_items_y_devuelve_el_resultado():
-    import json
-
-    resultado = {"alcanza_todo": False, "resultados": [{"tipo_recurso": "PARAMEDICO", "alcanza": False}]}
-    responses.add(responses.POST, f"{BASE}/validaciones", json=resultado)
-    items = [{"cuit": "30-54666544-5", "tipo_recurso": "PARAMEDICO", "cantidad": 5}]
-
-    assert NacionalClient(BASE).validar("ALTO", items) == resultado
-    assert json.loads(responses.calls[0].request.body) == {"gravedad": "ALTO", "items": items}
-
-
-@responses.activate
-def test_validar_con_422_o_caida_sale_como_nacional_error():
-    responses.add(responses.POST, f"{BASE}/validaciones", status=422, json={"detail": "Tipo de recurso inexistente: X"})
-    with pytest.raises(NacionalError):
-        NacionalClient(BASE).validar("ALTO", [])
-
-
-@responses.activate
-def test_adjudicar_recursos_manda_el_payload():
-    resultado = {"id": 4, "referencia_id": "emergencia-12"}
-    responses.add(responses.POST, f"{BASE}/adjudicaciones", json=resultado, status=201)
-    datos = {
-        "referencia_id": "emergencia-12",
-        "ong_id": 1,
-        "emergencia_id": 12,
-        "items": [{"inventario_id": 3, "cantidad": 2}],
-    }
-
-    assert NacionalClient(BASE).adjudicar_recursos_nacional(datos) == resultado
-
-
 # --- JWT: la app entra con su cuenta de servicio -------------------------------------------------------------------
 
 def _login(token="t1", **extra):
@@ -152,7 +119,7 @@ def test_get_nacional_usa_la_cuenta_de_servicio_de_la_configuracion():
     assert (c.username, c.password) == (s.nacional_service_username, s.nacional_service_password)
 
 
-# --- Alta de ONG: registro público e inventario con el token de la ONG ---------------------------------------------
+# --- Alta de ONG: registro público e inventario con la cuenta de servicio ---------------------------------------------
 
 CUIT_ONG = "30-71234567-8"
 
@@ -166,7 +133,7 @@ def _registrar(cliente=None):
 def test_registrar_ong_no_usa_token_de_servicio():
     responses.add(responses.POST, f"{BASE}/ongs", status=201,
                   json={"access_token": "t1", "token_type": "bearer", "user": {}})
-    assert _registrar() == "t1"
+    assert _registrar() is None
     assert [c.request.url for c in responses.calls] == [f"{BASE}/ongs"]
     assert _auth(0) is None
 
@@ -200,9 +167,49 @@ def test_registrar_ong_timeout_status_none():
 
 
 @responses.activate
-def test_declarar_inventario_manda_bearer_de_la_ong():
+def test_declarar_inventario_usa_la_cuenta_de_servicio():
+    _login("t1")
     responses.add(responses.PUT, f"{BASE}/ongs/{CUIT_ONG}/inventario", json=[])
     items = [{"tipo_recurso": "RACION_ALIMENTO", "cantidad_total": 0}]
-    assert _cliente().declarar_inventario(CUIT_ONG, "t1", items) == []
-    assert _auth(0) == "Bearer t1"
-    assert json.loads(responses.calls[0].request.body) == {"items": items}
+    assert _cliente().declarar_inventario(CUIT_ONG, items) == []
+    assert responses.calls[0].request.url == f"{BASE}/login"
+    assert _auth(1) == "Bearer t1"
+    assert json.loads(responses.calls[1].request.body) == {"items": items}
+
+
+@responses.activate
+def test_declarar_inventario_403_sale_como_nacional_error():
+    _login("t1")
+    responses.add(responses.PUT, f"{BASE}/ongs/{CUIT_ONG}/inventario", status=403, json={"detail": "no"})
+    with pytest.raises(NacionalError):
+        _cliente().declarar_inventario(CUIT_ONG, [{"tipo_recurso": "RACION_ALIMENTO", "cantidad_total": 1}])
+
+
+# --- Inventario de la ONG: la app lo lee y lo declara con su cuenta de servicio ------------------------------------
+
+@responses.activate
+def test_ficha_ong_lee_la_ficha_con_la_cuenta_de_servicio():
+    responses.add(responses.POST, f"{BASE}/login", json={"access_token": "tok-servicio"})
+    ficha = {"cuit": "30-54666544-5", "nombre": "Cruz Roja", "estado": "HABILITADA", "certificaciones": [], "inventario": []}
+    responses.add(responses.GET, f"{BASE}/ongs/30-54666544-5", json=ficha)
+
+    assert NacionalClient(BASE, username="app-service", password="x").ficha_ong("30-54666544-5") == ficha
+    assert responses.calls[1].request.headers["Authorization"] == "Bearer tok-servicio"
+
+
+@responses.activate
+def test_un_4xx_conserva_el_status_y_el_detail_de_nacional():
+    responses.add(responses.PUT, f"{BASE}/ongs/30-54666544-5/inventario", status=409,
+                  json={"detail": "PARAMEDICO: no se puede declarar 2, hay 3 comprometidos"})
+    with pytest.raises(NacionalError) as exc:
+        NacionalClient(BASE).declarar_inventario("30-54666544-5", [{"tipo_recurso": "PARAMEDICO", "cantidad_total": 2}])
+    assert exc.value.status == 409
+    assert str(exc.value) == "PARAMEDICO: no se puede declarar 2, hay 3 comprometidos"
+
+
+@responses.activate
+def test_sin_respuesta_el_status_queda_vacio():
+    responses.add(responses.GET, f"{BASE}/ongs/30-54666544-5", body=requests.ConnectionError("sin red"))
+    with pytest.raises(NacionalError) as exc:
+        NacionalClient(BASE).ficha_ong("30-54666544-5")
+    assert exc.value.status is None

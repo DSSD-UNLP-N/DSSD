@@ -88,3 +88,15 @@ def test_sesion_de_usuario_borrado_deja_de_valer(login, seeded):
         s.execute(delete(Usuario).where(Usuario.username == "auditor"))
         s.commit()
     assert c.get("/api/auth/me").status_code == 401
+
+
+def test_login_y_me_devuelven_el_ong_id_de_la_ong_y_null_para_los_demas(client):
+    r = client.post("/api/auth/login", json={"username": "ong.cruzroja", "password": "demo1234"})
+    assert r.status_code == 200
+    ong_id = r.json()["ong_id"]
+    assert isinstance(ong_id, int)
+    assert client.get("/api/auth/me").json()["ong_id"] == ong_id
+    client.post("/api/auth/logout")
+    r = client.post("/api/auth/login", json={"username": "operador.municipal", "password": "demo1234"})
+    assert r.json()["ong_id"] is None
+    assert client.get("/api/auth/me").json()["ong_id"] is None

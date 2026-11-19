@@ -8,10 +8,9 @@ from urllib.parse import urlparse
 import pytest
 import responses
 
-from app.core.config import get_settings
-from app.models import Emergencia, EstadoEmergencia, Gravedad, Lote, Municipio, TipoLote
+from app.models import Emergencia, EstadoEmergencia, Lote, TipoLote
+from tests.conftest import BASE, crear_emergencia, mock_ejecutar, mock_login
 
-BASE = get_settings().bonita_base_url
 BASE_PATH = urlparse(BASE).path
 CASE = 4242
 LOTE = {"tipo_recurso": "PARAMEDICO", "cantidad": 5, "tipo": "PRINCIPAL"}
@@ -23,13 +22,8 @@ def _futuro(horas=48):
 
 @pytest.fixture
 def emergencia(seeded):
-    with seeded() as s:
-        municipio = s.query(Municipio).one()
-        e = Emergencia(municipio_id=municipio.id, tipo="inundacion", nivel_gravedad=Gravedad.ALTO,
-                       zona_afectada="Centro", descripcion="Río desbordado", bonita_case_id=CASE)
-        s.add(e)
-        s.commit()
-        return e.id
+    return crear_emergencia(seeded, EstadoEmergencia.REGISTRADA, lotes=(), ofertas=(), descripcion="Río desbordado",
+                            bonita_case_id=CASE)[0]
 
 
 def _con_lote(seeded, emergencia_id, **kwargs):
@@ -40,19 +34,15 @@ def _con_lote(seeded, emergencia_id, **kwargs):
 
 def _mock_publicacion(revisar_pendiente=True):
     """Dos logins (admin y coordinador), las tareas del caso y el seteo de la ventana."""
-    for token in ("tok-admin", "tok-coord"):
-        responses.add(responses.POST, f"{BASE}/loginservice", status=204,
-                      headers={"Set-Cookie": f"X-Bonita-API-Token={token}; Path=/"})
+    mock_login("tok-admin")
+    mock_login("tok-coord")
     url_tareas = f"{BASE}/API/bpm/humanTask"
     if revisar_pendiente:
         responses.add(responses.GET, url_tareas, json=[{"id": "1", "displayName": "Revisar Informacion y Generar Lotes de Necesidades"}])
     responses.add(responses.GET, url_tareas, json=[{"id": "2", "displayName": "Publicar Convocatoria y Notificar a la Red de ONGs"}])
-    responses.add(responses.GET, f"{BASE}/API/system/session/unusedid", json={"user_id": "77"})
-    responses.add(responses.PUT, f"{BASE}/API/bpm/userTask/1", status=200)
-    responses.add(responses.POST, f"{BASE}/API/bpm/userTask/1/execution", status=200)
+    mock_ejecutar("1")
     responses.add(responses.PUT, f"{BASE}/API/bpm/caseVariable/{CASE}/ventanaOfertasISO", status=200)
-    responses.add(responses.PUT, f"{BASE}/API/bpm/userTask/2", status=200)
-    responses.add(responses.POST, f"{BASE}/API/bpm/userTask/2/execution", status=200)
+    mock_ejecutar("2")
 
 
 def _paths():
@@ -158,6 +148,38 @@ def test_no_se_puede_borrar_un_lote_de_otra_emergencia(login, emergencia, seeded
     assert r.status_code == 400 and "no pertenece a esta emergencia" in r.json()["detail"]
 
 
+# --- cambiar la cantidad (al reformular) ---------------------------------
+
+def _lote_de(seeded, emergencia_id):
+    with seeded() as s:
+        return s.query(Lote).filter_by(emergencia_id=emergencia_id).one().id
+
+
+def test_cambiar_la_cantidad_de_un_lote_antes_de_publicar(login, emergencia, seeded):
+    _con_lote(seeded, emergencia)
+    lote = _lote_de(seeded, emergencia)
+    r = login("coordinador.regional").patch(f"{_lotes(emergencia)}/{lote}", json={"cantidad": 40})
+    assert r.status_code == 200 and r.json()["cantidad"] == 40
+    with seeded() as s:
+        assert s.get(Lote, lote).cantidad == 40
+
+
+def test_cambiar_la_cantidad_valida_permisos_estado_y_datos(login, emergencia, seeded):
+    _con_lote(seeded, emergencia)
+    lote = _lote_de(seeded, emergencia)
+    url = f"{_lotes(emergencia)}/{lote}"
+    for usuario in ("operador.municipal", "ong.cruzroja", "auditor"):
+        assert login(usuario).patch(url, json={"cantidad": 3}).status_code in (403, 404), usuario
+    c = login("coordinador.regional")
+    assert c.patch(url, json={"cantidad": 0}).status_code == 422
+    assert c.patch(f"{_lotes(emergencia)}/999", json={"cantidad": 3}).status_code == 400
+    with seeded() as s:
+        s.get(Emergencia, emergencia).estado = EstadoEmergencia.CONVOCATORIA
+        s.commit()
+    r = c.patch(url, json={"cantidad": 3})
+    assert r.status_code == 400 and "publicada" in r.json()["detail"]
+
+
 def test_emergencia_inexistente_da_404(login):
     assert login("coordinador.regional").post(_lotes(999), json=LOTE).status_code == 404
 
@@ -192,6 +214,22 @@ def test_publicar_completa_las_dos_tareas_y_setea_la_ventana(login, emergencia, 
     ]
     enviado = json.loads(next(c.request.body for c in responses.calls if "caseVariable" in c.request.url))
     assert enviado["type"] == "java.lang.String" and enviado["value"].startswith(ventana)
+
+
+@responses.activate
+def test_la_ventana_se_guarda_en_los_mismos_segundos_que_recibe_bonita(login, emergencia, seeded):
+    """Bonita recibe la ventana en segundos; con milisegundos guardados, su timer vencía antes que la ventana de la
+    app y el GET de ofertas daba 409 (caso trabado, visto en la prueba con Bonita real del 10/11)."""
+    _con_lote(seeded, emergencia)
+    _mock_publicacion()
+    ventana = (datetime.now(timezone.utc) + timedelta(hours=2)).replace(microsecond=351000)
+    r = login("coordinador.regional").post(_publicar(emergencia), json={"ventana_fin": ventana.isoformat()})
+
+    assert r.status_code == 200
+    enviado = json.loads(next(c.request.body for c in responses.calls if "caseVariable" in c.request.url))["value"]
+    with seeded() as s:
+        guardada = s.get(Emergencia, emergencia).ventana_ofertas_fin.replace(tzinfo=timezone.utc)
+    assert guardada == datetime.fromisoformat(enviado) == ventana.replace(microsecond=0)
 
 
 @responses.activate
@@ -244,7 +282,7 @@ def test_ventana_invalida_o_pasada_no_publica(login, emergencia, seeded, ventana
 @responses.activate
 def test_si_bonita_falla_la_emergencia_queda_sin_publicar(login, emergencia, seeded):
     _con_lote(seeded, emergencia)
-    responses.add(responses.POST, f"{BASE}/loginservice", status=500)
+    mock_login(status=500)
     r = login("coordinador.regional").post(_publicar(emergencia), json={"ventana_fin": _futuro()})
     assert r.status_code == 400 and "No se pudo publicar" in r.json()["detail"]
     with seeded() as s:

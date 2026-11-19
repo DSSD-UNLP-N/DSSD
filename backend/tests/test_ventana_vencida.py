@@ -3,19 +3,17 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.models import Emergencia, EstadoEmergencia, Gravedad, Lote, Municipio, TipoLote
+from app.models import Emergencia, EstadoEmergencia, TipoLote
 from app.services.emergencias import cerrar_ventanas_vencidas
+from tests.conftest import crear_emergencia
 
 
 def _convocatoria(seeded, fin):
-    with seeded() as s:
-        e = Emergencia(municipio_id=s.query(Municipio).one().id, tipo="terremoto", nivel_gravedad=Gravedad.ALTO,
-                       zona_afectada="Centro", descripcion="x", bonita_case_id=1,
-                       estado=EstadoEmergencia.CONVOCATORIA, ventana_ofertas_fin=fin)
-        e.lotes = [Lote(recurso="Agua", cantidad=100, unidad="l", tipo=TipoLote.PRINCIPAL)]
-        s.add(e)
-        s.commit()
-        return e.id, e.lotes[0].id
+    emergencia_id, (lote_id,) = crear_emergencia(
+        seeded, EstadoEmergencia.CONVOCATORIA, tipo="terremoto", descripcion="x", bonita_case_id=1,
+        ventana_ofertas_fin=fin, ofertas=(),
+        lotes=({"recurso": "Agua", "cantidad": 100, "unidad": "l", "tipo": TipoLote.PRINCIPAL},))
+    return emergencia_id, lote_id
 
 
 @pytest.fixture

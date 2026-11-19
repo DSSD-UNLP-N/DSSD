@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session
 from app.config import Settings, get_settings
 from app.db import get_db
 from app.models import Cuenta, RolCuenta
-from app.schemas import CuitPath
 
 _ITERATIONS = 200_000
 _bearer = HTTPBearer(auto_error=False)
@@ -90,10 +89,4 @@ def require_servicio(
     servicios = (settings.bonita_service_username, settings.app_service_username)
     if cuenta.rol is not RolCuenta.BONITA or cuenta.username not in servicios:
         raise HTTPException(status_code=403, detail="Se requiere una cuenta de servicio (Bonita o la app)")
-    return cuenta
-
-
-def require_ong_account(cuit: CuitPath, cuenta: Cuenta = Depends(get_current_account)) -> Cuenta:
-    if cuenta.rol is not RolCuenta.ONG or cuenta.ong is None or cuenta.ong.cuit != cuit:
-        raise HTTPException(status_code=403, detail="Solo podés modificar el inventario de tu propia ONG")
     return cuenta

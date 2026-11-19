@@ -30,6 +30,9 @@ entrega-[3-9]/*.bos
 !entrega-[3-9]/*_local.bos
 !entrega-[3-9]/*_nube.bos
 
+# Backups locales (p. ej. backend/dev.db.bak-AAAAMMDD)
+*.bak*
+
 # Python
 __pycache__/
 *.pyc

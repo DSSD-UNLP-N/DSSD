@@ -4,3 +4,6 @@ dist
 .env.*
 !.env.example
 *.local
+*.tsbuildinfo
+vite.log
+vite.err

@@ -13,6 +13,8 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+sys.stdout.reconfigure(errors="replace")  # consola de Windows en cp1252: que un carácter raro no tape la falla
+
 RAIZ = Path(__file__).resolve().parent.parent
 VENV = RAIZ / "backend" / ".venv" / "Scripts" / "python.exe"
 PY = str(VENV if VENV.exists() else sys.executable)

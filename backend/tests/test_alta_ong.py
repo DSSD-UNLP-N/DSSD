@@ -7,28 +7,18 @@ from app.core.config import get_settings
 from app.core.security import verify_password
 from app.integrations.nacional import NacionalError
 from app.models import Ong, Rol
-from app.services.alta_ong import AltaOngError, DatosAlta, alta_ong, normalizar_cuit
+from app.schemas.api import AltaOngIn
+from app.services.alta_ong import AltaOngError, alta_ong, normalizar_cuit
+from tests.conftest import mock_bonita_alta_ong, mock_login
 
-BASE = get_settings().bonita_base_url
 RUBROS = [{"tipo_recurso": "PARAMEDICO", "cantidad_total": 4}, {"tipo_recurso": "RACION_ALIMENTO", "cantidad_total": 0}]
 
 
-def _datos(**kw) -> DatosAlta:
+def _datos(**kw) -> AltaOngIn:
     base = dict(ong_nombre="Techo Digno", cuit="30-71234567-8", nombre="Ana Paz", username="ong.techo",
                 password="secreto123", rubros=RUBROS)
     base.update(kw)
-    return DatosAlta(**base)
-
-
-def _mock_bonita_ok(usuario_existente=None):
-    responses.add(responses.POST, f"{BASE}/loginservice", status=204,
-                  headers={"Set-Cookie": "X-Bonita-API-Token=tok; Path=/"})
-    responses.add(responses.GET, f"{BASE}/API/identity/user", json=usuario_existente or [])
-    responses.add(responses.POST, f"{BASE}/API/identity/user", json={"id": "77"})
-    responses.add(responses.GET, f"{BASE}/API/identity/group", json=[{"id": "5"}])
-    responses.add(responses.GET, f"{BASE}/API/identity/role", json=[{"id": "3"}])
-    responses.add(responses.POST, f"{BASE}/API/identity/membership", status=200, json={})
-    responses.add(responses.DELETE, f"{BASE}/API/identity/user/77", status=200)
+    return AltaOngIn(**base)
 
 
 def _llamadas(metodo, sufijo):
@@ -42,7 +32,7 @@ def _ongs(factory):
 
 @responses.activate
 def test_alta_ok_crea_en_los_tres_sistemas(seeded, nacional):
-    _mock_bonita_ok()
+    mock_bonita_alta_ong()
     with seeded() as s:
         u = alta_ong(s, get_settings(), nacional, _datos())
         assert u.rol == Rol.ONG
@@ -80,7 +70,7 @@ def test_cuit_sin_guiones_se_normaliza_y_detecta_duplicado(seeded, nacional):
 
 @responses.activate
 def test_usuario_ya_existe_en_bonita(seeded, nacional):
-    _mock_bonita_ok(usuario_existente=[{"id": "9"}])
+    mock_bonita_alta_ong(usuario_existente=[{"id": "9"}])
     with seeded() as s:
         with pytest.raises(AltaOngError) as e:
             alta_ong(s, get_settings(), nacional, _datos())
@@ -91,7 +81,7 @@ def test_usuario_ya_existe_en_bonita(seeded, nacional):
 
 @responses.activate
 def test_bonita_login_falla_no_crea_nada(seeded, nacional):
-    responses.add(responses.POST, f"{BASE}/loginservice", status=401)
+    mock_login(status=401)
     with seeded() as s:
         with pytest.raises(AltaOngError) as e:
             alta_ong(s, get_settings(), nacional, _datos())
@@ -102,7 +92,7 @@ def test_bonita_login_falla_no_crea_nada(seeded, nacional):
 
 @responses.activate
 def test_nacional_409_borra_usuario_bonita(seeded, nacional):
-    _mock_bonita_ok()
+    mock_bonita_alta_ong()
     nacional.falla_registro = NacionalError("El CUIT ya está registrado", 409)
     with seeded() as s:
         with pytest.raises(AltaOngError) as e:
@@ -115,7 +105,7 @@ def test_nacional_409_borra_usuario_bonita(seeded, nacional):
 
 @responses.activate
 def test_nacional_4xx_pasa_status_y_detalle(seeded, nacional):
-    _mock_bonita_ok()
+    mock_bonita_alta_ong()
     nacional.falla_registro = NacionalError("La contraseña es muy corta", 422)
     with seeded() as s:
         with pytest.raises(AltaOngError) as e:
@@ -128,7 +118,7 @@ def test_nacional_4xx_pasa_status_y_detalle(seeded, nacional):
 
 @responses.activate
 def test_nacional_caido_borra_usuario_bonita(seeded, nacional):
-    _mock_bonita_ok()
+    mock_bonita_alta_ong()
     nacional.falla_registro = NacionalError("timeout", None)
     with seeded() as s:
         with pytest.raises(AltaOngError) as e:
@@ -139,7 +129,7 @@ def test_nacional_caido_borra_usuario_bonita(seeded, nacional):
 
 @responses.activate
 def test_falla_inventario_avisa_que_quedo_sin_rubros(seeded, nacional):
-    _mock_bonita_ok()
+    mock_bonita_alta_ong()
     nacional.falla_inventario = NacionalError("tipo inexistente", 404)
     with seeded() as s:
         with pytest.raises(AltaOngError) as e:
@@ -147,5 +137,6 @@ def test_falla_inventario_avisa_que_quedo_sin_rubros(seeded, nacional):
     assert e.value.status == 502
     assert "sin rubros" in str(e.value)
     assert "PUT /ongs/30-71234567-8/inventario" in str(e.value)
+    assert "cuenta de servicio" in str(e.value)
     assert len(_llamadas("DELETE", "/API/identity/user/77")) == 1
     assert "30-71234567-8" not in _ongs(seeded)

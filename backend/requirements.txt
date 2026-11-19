@@ -8,3 +8,4 @@ sqlalchemy==2.0.54
 psycopg[binary]==3.3.6
 alembic==1.20.0
 itsdangerous==2.2.0
+tzdata==2026.6  # zoneinfo de Argentina para los indicadores (Windows no trae la base de zonas)

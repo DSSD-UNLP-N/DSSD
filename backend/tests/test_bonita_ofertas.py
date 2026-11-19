@@ -1,50 +1,31 @@
 """GET /api/bonita/emergencias/{id}/ofertas: lo que Bonita le pide a la app al vencer la ventana."""
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 import pytest
 
-from app.models import (
-    Emergencia, EstadoEmergencia, Lote, Municipio, Oferta, OfertaItem, Ong,
-)
-
-from tests.conftest import PASSWORD
-
-CLAVE = {"X-Api-Key": "rescuesync-dev-key"}
-CRUZ_ROJA = "30-54666544-5"
-
-
-def _sin_zona(delta):
-    return datetime.now(timezone.utc).replace(tzinfo=None) + delta
+from app.models import Emergencia, EstadoEmergencia, Oferta, OfertaItem, Ong
+from tests.conftest import CLAVE, CRUZ_ROJA, PASSWORD, crear_emergencia, estado_de, sin_zona
 
 
 @pytest.fixture
 def vencida(seeded):
     """Emergencia con ventana vencida, 2 lotes (uno sin tipo) y la oferta de Cruz Roja en la versión 2."""
+    emergencia_id, (pm, libre) = crear_emergencia(
+        seeded, EstadoEmergencia.CONVOCATORIA, nivel_gravedad="ALTO", bonita_case_id=None,
+        ventana_ofertas_fin=sin_zona(-timedelta(minutes=1)), ofertas=(),
+        lotes=({"recurso": "Paramédicos", "tipo_recurso": "PARAMEDICO", "cantidad": 10, "unidad": "personas"},
+               {"recurso": "Libre", "tipo_recurso": None, "cantidad": 3, "unidad": "u"}))
     with seeded() as s:
-        e = Emergencia(municipio_id=s.query(Municipio).one().id, tipo="inundacion", nivel_gravedad="ALTO",
-                       zona_afectada="Centro", descripcion="d", estado=EstadoEmergencia.CONVOCATORIA,
-                       ventana_ofertas_fin=_sin_zona(-timedelta(minutes=1)))
-        e.lotes = [Lote(recurso="Paramédicos", tipo_recurso="PARAMEDICO", cantidad=10, unidad="personas"),
-                   Lote(recurso="Libre", tipo_recurso=None, cantidad=3, unidad="u")]
-        s.add(e)
-        s.flush()
-        ong = s.query(Ong).filter_by(cuit=CRUZ_ROJA).one()
-        o = Oferta(emergencia_id=e.id, ong_id=ong.id, version_actual=2)
+        o = Oferta(emergencia_id=emergencia_id, ong_id=s.query(Ong).filter_by(cuit=CRUZ_ROJA).one().id, version_actual=2)
         s.add(o)
         s.flush()
-        pm, libre = e.lotes
         s.add_all([  # la versión 1 no tiene que salir; en la 2 el lote libre no se valida
-            OfertaItem(oferta_id=o.id, version=1, lote_id=pm.id, recurso="p", cantidad=1),
-            OfertaItem(oferta_id=o.id, version=2, lote_id=pm.id, recurso="p", cantidad=4),
-            OfertaItem(oferta_id=o.id, version=2, lote_id=libre.id, recurso="l", cantidad=2),
+            OfertaItem(oferta_id=o.id, version=1, lote_id=pm, recurso="p", cantidad=1),
+            OfertaItem(oferta_id=o.id, version=2, lote_id=pm, recurso="p", cantidad=4),
+            OfertaItem(oferta_id=o.id, version=2, lote_id=libre, recurso="l", cantidad=2),
         ])
         s.commit()
-        return e.id, pm.id
-
-
-def _estado(seeded, emergencia_id):
-    with seeded() as s:
-        return s.get(Emergencia, emergencia_id).estado
+    return emergencia_id, pm
 
 
 def test_sin_clave_o_con_clave_mala_es_401(client, vencida):
@@ -72,7 +53,7 @@ def test_devuelve_el_consolidado_del_contrato(client, vencida):
 def test_pasa_a_en_evaluacion_y_repetirlo_devuelve_lo_mismo(client, seeded, vencida):
     url = f"/api/bonita/emergencias/{vencida[0]}/ofertas"
     primera = client.get(url, headers=CLAVE)
-    assert _estado(seeded, vencida[0]) is EstadoEmergencia.EN_EVALUACION
+    assert estado_de(seeded, vencida[0]) is EstadoEmergencia.EN_EVALUACION
     segunda = client.get(url, headers=CLAVE)
     assert segunda.status_code == 200 and segunda.json() == primera.json()
 
@@ -88,11 +69,11 @@ def test_una_oferta_retirada_no_figura(client, seeded, vencida):
 
 def test_con_la_ventana_abierta_es_409_y_no_cambia_el_estado(client, seeded, vencida):
     with seeded() as s:
-        s.get(Emergencia, vencida[0]).ventana_ofertas_fin = _sin_zona(timedelta(hours=1))
+        s.get(Emergencia, vencida[0]).ventana_ofertas_fin = sin_zona(timedelta(hours=1))
         s.commit()
     r = client.get(f"/api/bonita/emergencias/{vencida[0]}/ofertas", headers=CLAVE)
     assert r.status_code == 409
-    assert _estado(seeded, vencida[0]) is EstadoEmergencia.CONVOCATORIA
+    assert estado_de(seeded, vencida[0]) is EstadoEmergencia.CONVOCATORIA
 
 
 def test_ya_adjudicada_es_409(client, seeded, vencida):
@@ -196,3 +177,14 @@ def test_el_evento_de_una_emergencia_inexistente_es_404_y_uno_mal_formado_es_422
     r = client.post(f"/api/bonita/emergencias/{emergencia_id}/eventos", headers=CLAVE,
                     json={"tipo": "OTRO", "resultado": {}})
     assert r.status_code == 422
+
+
+@pytest.mark.parametrize("metodo, ruta, cuerpo", [
+    ("GET", "ofertas", None),
+    ("POST", "eventos", {"tipo": "EVALUACION", "resultado": _evaluacion(9999, 1)}),
+    ("POST", "eventos", {"tipo": "ADJUDICACION", "adjudicadas": [CRUZ_ROJA], "no_adjudicadas": []}),
+    ("POST", "eventos", {"tipo": "CIERRE", "cuits": [CRUZ_ROJA]}),
+])
+def test_emergencia_inexistente_es_404_con_el_detail_que_esperan_los_conectores(client, metodo, ruta, cuerpo):
+    r = client.request(metodo, f"/api/bonita/emergencias/9999/{ruta}", headers=CLAVE, json=cuerpo)
+    assert (r.status_code, r.json()) == (404, {"detail": "Emergencia no encontrada"})

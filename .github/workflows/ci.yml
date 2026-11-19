@@ -41,7 +41,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.14"
+          python-version: "3.12" # la del Dockerfile que se despliega en Render
           cache: pip
           cache-dependency-path: nacional/requirements*.txt
       - run: pip install -r requirements-dev.txt
@@ -123,7 +123,6 @@ jobs:
         # Genera pedidos válidos y hostiles a partir de /openapi.json. Lo que SQLite deja pasar y Postgres rechaza
         # (NUL, enteros de más de 32 bits) aparece acá como 500. La semilla queda en el log para reproducir.
         run: |
-          pip install "schemathesis==4.32.3"
           TOKEN=$(curl -sf -X POST http://localhost:8002/login -H 'Content-Type: application/json' \
             -d "{\"username\":\"bonita-service\",\"password\":\"$BONITA_SERVICE_PASSWORD\"}" \
             | python -c "import json,sys; print(json.load(sys.stdin)['access_token'])")

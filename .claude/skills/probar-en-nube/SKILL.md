@@ -24,7 +24,7 @@ La clave de Render está en las variables del servicio (`BONITA_SERVICE_PASSWORD
 ## 2. Con Bonita real (desde `backend/`, con `PYTHONIOENCODING=utf-8`)
 ```
 python scripts/correr_escenarios.py --solo evaluacion,tope,adjudicacion,cierre --sin-unitarios   # 26+39+34+28, ~10 min, ~16 casos
-python scripts/correr_ui.py --completo                                                           # e2e_ui 59, parada3 50, parada2 25 y 46, ~6 min
+python scripts/correr_ui.py --completo                                                           # e2e_ui 58, parada3 50, parada2 27 y 48, camino feliz 50, reabrir 30, ~14 min
 python scripts/e2e_alta_ong.py --ofertar                                                         # 16, deja una emergencia abierta
 ```
 `variantes` y `jwt` apagan Nacional y rotan claves: **solo en local** (175 y 39). Costo en casos: evaluación 2, adjudicación 2, cierre 1, tope 3,

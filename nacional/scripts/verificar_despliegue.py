@@ -25,6 +25,7 @@ import urllib.error
 import urllib.request
 
 CRUZ_ROJA, BOMBEROS, SUSPENDIDA = "30-54666544-5", "30-68522415-9", "30-70000000-1"
+INEXISTENTE = "99-99999999-9"  # bien formado, no registrado
 ONG_DEMO, CLAVE_DEMO = "ong.cruzroja", "demo1234"
 
 
@@ -132,7 +133,7 @@ def _correr(v: Verificador, args: argparse.Namespace) -> int:
         _, ficha = v.pedir("GET", f"/ongs/{CRUZ_ROJA}")
         paramedicos = next((i for i in ficha.get("inventario", []) if i["tipo_recurso"] == "PARAMEDICO"), None)
         if paramedicos and paramedicos["cantidad_total"] != 4 and paramedicos["cantidad_comprometida"] == 0:
-            v.pedir("PUT", f"/ongs/{CRUZ_ROJA}/inventario", {"items": [{"tipo_recurso": "PARAMEDICO", "cantidad_total": 4}]}, token=ong)
+            v.pedir("PUT", f"/ongs/{CRUZ_ROJA}/inventario", {"items": [{"tipo_recurso": "PARAMEDICO", "cantidad_total": 4}]})
             print("     (se restauró el inventario de demo: Cruz Roja con 4 paramédicos)")
     v.check("Una ONG no puede liberar reservas → 403",
             v.pedir("POST", "/adjudicaciones/no-existe/liberar", token=ong)[0] == 403)
@@ -189,18 +190,23 @@ def _correr(v: Verificador, args: argparse.Namespace) -> int:
             SUSPENDIDA not in {o["cuit"] for o in raciones[0]["por_ong"]} and raciones[0]["cantidad_total"] >= 5000, raciones)
     v.check("Tipo inexistente → 404", v.pedir("GET", "/recursos/disponibilidad?tipo_recurso=NADA")[0] == 404)
 
-    print("\n== A7. PUT de inventario: solo la propia ONG, y falla antes de escribir")
+    print("\n== A7. PUT de inventario: solo el sistema (cuenta de servicio), y falla antes de escribir")
     uno = {"items": [{"tipo_recurso": "PARAMEDICO", "cantidad_total": 1}]}
     v.check("Sin token → 401", v.pedir("PUT", f"/ongs/{CRUZ_ROJA}/inventario", uno, token=None)[0] == 401)
-    v.check("La cuenta de servicio no declara inventarios → 403", v.pedir("PUT", f"/ongs/{CRUZ_ROJA}/inventario", uno)[0] == 403)
+    v.check("Una cuenta de ONG no declara inventarios, ni el propio → 403",
+            v.pedir("PUT", f"/ongs/{CRUZ_ROJA}/inventario", uno, token=ong)[0] == 403)
     v.check("Una ONG no toca el inventario de otra → 403", v.pedir("PUT", f"/ongs/{BOMBEROS}/inventario", uno, token=ong)[0] == 403)
     v.check("Tipo inexistente → 404 (y no guarda el resto)",
             v.pedir("PUT", f"/ongs/{CRUZ_ROJA}/inventario", {"items": [
-                {"tipo_recurso": "PARAMEDICO", "cantidad_total": 99}, {"tipo_recurso": "NADA", "cantidad_total": 1}]}, token=ong)[0] == 404)
+                {"tipo_recurso": "PARAMEDICO", "cantidad_total": 99}, {"tipo_recurso": "NADA", "cantidad_total": 1}]})[0] == 404)
+    v.check("CUIT no registrado → 404", v.pedir("PUT", f"/ongs/{INEXISTENTE}/inventario", uno)[0] == 404)
     v.check("Cantidad de más de 32 bits → 422 (en Postgres sería un 500)",
-            v.pedir("PUT", f"/ongs/{CRUZ_ROJA}/inventario", {"items": [{"tipo_recurso": "PARAMEDICO", "cantidad_total": 3_000_000_000}]}, token=ong)[0] == 422)
+            v.pedir("PUT", f"/ongs/{CRUZ_ROJA}/inventario", {"items": [{"tipo_recurso": "PARAMEDICO", "cantidad_total": 3_000_000_000}]})[0] == 422)
     v.check("Cantidad negativa → 422",
-            v.pedir("PUT", f"/ongs/{CRUZ_ROJA}/inventario", {"items": [{"tipo_recurso": "PARAMEDICO", "cantidad_total": -1}]}, token=ong)[0] == 422)
+            v.pedir("PUT", f"/ongs/{CRUZ_ROJA}/inventario", {"items": [{"tipo_recurso": "PARAMEDICO", "cantidad_total": -1}]})[0] == 422)
+    _, tras = v.pedir("GET", f"/ongs/{CRUZ_ROJA}")
+    v.check("Nada de lo anterior modificó el inventario de Cruz Roja",
+            next(i for i in tras["inventario"] if i["tipo_recurso"] == "PARAMEDICO")["cantidad_total"] == inv_cruz["PARAMEDICO"]["cantidad_total"], tras)
 
     print("\n== V. Validación de ofertas (POST /validaciones)")
     r = v.uno("ALTO", CRUZ_ROJA, "PARAMEDICO", 10)
@@ -423,9 +429,11 @@ def _correr(v: Verificador, args: argparse.Namespace) -> int:
         v.check("O2 La cuenta nueva inicia sesión", token_nuevo is not None)
         status, ficha = v.pedir("GET", f"/ongs/{cuit_nuevo}")
         v.check("O3 Queda HABILITADA y sin inventario", status == 200 and ficha["estado"] == "HABILITADA" and ficha["inventario"] == [], (status, ficha))
-        status, inv = v.pedir("PUT", f"/ongs/{cuit_nuevo}/inventario",
-                              {"items": [{"tipo_recurso": "FRAZADA", "cantidad_total": 5}]}, token=token_nuevo)
-        v.check("O4 Declara su inventario con su propio token (200)",
+        cuerpo_inv = {"items": [{"tipo_recurso": "FRAZADA", "cantidad_total": 5}]}
+        v.check("O4a La propia ONG no puede declarar su inventario (403)",
+                v.pedir("PUT", f"/ongs/{cuit_nuevo}/inventario", cuerpo_inv, token=token_nuevo)[0] == 403)
+        status, inv = v.pedir("PUT", f"/ongs/{cuit_nuevo}/inventario", cuerpo_inv)
+        v.check("O4 El sistema declara su inventario con la cuenta de servicio (200)",
                 status == 200 and any(i["tipo_recurso"] == "FRAZADA" and i["cantidad_total"] == 5 for i in inv), (status, inv))
         v.check("O5 Figura en GET /ongs", cuit_nuevo in {o["cuit"] for o in v.pedir("GET", "/ongs")[1]})
         v.check("O6 Registrarla de nuevo → 409", v.pedir("POST", "/ongs", cuerpo_o, token=None)[0] == 409)

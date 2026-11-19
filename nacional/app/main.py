@@ -7,8 +7,9 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.config import get_settings
-from app.errores import errores
 from app.routers import adjudicacion, auth, catalogo, cierre, inventario, reservas, validacion
+from app.services.reservas import ReservaEnConflicto, ReservaError, ReservaNoExiste
+from app.services.validacion import TipoRecursoDesconocido
 
 
 async def sin_nul(request: Request):
@@ -24,9 +25,9 @@ app = FastAPI(
     "validación de ofertas por niveles de competencia y cierre operativo (libera recursos bloqueados).\n\n"
     "**Autenticación.** `POST /login` devuelve un JWT; en Swagger, botón *Authorize* y pegar el token. Todo menos "
     "`/health`, `/login` y `POST /ongs` lo exige. Los endpoints de reservas, adjudicaciones y cierres son solo de las "
-    "cuentas de servicio (Bonita y la app local); el inventario lo modifica cada ONG con su cuenta.\n\n"
+    "cuentas de servicio (Bonita y la app local), igual que la carga del inventario de las ONGs.\n\n"
     "**Cuentas de prueba (demo).** `bonita-service` / `1gom_DfYwiGTjWmBkks4MvHT` (cuenta de servicio: sirve para todos los endpoints) y "
-    "`ong.cruzroja` o `ong.bomberos` / `demo1234` (cuentas de ONG: catálogo, validaciones e inventario propio). "
+    "`ong.cruzroja` o `ong.bomberos` / `demo1234` (cuentas de ONG: solo consulta y validaciones). "
     "`POST /ongs` está abierto para registrar una ONG nueva.\n\n"
     "**Recorrido de una emergencia.** `POST /validaciones` (consulta, no guarda) → `POST /evaluaciones` (reserva el stock "
     "al vencer la ventana de ofertas) → `POST /adjudicaciones/resolucion` (confirma las elegidas y libera las demás) → "
@@ -37,7 +38,7 @@ app = FastAPI(
     openapi_tags=[
         {"name": "autenticación", "description": "Login con JWT y alta de ONGs (servicio 1)."},
         {"name": "catálogo", "description": "Tipos de recurso, certificaciones, ONGs y disponibilidad (servicio 2)."},
-        {"name": "inventario", "description": "Cada ONG declara lo que tiene (servicio 2)."},
+        {"name": "inventario", "description": "El sistema declara lo que tiene cada ONG (servicio 2)."},
         {"name": "validación", "description": "Competencia y cantidad de lo ofrecido, sin rechazos binarios (servicio 3)."},
         {"name": "reservas", "description": "Evaluación con reserva de stock y su confirmación o liberación (servicio 4)."},
         {"name": "adjudicaciones", "description": "Compromiso de inventario con bloqueo pesimista (servicio 4)."},
@@ -51,8 +52,14 @@ app = FastAPI(
 @app.exception_handler(RequestValidationError)
 async def validacion_fallida(_: Request, exc: RequestValidationError):
     """Igual que el 422 de FastAPI pero sin devolver `input`: un `NaN` en el cuerpo no se puede volver a serializar."""
-    errores = [{k: v for k, v in e.items() if k != "input"} for e in exc.errors()]
-    return JSONResponse(status_code=422, content={"detail": jsonable_encoder(errores)})
+    detalle = [{k: v for k, v in e.items() if k != "input"} for e in exc.errors()]
+    return JSONResponse(status_code=422, content={"detail": jsonable_encoder(detalle)})
+
+
+# Errores de los servicios -> HTTP. Ninguna hereda de otra: cada una cae en su propio handler.
+for _clase, _codigo in {ReservaError: 400, ReservaNoExiste: 404, ReservaEnConflicto: 409, TipoRecursoDesconocido: 422}.items():
+    app.add_exception_handler(
+        _clase, lambda _, exc, codigo=_codigo: JSONResponse(status_code=codigo, content={"detail": str(exc)}))
 
 
 app.include_router(auth.router)

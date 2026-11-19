@@ -1,8 +1,8 @@
 import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
-import { AnimatePresence, motion } from "framer-motion";
 import { api, type AltaOngIn, type Emergencia, type Meta, type Notificacion, type Oferta, type Rol, type TipoRecurso } from "./api";
 import { useAuth } from "./auth";
+import { agruparParaAdjudicar, BloqueConsorcio, ConsorcioPanel, useConsorcios } from "./consorcios";
 import { FlowBubbles } from "./FlowBubbles";
 import { PageHeader } from "./PageHeader";
 
@@ -30,17 +30,12 @@ const MENU: Record<Rol, { title: string; to: string; hint: string }[]> = {
   ],
   ONG: [
     { title: "Convocatorias abiertas", to: "/emergencias", hint: "Cargar ofertas de ayuda" },
+    { title: "Mi inventario", to: "/inventario", hint: "Recursos y certificaciones en el Sistema Nacional" },
   ],
   AUDITOR: [
+    { title: "Dashboard de indicadores", to: "/indicadores", hint: "Métricas de la app y tiempos de Bonita" },
     { title: "Consulta de emergencias", to: "/emergencias", hint: "Vista de solo lectura" },
   ],
-};
-
-const fade = {
-  initial: { opacity: 0, y: 14 },
-  animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -8 },
-  transition: { duration: 0.38, ease: "easeOut" as const },
 };
 
 function formatFecha(iso: string | null) {
@@ -193,7 +188,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <div className="topbar-meta">
             {user.rol === "ONG" && <Campana />}
             <span className="role-chip">{ROL_LABEL[user.rol]}</span>
-            <span>{user.nombre}</span>
+            <span className="topbar-nombre">{user.nombre}</span>
             <button className="btn btn-ghost light" type="button" onClick={() => void logout()}>
               Salir
             </button>
@@ -251,7 +246,7 @@ export function LoginPage() {
   return (
     <div className="login-stage">
       <section className="login-hero">
-        <motion.div className="login-hero-inner" {...fade}>
+        <div className="login-hero-inner fade-in">
           <FlowBubbles />
           <div className="login-hero-copy">
             <p className="kicker" style={{ color: "rgba(246,243,236,0.7)" }}>
@@ -270,16 +265,14 @@ export function LoginPage() {
               <span className="login-stat">Red de ONGs</span>
             </div>
           </div>
-        </motion.div>
+        </div>
       </section>
       <section className="login-panel">
-        <motion.div className="login-card" {...fade} transition={{ ...fade.transition, delay: 0.08 }}>
+        <div className="login-card fade-in" style={{ animationDelay: "0.08s" }}>
           <h1>Ingresar</h1>
           <p className="sub">Usá tu perfil operativo para continuar.</p>
           {error && (
-            <motion.div className="alert" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}>
-              {error}
-            </motion.div>
+            <div className="alert alert-in">{error}</div>
           )}
           <form onSubmit={onSubmit}>
             <div className="field">
@@ -334,7 +327,7 @@ export function LoginPage() {
               </ul>
             </details>
           )}
-        </motion.div>
+        </div>
       </section>
     </div>
   );
@@ -345,7 +338,7 @@ export function HomePage() {
   const items = MENU[user!.rol] ?? [];
   return (
     <Shell>
-      <motion.div {...fade}>
+      <div className="fade-in">
         <p className="kicker">Panel operativo</p>
         <h1 className="title" style={{ fontSize: "clamp(1.9rem, 4vw, 2.45rem)" }}>
           Hola, {user!.nombre.split(" ")[0]}
@@ -355,12 +348,7 @@ export function HomePage() {
         </p>
         <nav className={`menu-grid ${items.length > 1 ? "cols-2" : ""}`}>
           {items.map((item, i) => (
-            <motion.div
-              key={item.to}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.06 * i, duration: 0.35 }}
-            >
+            <div key={item.to} className="rise-in" style={{ animationDelay: `${0.06 * i}s` }}>
               <Link className="menu-card" to={item.to}>
                 <div className="menu-title">
                   <strong>{item.title}</strong>
@@ -370,10 +358,10 @@ export function HomePage() {
                   →
                 </span>
               </Link>
-            </motion.div>
+            </div>
           ))}
         </nav>
-      </motion.div>
+      </div>
     </Shell>
   );
 }
@@ -397,7 +385,7 @@ export function EmergenciasPage() {
 
   return (
     <Shell>
-      <motion.div {...fade}>
+      <div className="fade-in">
         <div className="page-head">
           <div>
             <p className="kicker">Operación</p>
@@ -421,55 +409,45 @@ export function EmergenciasPage() {
           <div className="panel empty">
             <div className="loading-dot" style={{ margin: "0 auto" }} />
           </div>
+        ) : items.length === 0 ? (
+          <div className="panel empty">
+            <div className="empty-mark">∅</div>
+            <p>
+              {user!.rol === "ONG"
+                ? "No hay convocatorias abiertas por ahora."
+                : "Todavía no hay emergencias registradas."}
+            </p>
+          </div>
         ) : (
-          <AnimatePresence mode="popLayout">
-            {items.length === 0 ? (
-              <div className="panel empty">
-                <div className="empty-mark">∅</div>
-                <p>
-                  {user!.rol === "ONG"
-                    ? "No hay convocatorias abiertas por ahora."
-                    : "Todavía no hay emergencias registradas."}
-                </p>
+          <div className="cards two">
+            {items.map((em, i) => (
+              <div key={em.id} className="rise-in" style={{ animationDelay: `${i * 0.04}s` }}>
+                <Link
+                  className="em-card"
+                  to={`/emergencias/${em.id}`}
+                  style={{ ["--grav-color" as string]: GRAV_COLOR[em.nivel_gravedad] }}
+                >
+                  <div className="em-card-top">
+                    <span className="badge muted">#{em.id}</span>
+                    {estadoBadge(em.estado)}
+                  </div>
+                  <h3>{meta?.tipos[em.tipo] ?? em.tipo}</h3>
+                  <p>{em.zona_afectada}</p>
+                  <div className="meta-line">
+                    <span className={`badge g-${em.nivel_gravedad}`}>{em.nivel_gravedad}</span>
+                    <span>{formatFecha(em.creada_en)}</span>
+                    {em.lotes.length > 0 && (
+                      <span>
+                        {em.lotes.length} lote{em.lotes.length === 1 ? "" : "s"}
+                      </span>
+                    )}
+                  </div>
+                </Link>
               </div>
-            ) : (
-              <div className="cards two">
-                {items.map((em, i) => (
-                  <motion.div
-                    key={em.id}
-                    layout
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.04, duration: 0.35 }}
-                  >
-                    <Link
-                      className="em-card"
-                      to={`/emergencias/${em.id}`}
-                      style={{ ["--grav-color" as string]: GRAV_COLOR[em.nivel_gravedad] }}
-                    >
-                      <div className="em-card-top">
-                        <span className="badge muted">#{em.id}</span>
-                        {estadoBadge(em.estado)}
-                      </div>
-                      <h3>{meta?.tipos[em.tipo] ?? em.tipo}</h3>
-                      <p>{em.zona_afectada}</p>
-                      <div className="meta-line">
-                        <span className={`badge g-${em.nivel_gravedad}`}>{em.nivel_gravedad}</span>
-                        <span>{formatFecha(em.creada_en)}</span>
-                        {em.lotes.length > 0 && (
-                          <span>
-                            {em.lotes.length} lote{em.lotes.length === 1 ? "" : "s"}
-                          </span>
-                        )}
-                      </div>
-                    </Link>
-                  </motion.div>
-                ))}
-              </div>
-            )}
-          </AnimatePresence>
+            ))}
+          </div>
         )}
-      </motion.div>
+      </div>
     </Shell>
   );
 }
@@ -506,7 +484,7 @@ export function NuevaEmergenciaPage() {
 
   return (
     <Shell>
-      <motion.div {...fade}>
+      <div className="fade-in">
         <PageHeader
           to="/"
           label="Volver al panel"
@@ -581,7 +559,7 @@ export function NuevaEmergenciaPage() {
             </div>
           </aside>
         </div>
-      </motion.div>
+      </div>
     </Shell>
   );
 }
@@ -653,7 +631,7 @@ export function AltaOngPage() {
 
   return (
     <Shell>
-      <motion.div {...fade}>
+      <div className="fade-in">
         <PageHeader
           to="/login"
           label="Ir al ingreso"
@@ -755,7 +733,7 @@ export function AltaOngPage() {
             </div>
           </form>
         </div>
-      </motion.div>
+      </div>
     </Shell>
   );
 }
@@ -773,12 +751,14 @@ export function DetallePage() {
   const [tipos, setTipos] = useState<TipoRecurso[]>([]);
   const [elegidas, setElegidas] = useState<string[]>([]);
 
+  const { consorcios, recargar: recargarConsorcios } = useConsorcios(id, user?.rol);
+
   const reload = useCallback(async () => {
-    const [em, m, of] = await Promise.all([api.getEmergencia(id), api.meta(), api.listOfertas(id)]);
+    const [em, m, of] = await Promise.all([api.getEmergencia(id), api.meta(), api.listOfertas(id), recargarConsorcios()]);
     setE(em);
     setMeta(m);
     setOfertas(of);
-  }, [id]);
+  }, [id, recargarConsorcios]);
 
   useEffect(() => {
     void reload().catch((err) => setError(String(err.message || err)));
@@ -805,14 +785,29 @@ export function DetallePage() {
     );
   }
 
-  async function addLote(ev: FormEvent<HTMLFormElement>) {
-    ev.preventDefault();
-    const form = ev.currentTarget;
-    const fd = new FormData(form);
+  // Envuelve una acción: busy mientras dura, limpia mensajes, muestra el ok o el error y recarga.
+  // esperaMs: el pase de estado lo hace Bonita en unos segundos (adjudicar → En ejecución, validar cierre → Resuelta).
+  async function run<T>(paso: () => Promise<T>, mensaje: string | ((r: T) => string), esperaMs = 0) {
     setBusy(true);
     setError(null);
     setOk(null);
     try {
+      const r = await paso();
+      setOk(typeof mensaje === "string" ? mensaje : mensaje(r));
+      if (esperaMs) await new Promise((res) => setTimeout(res, esperaMs));
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function addLote(ev: FormEvent<HTMLFormElement>) {
+    ev.preventDefault();
+    const form = ev.currentTarget;
+    const fd = new FormData(form);
+    return run(async () => {
       await api.createLote(id, {
         tipo_recurso: String(fd.get("tipo_recurso")),
         detalle: String(fd.get("detalle") ?? "").trim() || undefined,
@@ -820,100 +815,47 @@ export function DetallePage() {
         tipo: String(fd.get("tipo")),
       });
       form.reset();
-      setOk("Lote agregado");
-      await reload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error");
-    } finally {
-      setBusy(false);
-    }
+    }, "Lote agregado");
   }
 
-  async function decidir(decision: "PARCIAL" | "REFORMULAR") {
-    setBusy(true);
-    setError(null);
-    setOk(null);
-    try {
-      await api.decidir(id, decision);
-      setOk(decision === "PARCIAL" ? "Seguís con la cobertura parcial: el Municipio adjudica." : "Convocatoria reformulada: cargá los lotes y publicá de nuevo.");
-      await reload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error");
-    } finally {
-      setBusy(false);
-    }
+  const decidir = (decision: "PARCIAL" | "REFORMULAR") =>
+    run(
+      () => api.decidir(id, decision),
+      decision === "PARCIAL" ? "Seguís con la cobertura parcial: el Municipio adjudica." : "Convocatoria reformulada: ajustá los lotes y publicá de nuevo.",
+    );
+
+  function cambiarCantidad(ev: FormEvent<HTMLFormElement>, loteId: number) {
+    ev.preventDefault();
+    const cantidad = Number(new FormData(ev.currentTarget).get("nueva_cantidad"));
+    return run(() => api.cambiarCantidadLote(id, loteId, cantidad), "Cantidad del lote actualizada");
   }
 
-  async function adjudicar() {
-    setBusy(true);
-    setError(null);
-    setOk(null);
-    try {
-      await api.adjudicar(id, elegidas);
-      setOk("Adjudicación enviada: Bonita confirma las reservas elegidas y libera las demás.");
-      setElegidas([]);
-      // El pase a "En ejecución" lo hace Bonita en unos segundos.
-      await new Promise((r) => setTimeout(r, 4000));
-      await reload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error");
-    } finally {
-      setBusy(false);
-    }
+  function reabrir(ev: FormEvent<HTMLFormElement>) {
+    ev.preventDefault();
+    const fd = new FormData(ev.currentTarget);
+    const iso = new Date(String(fd.get("ventana_reabrir"))).toISOString();
+    return run(() => api.decidir(id, "REABRIR", iso), "Convocatoria reabierta con los mismos lotes: las ONGs pueden ofertar hasta el nuevo cierre.");
   }
 
-  async function avanzar(paso: () => Promise<Emergencia>, mensaje: string, esperarABonita = false) {
-    setBusy(true);
-    setError(null);
-    setOk(null);
-    try {
-      await paso();
-      setOk(mensaje);
-      // El pase a "Resuelta" lo hace Bonita en unos segundos, cuando libera los recursos.
-      if (esperarABonita) await new Promise((r) => setTimeout(r, 4000));
-      await reload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error");
-    } finally {
-      setBusy(false);
-    }
-  }
+  const adjudicar = () =>
+    run(
+      async () => {
+        await api.adjudicar(id, elegidas);
+        setElegidas([]);
+      },
+      "Adjudicación enviada: Bonita confirma las reservas elegidas y libera las demás.",
+      4000,
+    );
 
-  async function publicar(ev: FormEvent<HTMLFormElement>) {
+  function publicar(ev: FormEvent<HTMLFormElement>) {
     ev.preventDefault();
     const fd = new FormData(ev.currentTarget);
     const iso = new Date(String(fd.get("ventana_fin"))).toISOString();
-    setBusy(true);
-    setError(null);
-    setOk(null);
-    try {
-      await api.publicar(id, iso);
-      setOk("Convocatoria publicada");
-      await reload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error");
-    } finally {
-      setBusy(false);
-    }
+    return run(() => api.publicar(id, iso), "Convocatoria publicada");
   }
 
-  async function enviarOferta(
-    items: { lote_id: number; recurso: string; cantidad: number }[],
-    mensaje: (o: Oferta) => string,
-  ) {
-    setBusy(true);
-    setError(null);
-    setOk(null);
-    try {
-      const o = await api.createOferta(id, items);
-      setOk(mensaje(o));
-      await reload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error");
-    } finally {
-      setBusy(false);
-    }
-  }
+  const enviarOferta = (items: { lote_id: number; recurso: string; cantidad: number }[], mensaje: (o: Oferta) => string) =>
+    run(() => api.createOferta(id, items), mensaje);
 
   async function oferta(ev: FormEvent<HTMLFormElement>) {
     ev.preventDefault();
@@ -929,7 +871,9 @@ export function DetallePage() {
     await enviarOferta(items, (o) => `Oferta enviada (versión ${o.version_actual})`);
   }
 
-  const miOferta = user!.rol === "ONG" ? ofertas[0] : undefined;
+  // Una ONG con consorcio también recibe las ofertas de sus socios (solo lectura): la propia se busca por ONG.
+  const miOferta = user!.rol === "ONG" ? ofertas.find((o) => o.ong_id === user!.ong_id) : undefined;
+  const ofertasVisibles = user!.rol === "ONG" ? ofertas.filter((o) => o === miOferta) : ofertas;
 
   // Retirar = reenviar la oferta sin ese lote (versión nueva); sin ningún lote, la oferta queda retirada.
   const itemsVigentes = (miOferta && !miOferta.retirada ? miOferta.items : []).map(({ lote_id, recurso, cantidad }) => ({
@@ -943,13 +887,17 @@ export function DetallePage() {
       (o) => (o.retirada ? "Retiraste tu oferta" : `Retiraste tu oferta a ese lote (versión ${o.version_actual})`),
     );
 
+  const { bloques, sueltas } = e.evaluacion
+    ? agruparParaAdjudicar(e.evaluacion, consorcios)
+    : { bloques: [], sueltas: [] };
+
   const ventanaAbierta = !!e.ventana_ofertas_fin && new Date(e.ventana_ofertas_fin) > new Date();
   const cantidadOfrecida = (o: Oferta | undefined, loteId: number) =>
     o?.items.find((i) => i.lote_id === loteId)?.cantidad;
 
   return (
     <Shell>
-      <motion.div {...fade}>
+      <div className="fade-in">
         <PageHeader
           to="/emergencias"
           label="Volver al listado"
@@ -1016,7 +964,29 @@ export function DetallePage() {
                   </strong>{" "}
                   · {l.cantidad} {l.unidad}
                 </span>
-                <span className="badge muted">{l.tipo}</span>
+                {user!.rol === "COORDINADOR" && e.estado === "REGISTRADA" ? (
+                  <form
+                    onSubmit={(ev) => cambiarCantidad(ev, l.id)}
+                    style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}
+                    data-testid={`lote-cantidad-${l.id}`}
+                  >
+                    <input
+                      name="nueva_cantidad"
+                      type="number"
+                      min={1}
+                      step={1}
+                      defaultValue={l.cantidad}
+                      aria-label={`Cantidad del lote ${l.id}`}
+                      style={{ width: "6.5rem" }}
+                      required
+                    />
+                    <button className="btn btn-ghost" disabled={busy}>
+                      Ajustar
+                    </button>
+                  </form>
+                ) : (
+                  <span className="badge muted">{l.tipo}</span>
+                )}
               </div>
             ))
           )}
@@ -1035,10 +1005,13 @@ export function DetallePage() {
             <p>
               <strong>Cobertura parcial:</strong> se sigue con lo reservado y el Municipio elige entre las ofertas.
               <br />
-              <strong>Reformular:</strong> se libera todo el stock reservado, se retiran las ofertas y se vuelve a cargar
-              lotes y publicar (ronda {e.evaluacion.ronda + 1}).
+              <strong>Reformular:</strong> Bonita libera todo el stock reservado, se retiran las ofertas y se ajustan los
+              lotes para publicar de nuevo (ronda {e.evaluacion.ronda + 1}).
+              <br />
+              <strong>Reabrir:</strong> Bonita libera lo reservado y la convocatoria vuelve a abrirse con los mismos lotes y
+              las mismas ofertas, hasta un cierre nuevo; las ONGs pueden sumar o mejorar sus ofertas.
             </p>
-            <div className="actions">
+            <div>
               <button className="btn btn-primary" disabled={busy} onClick={() => void decidir("PARCIAL")} data-testid="decidir-parcial">
                 Seguir con cobertura parcial
               </button>{" "}
@@ -1046,6 +1019,15 @@ export function DetallePage() {
                 Reformular la convocatoria
               </button>
             </div>
+            <form onSubmit={reabrir} style={{ marginTop: "1rem" }} data-testid="reabrir">
+              <div className="field">
+                <label htmlFor="ventana_reabrir">Nuevo cierre de ofertas</label>
+                <input id="ventana_reabrir" name="ventana_reabrir" type="datetime-local" required />
+              </div>
+              <button className="btn btn-ghost" disabled={busy} data-testid="decidir-reabrir">
+                Reabrir la convocatoria
+              </button>
+            </form>
           </div>
         )}
 
@@ -1053,7 +1035,18 @@ export function DetallePage() {
           <div className="panel" style={{ marginBottom: "1.35rem" }} data-testid="adjudicacion">
             <h3>Adjudicar ofertas</h3>
             <p>Elegí a qué ONGs aceptás. Lo elegido queda comprometido; el resto se libera.</p>
-            {e.evaluacion.ongs.filter((o) => o.estado === "RESERVADA").map((o) => (
+            {bloques.map((b) => (
+              <BloqueConsorcio
+                key={b.consorcio.id}
+                bloque={b}
+                ev={e.evaluacion!}
+                elegidas={elegidas}
+                onToggle={(cuits, marcado) =>
+                  setElegidas((prev) => [...prev.filter((c) => !cuits.includes(c)), ...(marcado ? cuits : [])])
+                }
+              />
+            ))}
+            {sueltas.map((o) => (
               <label key={o.cuit} className="lote-row" style={{ cursor: "pointer" }} data-testid={`elegir-${o.cuit}`}>
                 <span>
                   <input
@@ -1206,7 +1199,7 @@ export function DetallePage() {
                         className="btn btn-primary"
                         disabled={busy}
                         data-testid="monitorear"
-                        onClick={() => void avanzar(() => api.monitorear(id), "Monitoreo iniciado: las ONGs ya pueden finalizar.")}
+                        onClick={() => void run(() => api.monitorear(id), "Monitoreo iniciado: las ONGs ya pueden finalizar.")}
                       >
                         Monitorear ejecución
                       </button>
@@ -1225,7 +1218,7 @@ export function DetallePage() {
                         disabled={busy}
                         data-testid="validar-cierre"
                         onClick={() =>
-                          void avanzar(() => api.validarCierre(id), "Cierre validado: Bonita libera los recursos.", true)
+                          void run(() => api.validarCierre(id), "Cierre validado: Bonita libera los recursos.", 4000)
                         }
                       >
                         Validar cierre bilateral
@@ -1249,7 +1242,7 @@ export function DetallePage() {
                       className="btn btn-primary"
                       disabled={busy}
                       data-testid="finalizar"
-                      onClick={() => void avanzar(() => api.finalizar(id), "Marcaste tu actividad como finalizada.")}
+                      onClick={() => void run(() => api.finalizar(id), "Marcaste tu actividad como finalizada.")}
                     >
                       Marcar actividad finalizada
                     </button>
@@ -1263,13 +1256,18 @@ export function DetallePage() {
           </>
         )}
 
-        {ofertas.length > 0 && (
+        {user!.rol === "ONG" && e.estado === "CONVOCATORIA" && (
+          <ConsorcioPanel e={e} ofertas={ofertas} onCambio={reload} />
+        )}
+
+        {ofertasVisibles.length > 0 && (
           <>
             <h2 className="section-title">{user!.rol === "ONG" ? "Mi oferta vigente" : "Ofertas recibidas"}</h2>
             <div className="panel" style={{ marginBottom: "1.35rem" }}>
-              {ofertas.map((o) => (
+              {ofertasVisibles.map((o) => (
                 <div key={o.id} style={{ marginBottom: "0.75rem" }}>
                   <strong>{o.ong_nombre}</strong> <span className="badge muted">v{o.version_actual}</span>
+                  {o.consorcio_nombre && <span className="badge ok">consorcio {o.consorcio_nombre}</span>}
                   {o.retirada && <span className="badge muted">retirada</span>}
                   {o.estado === "ADJUDICADA" && <span className="badge ok">adjudicada</span>}
                   {o.estado === "NO_ADJUDICADA" && <span className="badge muted">no adjudicada</span>}
@@ -1296,7 +1294,7 @@ export function DetallePage() {
         <Link className="btn btn-ghost" to="/emergencias" style={{ display: "inline-flex" }}>
           ← Volver al listado
         </Link>
-      </motion.div>
+      </div>
     </Shell>
   );
 }

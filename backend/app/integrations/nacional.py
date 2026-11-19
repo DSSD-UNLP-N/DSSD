@@ -25,6 +25,9 @@ def olvidar_tokens() -> None:
         _TOKENS.clear()
 
 
+NACIONAL_CAIDO = "El Sistema Nacional no responde; probá de nuevo en un momento."
+
+
 class NacionalError(RuntimeError):
     def __init__(self, mensaje: str, status: int | None = None):
         super().__init__(mensaje)
@@ -56,25 +59,28 @@ class NacionalClient:
             return _TOKENS[clave]
 
     def _request(self, method: str, path: str, **kwargs) -> dict | list:
+        """Llamada con la cuenta de servicio; un error conserva el status y el detail de Nacional."""
         for renovar in (False, True):
             token = self._token(renovar)
             headers = {"Authorization": f"Bearer {token}"} if token else {}
             try:
                 resp = requests.request(method, f"{self.base_url}{path}", timeout=self.timeout, headers=headers, **kwargs)
-                if resp.status_code == 401 and token and not renovar:
-                    continue  # vencido o secreto rotado: se vuelve a entrar una sola vez
-                resp.raise_for_status()
-                return resp.json()
-            except (requests.RequestException, ValueError) as exc:
+            except requests.RequestException as exc:
                 raise NacionalError(f"Sistema Nacional: {method} {path} falló ({exc})") from exc
+            if resp.status_code == 401 and token and not renovar:
+                continue  # vencido o secreto rotado: se vuelve a entrar una sola vez
+            return self._respuesta(resp, method, path)
 
-    def _llamar_sin_servicio(self, method: str, path: str, token: str | None = None, **kwargs) -> dict | list:
-        """Llamada sin la cuenta de servicio (registro público o token de la ONG); conserva el status y el detail."""
-        headers = {"Authorization": f"Bearer {token}"} if token else {}
+    def _llamar_sin_servicio(self, method: str, path: str, **kwargs) -> dict | list:
+        """Llamada pública, sin token (el registro de ONGs); conserva el status y el detail."""
         try:
-            resp = requests.request(method, f"{self.base_url}{path}", timeout=self.timeout, headers=headers, **kwargs)
+            resp = requests.request(method, f"{self.base_url}{path}", timeout=self.timeout, **kwargs)
         except requests.RequestException as exc:
             raise NacionalError(f"Sistema Nacional: {method} {path} falló ({exc})") from exc
+        return self._respuesta(resp, method, path)
+
+    @staticmethod
+    def _respuesta(resp: requests.Response, method: str, path: str) -> dict | list:
         if not resp.ok:
             try:
                 detalle = resp.json().get("detail")
@@ -90,44 +96,23 @@ class NacionalClient:
             raise NacionalError(f"Sistema Nacional: {method} {path} devolvió una respuesta inválida",
                                 resp.status_code) from exc
 
-    def registrar_ong(self, *, ong_nombre: str, cuit: str, nombre: str, username: str, password: str) -> str:
-        """Alta pública de una ONG con su primer usuario (POST /ongs, sin token de servicio). Devuelve su access_token."""
-        cuerpo = self._llamar_sin_servicio("POST", "/ongs", json={
+    def registrar_ong(self, *, ong_nombre: str, cuit: str, nombre: str, username: str, password: str) -> None:
+        """Alta pública de una ONG con su primer usuario (POST /ongs, sin token de servicio).
+        El token que devuelve Nacional no se usa: el inventario se declara con la cuenta de servicio."""
+        self._llamar_sin_servicio("POST", "/ongs", json={
             "ong_nombre": ong_nombre, "cuit": cuit, "nombre": nombre, "username": username, "password": password})
-        try:
-            return cuerpo["access_token"]
-        except (KeyError, TypeError) as exc:
-            raise NacionalError("Sistema Nacional: respuesta inválida al registrar la ONG") from exc
 
-    def declarar_inventario(self, cuit: str, token: str, items: list[dict]) -> list[dict]:
-        """Declara el inventario de la ONG (PUT /ongs/{cuit}/inventario) con el token de la propia ONG."""
-        return self._llamar_sin_servicio("PUT", f"/ongs/{cuit}/inventario", token=token, json={"items": items})
+    def ficha_ong(self, cuit: str) -> dict:
+        """GET /ongs/{cuit}: certificaciones e inventario (total, comprometido, disponible) de la ONG."""
+        return self._request("GET", f"/ongs/{cuit}")
+
+    def declarar_inventario(self, cuit: str, items: list[dict]) -> list[dict]:
+        """Declara el inventario de la ONG (PUT /ongs/{cuit}/inventario): solo lo acepta la cuenta de servicio."""
+        return self._request("PUT", f"/ongs/{cuit}/inventario", json={"items": items})
 
     def tipos_recurso(self) -> list[dict]:
         """Catálogo: [{codigo, nombre, categoria, unidad, certificacion_requerida}]."""
         return self._request("GET", "/tipos-recurso")
-
-    def validar(self, gravedad: str, items: list[dict]) -> dict:
-        """Valida cantidades y competencia (no guarda nada).
-
-        items: [{cuit, tipo_recurso, cantidad}]. Devuelve {alcanza_todo, resultados: [{cuit, tipo_recurso,
-        nombre_recurso, unidad, solicitado, disponible, alcanza, nivel, riesgo_permitido,
-        asignacion_sugerida, observaciones}]}."""
-        return self._request("POST", "/validaciones", json={"gravedad": gravedad, "items": items})
-
-    def liberar(self, referencia: str) -> dict:
-        """Libera una reserva (idempotente): la usa la app cuando el Coordinador reformula la convocatoria."""
-        resultado = self._request("POST", f"/adjudicaciones/{referencia}/liberar")
-        if not isinstance(resultado, dict):
-            raise NacionalError("Sistema Nacional: respuesta inválida al liberar la reserva")
-        return resultado
-
-    def adjudicar_recursos_nacional(self, datos_adjudicacion: dict) -> dict:
-        """Compromete recursos en el Sistema Nacional de forma idempotente."""
-        resultado = self._request("POST", "/adjudicaciones", json=datos_adjudicacion)
-        if not isinstance(resultado, dict):
-            raise NacionalError("Sistema Nacional: respuesta inválida al adjudicar recursos")
-        return resultado
 
 
 def get_nacional(settings: Settings = Depends(get_settings)) -> NacionalClient:
