@@ -303,6 +303,9 @@ export function LoginPage() {
               {busy ? "Entrando…" : "Entrar al panel"}
             </button>
           </form>
+          <p className="sub" style={{ margin: "1.2rem 0 0" }}>
+            ¿Tu ONG todavía no está en la red? <Link to="/alta-ong">Registrala acá</Link>
+          </p>
           {meta?.demo && (
             <details className="demo">
               <summary>
