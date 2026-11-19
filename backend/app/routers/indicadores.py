@@ -6,7 +6,7 @@ Endpoints:
 
 Filtros comunes: desde, hasta (YYYY-MM-DD; por defecto hoy-6 meses … hoy), municipio_id.
 Si desde > hasta o la fecha es inválida: 422. Municipio_id inexistente: 200 con todo en cero.
-Si Bonita falla: 200 con tiempos.disponible=False y motivo descriptivo.
+Si Bonita falla: 200 con tiempos, cursos y casos en disponible=False y motivo descriptivo.
 """
 from __future__ import annotations
 
@@ -36,6 +36,8 @@ class Bloque(str, Enum):
     suministros = "suministros"
     estados = "estados"
     tiempos = "tiempos"
+    cursos = "cursos"
+    casos = "casos"
     finalizadas = "finalizadas"
 
 
@@ -51,6 +53,8 @@ _ENCABEZADOS: dict[Bloque, list[str]] = {
     Bloque.suministros: ["Mes", "Tipo de recurso", "Cantidad"],
     Bloque.estados: ["Estado", "Etiqueta", "Cantidad"],
     Bloque.tiempos: ["Tarea", "Horas promedio", "Emergencias"],
+    Bloque.cursos: ["Curso", "Etiqueta", "Emergencias", "Veces", "Cobertura promedio (%)"],
+    Bloque.casos: ["Casos abiertos", "Casos archivados", "Consistentes", "Inconsistentes (ids)", "Horas de resolución (Bonita)"],
     Bloque.finalizadas: [
         "ID",
         "Municipio",
@@ -132,6 +136,15 @@ def _filas_csv(bloque: Bloque, reporte: Reporte) -> list[list]:
             [t.tarea, t.horas_promedio, t.emergencias]
             for t in reporte.tiempos.etapas
         ]
+    if bloque is Bloque.cursos:
+        return [[c.curso, c.etiqueta, c.emergencias, c.veces, "" if c.cobertura_promedio is None else c.cobertura_promedio]
+                for c in reporte.cursos.filas]
+    if bloque is Bloque.casos:
+        k = reporte.casos
+        if not k.disponible:
+            return []
+        return [[k.abiertos, k.archivados, k.consistentes, "; ".join(map(str, k.inconsistentes)),
+                 "" if k.horas_resolucion_promedio is None else k.horas_resolucion_promedio]]
     if bloque is Bloque.finalizadas:
         return [
             [
@@ -166,8 +179,9 @@ _SoloAuditor = Depends(require_role(Rol.AUDITOR))
     summary="Reporte de indicadores del dashboard",
     description=(
         "Devuelve el reporte completo con KPIs, suministros por mes, emergencias por estado, "
-        "tiempos por etapa de Bonita y listado de finalizadas. "
-        "Si Bonita no está disponible, el bloque `tiempos` llega con `disponible=false` y `motivo`; "
+        "tiempos por etapa de Bonita, cursos de acción tomados (Bonita + cobertura de la app), estado de los casos en "
+        "Bonita contra la app y listado de finalizadas. "
+        "Si Bonita no está disponible, `tiempos`, `cursos` y `casos` llegan con `disponible=false` y `motivo`; "
         "el resto del reporte se calcula igualmente."
     ),
     responses={
@@ -199,6 +213,20 @@ _SoloAuditor = Depends(require_role(Rol.AUDITOR))
                     {"tarea": "Adjudicar Ofertas", "horas_promedio": 6.5, "emergencias": 7}
                 ],
                 "horas_total_promedio": 48.3,
+            },
+            "cursos": {
+                "disponible": True,
+                "motivo": None,
+                "filas": [
+                    {"curso": "TOTAL", "etiqueta": "Cobertura total: directo a adjudicar", "emergencias": 5,
+                     "veces": 5, "cobertura_promedio": 100.0},
+                    {"curso": "REABRIR", "etiqueta": "Reabrir convocatoria", "emergencias": 2, "veces": 3,
+                     "cobertura_promedio": 85.0},
+                ],
+            },
+            "casos": {
+                "disponible": True, "motivo": None, "abiertos": 5, "archivados": 9, "consistentes": 14,
+                "inconsistentes": [], "horas_resolucion_promedio": 47.9,
             },
             "finalizadas": [
                 {
@@ -232,7 +260,7 @@ def api_indicadores(
     summary="Exportar un bloque del reporte como CSV",
     description=(
         "Devuelve un archivo CSV (UTF-8 con BOM) con un bloque del reporte. "
-        "Bloques válidos: `kpis`, `suministros`, `estados`, `tiempos`, `finalizadas`. "
+        "Bloques válidos: `kpis`, `suministros`, `estados`, `tiempos`, `cursos`, `casos`, `finalizadas`. "
         "El nombre del archivo incluye el bloque y el rango: "
         "`indicadores_<bloque>_<desde>_<hasta>.csv`."
     ),
@@ -247,7 +275,7 @@ def api_indicadores(
     },
 )
 def api_indicadores_csv(
-    bloque: Annotated[Bloque, Query(description="Bloque a exportar: kpis | suministros | estados | tiempos | finalizadas.")],
+    bloque: Annotated[Bloque, Query(description="Bloque a exportar: kpis | suministros | estados | tiempos | cursos | casos | finalizadas.")],
     desde: Annotated[date | None, Query(description="Inicio del período (YYYY-MM-DD). Por defecto: hoy menos 6 meses.")] = None,
     hasta: Annotated[date | None, Query(description="Fin del período (YYYY-MM-DD). Por defecto: hoy.")] = None,
     municipio_id: Annotated[int | None, Query(ge=1, le=2**31 - 1, description="Filtrar por municipio. Sin valor: todos los municipios.")] = None,

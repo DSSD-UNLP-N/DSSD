@@ -148,6 +148,38 @@ def test_no_se_puede_borrar_un_lote_de_otra_emergencia(login, emergencia, seeded
     assert r.status_code == 400 and "no pertenece a esta emergencia" in r.json()["detail"]
 
 
+# --- cambiar la cantidad (al reformular) ---------------------------------
+
+def _lote_de(seeded, emergencia_id):
+    with seeded() as s:
+        return s.query(Lote).filter_by(emergencia_id=emergencia_id).one().id
+
+
+def test_cambiar_la_cantidad_de_un_lote_antes_de_publicar(login, emergencia, seeded):
+    _con_lote(seeded, emergencia)
+    lote = _lote_de(seeded, emergencia)
+    r = login("coordinador.regional").patch(f"{_lotes(emergencia)}/{lote}", json={"cantidad": 40})
+    assert r.status_code == 200 and r.json()["cantidad"] == 40
+    with seeded() as s:
+        assert s.get(Lote, lote).cantidad == 40
+
+
+def test_cambiar_la_cantidad_valida_permisos_estado_y_datos(login, emergencia, seeded):
+    _con_lote(seeded, emergencia)
+    lote = _lote_de(seeded, emergencia)
+    url = f"{_lotes(emergencia)}/{lote}"
+    for usuario in ("operador.municipal", "ong.cruzroja", "auditor"):
+        assert login(usuario).patch(url, json={"cantidad": 3}).status_code in (403, 404), usuario
+    c = login("coordinador.regional")
+    assert c.patch(url, json={"cantidad": 0}).status_code == 422
+    assert c.patch(f"{_lotes(emergencia)}/999", json={"cantidad": 3}).status_code == 400
+    with seeded() as s:
+        s.get(Emergencia, emergencia).estado = EstadoEmergencia.CONVOCATORIA
+        s.commit()
+    r = c.patch(url, json={"cantidad": 3})
+    assert r.status_code == 400 and "publicada" in r.json()["detail"]
+
+
 def test_emergencia_inexistente_da_404(login):
     assert login("coordinador.regional").post(_lotes(999), json=LOTE).status_code == 404
 

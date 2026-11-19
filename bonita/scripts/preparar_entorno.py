@@ -4,8 +4,8 @@ Los conectores de Bonita tienen escrita la dirección de la API Nacional (`http:
 `bonita-service` en el `loginNacional`. Este script cambia solo eso y deja el resto igual:
 
   --estandar          «Confirmar Finalizacion de Actividades» deja de ser multi-instancia (saca el aviso rojo de Studio).
-  --nacional URL      reemplaza `http://localhost:8002` en los 6 conectores que llaman a Nacional (3 logins, evaluaciones,
-                      adjudicaciones/resolucion, cierres/lote). Ej.: https://rescuesync-nacional.onrender.com
+  --nacional URL      reemplaza `http://localhost:8002` en los 8 conectores que llaman a Nacional (4 logins, evaluaciones,
+                      adjudicaciones/resolucion dos veces —adjudicar y liberar al reformular/reabrir—, cierres/lote). Ej.: https://rescuesync-nacional.onrender.com
   clave               si hay --nacional, la clave de `bonita-service` se toma de la variable NACIONAL_BONITA_PASSWORD
                       (así no queda en el historial ni en el repositorio).
 
@@ -40,12 +40,12 @@ def estandar(x: str) -> str:
 
 def nacional(x: str, url: str, clave: str) -> str:
     destino = url.rstrip("/")
-    if x.count(f"&quot;{LOCAL}/") != 6:
-        raise ValueError(f"Se esperaban 6 conectores con {LOCAL} y hay {x.count(f'&quot;{LOCAL}/')}: ¿ya está cambiado?")
+    if x.count(f"&quot;{LOCAL}/") != 8:
+        raise ValueError(f"Se esperaban 8 conectores con {LOCAL} y hay {x.count(f'&quot;{LOCAL}/')}: ¿ya está cambiado?")
     x = x.replace(f"&quot;{LOCAL}/", f"&quot;{destino}/")
     viejo = f"password: &quot;{CLAVE_LOCAL}&quot;"
-    if x.count(viejo) != 3:
-        raise ValueError(f"Se esperaban 3 logins con la clave de ejemplo y hay {x.count(viejo)}")
+    if x.count(viejo) != 4:
+        raise ValueError(f"Se esperaban 4 logins con la clave de ejemplo y hay {x.count(viejo)}")
     return x.replace(viejo, f"password: &quot;{clave}&quot;")
 
 
@@ -78,7 +78,7 @@ def main() -> None:
     if args.estandar:
         print(f"  «{TAREA}»: tarea estándar")
     if args.nacional:
-        print(f"  API Nacional: {args.nacional} (6 conectores) y clave de bonita-service cambiada (3 logins)")
+        print(f"  API Nacional: {args.nacional} (8 conectores) y clave de bonita-service cambiada (4 logins)")
 
 
 if __name__ == "__main__":

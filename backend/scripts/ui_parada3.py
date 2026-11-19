@@ -13,6 +13,9 @@ Nacional y en qué tarea quedó el caso de Bonita (y con qué usuario la complet
   7. El Coordinador valida el cierre; Bonita cierra en la API Nacional, avisa a la app y la emergencia queda RESUELTA.
   8. Las ONGs reciben el aviso en la campana y el Municipio ve la emergencia resuelta.
 
+Con `--total` es el camino feliz: Cruz Roja ofrece 4 y Bomberos 6 (todo su stock), la cobertura llega al 100 % y Bonita pasa
+directo de la evaluación a «Adjudicar Ofertas», sin decisión del Coordinador. Capturas en `entrega-5/img/camino-feliz/`.
+
 El cierre libera lo reservado en la API Nacional (4 y 2 paramédicos): el stock queda como estaba. Contra la nube, la emergencia
 no puede tener un número ya cerrado en Render (ver docs/instalacion-nube.md).
 
@@ -23,6 +26,7 @@ ui_parada2.py (usan otros recursos): ver correr_ui.py.
     python scripts/ui_parada3.py
     python scripts/ui_parada3.py --ventana 1      # minutos de margen para cargar las ofertas antes del cierre (por defecto 0.5)
     python scripts/ui_parada3.py --sin-capturas
+    python scripts/ui_parada3.py --total          # camino feliz: cobertura 100 %, sin decisión del Coordinador
 """
 from __future__ import annotations
 
@@ -64,7 +68,13 @@ def main() -> int:
     ap.add_argument("--ventana", type=float, default=0.5, help="minutos de margen para cargar las ofertas antes del cierre")
     ap.add_argument("--visible", action="store_true", help="navegador visible")
     ap.add_argument("--sin-capturas", action="store_true", help="no guardar las fotos de cada paso")
+    ap.add_argument("--total", action="store_true", help="camino feliz: las ofertas cubren el 100 %%")
     args = ap.parse_args()
+    global IMG
+    if args.total:
+        IMG = HERE.parents[1] / "entrega-5" / "img" / "camino-feliz"
+        ui_comun.CAPTURAS = IMG
+    cr, bo = (4, 6) if args.total else (4, 2)
 
     ui_comun.SIN_CAPTURAS = args.sin_capturas
     if not args.sin_capturas:
@@ -93,7 +103,7 @@ def main() -> int:
         try:
             r.fase("1. Municipio: registra la emergencia")
             u.entrar(app, "operador.municipal")
-            emg, caso = registrar(u, app, "ALTO", "Parada 3 · recorrido completo",
+            emg, caso = registrar(u, app, "ALTO", "Camino feliz · cobertura total" if args.total else "Parada 3 · recorrido completo",
                                   "Inundación: faltan paramédicos para los centros de evacuación.", "municipio-formulario")
             u.foto("municipio-detalle")
             print(f"     emergencia #{emg} (caso {caso})")
@@ -109,15 +119,16 @@ def main() -> int:
             u.foto("coordinador-publicada")
             u.salir()
 
-            r.fase("3. ONGs: Cruz Roja ofrece 4 y Bomberos 2")
+            r.fase(f"3. ONGs: Cruz Roja ofrece {cr} y Bomberos {bo}")
             u.entrar(app, "ong.cruzroja")
-            ofrecer(u, app, emg, "4", "ong-cruzroja-oferta")
+            ofrecer(u, app, emg, str(cr), "ong-cruzroja-oferta")
             u.salir()
             u.entrar(app, "ong.bomberos")
-            ofrecer(u, app, emg, "2", "ong-bomberos-oferta")
+            ofrecer(u, app, emg, str(bo), "ong-bomberos-oferta")
             u.salir()
 
-            r.fase(f"4. Espera: la ventana vence a las {fin:%H:%M}, Bonita evalúa y el Coordinador sigue con la cobertura parcial")
+            r.fase(f"4. Espera: la ventana vence a las {fin:%H:%M} y Bonita evalúa"
+                   + (" (cobertura total: directo a adjudicar)" if args.total else "; el Coordinador sigue con la cobertura parcial"))
             u.entrar(app, "coordinador.regional")
             esperar_hasta(fin)
             ok = esperar_evaluacion(u, app, emg, 240)
@@ -126,21 +137,30 @@ def main() -> int:
                 u.foto("error-sin-evaluacion")
                 raise RuntimeError("la evaluación no llegó")
             cob = page.locator("[data-testid=cobertura-total]").inner_text()
-            r.check("Cobertura 60 %, no alcanza", cob.startswith("60") and "no alcanza" in cob, cob)
+            if args.total:
+                r.check("Cobertura 100 %, lotes cubiertos", cob.startswith("100") and "lotes cubiertos" in cob, cob)
+            else:
+                r.check("Cobertura 60 %, no alcanza", cob.startswith("60") and "no alcanza" in cob, cob)
             for _, cuit, nombre in ONGS:
                 r.check(f"{nombre} figura como reservada",
                         "Reservada" in page.locator(f'[data-testid="evaluacion-ong-{cuit}"]').inner_text())
-            r.check("Nacional tiene 4 + 2 paramédicos reservados",
-                    (comprometido(nacional, CRUZ_ROJA, "PARAMEDICO"), comprometido(nacional, BOMBEROS, "PARAMEDICO")) == (4, 2))
-            r.check("El Coordinador ve los botones de decisión",
-                    page.locator("[data-testid=decidir-parcial]").count() == 1
-                    and page.locator("[data-testid=decidir-reformular]").count() == 1)
-            u.foto("coordinador-evaluacion")
-            page.locator("[data-testid=decidir-parcial]").click()
-            u.ve("Seguís con la cobertura parcial", "El Coordinador eligió la cobertura parcial")
+            r.check(f"Nacional tiene {cr} + {bo} paramédicos reservados",
+                    (comprometido(nacional, CRUZ_ROJA, "PARAMEDICO"), comprometido(nacional, BOMBEROS, "PARAMEDICO")) == (cr, bo))
+            botones = page.locator("[data-testid=decidir-parcial]").count() + page.locator("[data-testid=decidir-reformular]").count()
+            if args.total:
+                r.check("El Coordinador no tiene nada que decidir (sin botones)", botones == 0, botones)
+                u.foto("coordinador-evaluacion")
+            else:
+                r.check("El Coordinador ve los botones de decisión", botones == 2, botones)
+                u.foto("coordinador-evaluacion")
+                page.locator("[data-testid=decidir-parcial]").click()
+                u.ve("Seguís con la cobertura parcial", "El Coordinador eligió la cobertura parcial")
             r.check("La emergencia pasó a «Adjudicación»", esperar_estado(u, app, emg, "Adjudicación", 30))
             r.check("Bonita espera «Adjudicar Ofertas»", esperar_tarea_activa(admin, caso, "Adjudicar").startswith("Adjudicar"),
                     tarea_activa(admin, caso))
+            if args.total:
+                r.check("Bonita no pasó por «Evaluar Cobertura» (rama de cobertura completa del XOR)",
+                        ejecutada_por(admin, caso, "Evaluar") == "(no ejecutada)", ejecutada_por(admin, caso, "Evaluar"))
             u.salir()
 
             r.fase("5. Municipio: adjudica a las dos ONGs")
@@ -156,8 +176,8 @@ def main() -> int:
             u.foto("municipio-en-ejecucion")
             r.check("Bonita espera «Monitorear Ejecucion»", esperar_tarea_activa(admin, caso, "Monitorear").startswith("Monitorear"),
                     tarea_activa(admin, caso))
-            r.check("Nacional conserva las dos reservas (4 y 2)",
-                    (comprometido(nacional, CRUZ_ROJA, "PARAMEDICO"), comprometido(nacional, BOMBEROS, "PARAMEDICO")) == (4, 2))
+            r.check(f"Nacional conserva las dos reservas ({cr} y {bo})",
+                    (comprometido(nacional, CRUZ_ROJA, "PARAMEDICO"), comprometido(nacional, BOMBEROS, "PARAMEDICO")) == (cr, bo))
             u.salir()
 
             r.fase("6. Coordinador: monitorea la ejecución")

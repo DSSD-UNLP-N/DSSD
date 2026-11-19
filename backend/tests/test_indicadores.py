@@ -286,4 +286,73 @@ def test_reporte_con_bonita_caido_marca_tiempos_no_disponible(db, fake_bonita):
 
 def test_reporte_sin_bonita_configurado(db):
     r = indicadores.reporte(db, None, OCT)
-    assert not r.tiempos.disponible and r.tiempos.motivo == "Bonita no responde: no se pudieron leer los tiempos por etapa."
+    motivo = "Bonita no responde: no se pudieron leer los datos del motor."
+    assert not r.tiempos.disponible and r.tiempos.motivo == motivo
+    assert (r.cursos.disponible, r.cursos.motivo, r.cursos.filas) == (False, motivo, [])
+    assert (r.casos.disponible, r.casos.motivo) == (False, motivo)
+
+
+def test_reporte_con_bonita_caido_marca_cursos_y_casos_no_disponibles(db, fake_bonita):
+    _con_caso(db, 1)
+    fake_bonita.falla = True
+    r = indicadores.reporte(db, fake_bonita, OCT)
+    assert not r.cursos.disponible and not r.casos.disponible and r.kpis.emergencias == 1
+
+
+def _hecha(nombre):
+    return {"type": "USER_TASK", "name": nombre, "state": "completed"}
+
+
+def _activada(nombre):
+    return {"type": "USER_TASK", "name": nombre, "state": "initializing"}
+
+
+REVISAR, PUBLICAR, EVALUAR, ADJUDICAR = ETAPAS[0], ETAPAS[1], ETAPAS[3], ETAPAS[4]
+
+
+def test_recorrido_reconoce_los_cuatro_cursos():
+    total = [_hecha(REVISAR), _hecha(PUBLICAR), _activada(ADJUDICAR)]
+    parcial = [_hecha(REVISAR), _hecha(PUBLICAR), _hecha(EVALUAR), _activada(ADJUDICAR)]
+    # Reformula una vez y en la ronda 2 cubre todo.
+    reformula = [_hecha(REVISAR), _hecha(PUBLICAR), _hecha(EVALUAR), _hecha(REVISAR), _hecha(PUBLICAR), _activada(ADJUDICAR)]
+    # Reabre dos veces y termina en PARCIAL.
+    reabre = [_hecha(REVISAR), _hecha(PUBLICAR), _hecha(EVALUAR), _hecha(PUBLICAR), _hecha(EVALUAR), _hecha(PUBLICAR),
+              _hecha(EVALUAR), _activada(ADJUDICAR)]
+    en_curso = [_hecha(REVISAR), _hecha(PUBLICAR)]  # todavía no llegó a adjudicar
+    assert indicadores._recorrido(total) == {"TOTAL": 1}
+    assert indicadores._recorrido(parcial) == {"PARCIAL": 1}
+    assert indicadores._recorrido(reformula) == {"REFORMULAR": 1, "TOTAL": 1}
+    assert indicadores._recorrido(reabre) == {"REABRIR": 2, "PARCIAL": 1}
+    assert indicadores._recorrido(en_curso) == {}
+
+
+def test_cursos_cruza_bonita_con_la_cobertura_de_la_app(db, fake_bonita):
+    _con_caso(db, 1, evaluacion=json.dumps({"porcentaje_cobertura": 100}))
+    _con_caso(db, 2, evaluacion=json.dumps({"porcentaje_cobertura": 60}))
+    _con_caso(db, 3, evaluacion=json.dumps({"porcentaje_cobertura": 100}))
+    fake_bonita.nodos["1"] = [_hecha(REVISAR), _hecha(PUBLICAR), _activada(ADJUDICAR)]
+    fake_bonita.nodos["2"] = [_hecha(REVISAR), _hecha(PUBLICAR), _hecha(EVALUAR), _activada(ADJUDICAR)]
+    fake_bonita.nodos["3"] = [_hecha(REVISAR), _hecha(PUBLICAR), _hecha(EVALUAR), _hecha(PUBLICAR), _activada(ADJUDICAR)]
+    c = indicadores.cursos_de_accion(db, fake_bonita, OCT)
+    assert c.disponible
+    assert [(x.curso, x.emergencias, x.veces, x.cobertura_promedio) for x in c.filas] == [
+        ("TOTAL", 2, 2, 100.0), ("PARCIAL", 1, 1, 60.0), ("REFORMULAR", 0, 0, None), ("REABRIR", 1, 1, 100.0),
+    ]
+
+
+def test_casos_compara_el_estado_de_bonita_con_la_app(db, fake_bonita):
+    _con_caso(db, 1, estado=EstadoEmergencia.RESUELTA)  # archivado: bien
+    _con_caso(db, 2, estado=EstadoEmergencia.CONVOCATORIA)  # abierto: bien
+    e3 = _con_caso(db, 3, estado=EstadoEmergencia.RESUELTA)  # abierto: mal
+    e4 = _con_caso(db, 4, estado=EstadoEmergencia.EN_EJECUCION)  # archivado: mal
+    e5 = _con_caso(db, 5, estado=EstadoEmergencia.REGISTRADA)  # Bonita no lo conoce (se redesplegó): mal
+    _emergencia(db, _municipio(db, "Sin caso"))  # sin caso: no cuenta
+    fake_bonita.abiertos = {"2", "3"}
+    fake_bonita.archivados = {
+        "1": {"start": "2026-10-10 10:00:00.000", "end_date": "2026-10-10 13:00:00.000"},  # 3 h
+        "4": {"start": "2026-10-10 10:00:00.000", "end_date": "2026-10-10 11:00:00.000"},  # 1 h
+    }
+    c = indicadores.casos_en_bonita(db, fake_bonita, OCT)
+    assert (c.abiertos, c.archivados, c.consistentes) == (2, 2, 2)
+    assert sorted(c.inconsistentes) == sorted([e3.id, e4.id, e5.id])
+    assert c.horas_resolucion_promedio == 2.0

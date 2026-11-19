@@ -70,15 +70,19 @@ Los scripts de `scripts/` necesitan Bonita, la app y (según el caso) la API Nac
 - `e2e_ui.py`: recorre el flujo con los perfiles de demo **en un navegador real** (Playwright + Chrome) contra la SPA, verifica además lo que
   pasa en Bonita y deja una captura por paso en `scripts/capturas/` (gitignoreado). `--demo` lo hace visible y lento; `--timer 90` suma el cierre por timer.
 - `ui_parada2.py`, `ui_parada3.py`: recorridos por la interfaz de cada tramo; `ui_parada3.py` es el completo (alta,
-  ofertas de dos ONGs, evaluación, adjudicación, ejecución y cierre) y sirve contra local y contra la nube. `ui_parada2.py` corre el caso de
-  reformulación (raciones); su caso de cobertura parcial es opcional (`--con-parcial`) porque usa los mismos paramédicos que `ui_parada3.py`.
+  ofertas de dos ONGs, evaluación, adjudicación, ejecución y cierre) y sirve contra local y contra la nube; con `--total` es el camino feliz
+  (cobertura 100 %, sin decisión del Coordinador). `ui_parada2.py` corre el caso de
+  reformulación (raciones, con ajuste de la cantidad del lote; `--img` cambia la carpeta de capturas); su caso de cobertura parcial es opcional
+  (`--con-parcial`) porque usa los mismos paramédicos que `ui_parada3.py`.
+- `ui_reabrir.py`: el camino REABRIR por la interfaz (ronda 1 al 40 %, el Coordinador reabre con un cierre nuevo, Bomberos completa en la
+  ronda 2 y el Municipio adjudica), con una captura por paso. Usa paramédicos: no a la vez que `ui_parada3.py`.
 - `correr_ui.py`: corre `e2e_ui.py`, `ui_parada2.py` y `ui_parada3.py` **a la vez** (usan recursos distintos), en lugar de uno tras otro: casi todo lo que
-  tardan es esperar a que venza la ventana de ofertas. `--completo` suma después el caso parcial; `--sin-capturas` omite las fotos.
+  tardan es esperar a que venza la ventana de ofertas. `--completo` suma después, en serie, el caso parcial, el camino feliz y reabrir; `--sin-capturas` omite las fotos.
 
 Usan el Chrome instalado; sin Chrome, `playwright install chromium`.
 
 **Presupuesto de casos de Bonita.** La edición Community no deja iniciar procesos tras **150 casos en 30 días** por proyecto de Studio (cuenta los
-casos iniciados aunque se borren). Cada corrida gasta: `e2e_ui` 1, `ui_parada3` 1, `ui_parada2` 1 (2 con `--con-parcial`), `correr_ui` 3, y los escenarios
+casos iniciados aunque se borren). Cada corrida gasta: `e2e_ui` 1, `ui_parada3` 1, `ui_parada2` 1 (2 con `--con-parcial`), `ui_reabrir` 1, `correr_ui` 3 (7 con `--completo`), y los escenarios
 `evaluacion` 2, `adjudicacion` 2, `cierre` 1, `tope` 3, `variantes` ~6, `jwt` ~2 (`correr_escenarios` completo, ~16). Al llegar al 80 % y 90 % `bonita.log` avisa
 (`allowed cases`); al agotarse la app contesta 502 «No se pudo iniciar el caso en Bonita» y el log dice `Process start limit (150 cases during last 30 days)`.
 La salida es importar el `.bos` en Studio como proyecto nuevo (base H2 nueva) y desplegar la organización.
@@ -129,10 +133,10 @@ antes de llamar a Nacional. El token se pide una vez por proceso y se renueva so
 depende de Nacional. Contra Render (que duerme y tarda en despertar) hace falta un `NACIONAL_TIMEOUT_SECONDS` alto: `.env.nube` ya lo trae.
 Los tests la reemplazan por `FakeNacional` (`tests/conftest.py`).
 
-Tope de ofertas (`app/services/ofertas.py`): al enviar una oferta se suma lo que la ONG ofrece de cada recurso con lo que ya ofreció en sus otras
-convocatorias abiertas y se valida contra su inventario en el Sistema Nacional (`POST /validaciones`); si no alcanza, 400 y no se guarda nada.
-Reducir o retirar nunca consulta a la API. Retirar un lote = reenviar la oferta sin él; retirarla toda = reenviarla vacía (versión sin ítems,
-`retirada: true`); el historial de versiones no se toca.
+Ofertas (`app/services/ofertas.py`): la app **no** valida contra el Sistema Nacional (la arquitectura exige que solo Bonita llame a la API
+Nacional): guarda cada versión y, al vencer la ventana, Bonita valida competencia e inventario y reserva. Retirar un lote = reenviar la oferta
+sin él; retirarla toda = reenviarla vacía (versión sin ítems, `retirada: true`); el historial de versiones no se toca. Al REFORMULAR, las
+reservas de la ronda también las libera Bonita.
 
 ## Bonita
 

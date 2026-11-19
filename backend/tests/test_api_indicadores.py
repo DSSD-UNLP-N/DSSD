@@ -122,6 +122,7 @@ def test_bonita_caido_degrada_solo_tiempos(seeded, nacional):
     body = r.json()
     assert body["tiempos"]["disponible"] is False
     assert body["tiempos"]["motivo"] is not None and len(body["tiempos"]["motivo"]) > 0
+    assert body["cursos"]["disponible"] is False and body["casos"]["disponible"] is False
     for bloque in ("kpis", "suministros", "estados", "finalizadas"):
         assert bloque in body, f"Falta el bloque '{bloque}' con Bonita caído"
 
@@ -167,6 +168,18 @@ def test_csv_vacio_tiene_encabezados(indicadores_client):
     assert len(encabezados) > 0, "El CSV vacío debe tener al menos una columna de encabezado"
     filas = list(reader)
     assert filas == [], f"El CSV no debería tener filas de datos, pero tiene: {filas}"
+
+
+def test_csv_de_los_bloques_que_cruzan_con_bonita(indicadores_client):
+    """cursos: una fila por curso de acción (los cuatro siempre); casos: una sola fila con los totales."""
+    c = _login(indicadores_client, "auditor")
+    filas = {}
+    for bloque in ("cursos", "casos"):
+        r = c.get(f"/api/indicadores/export.csv?bloque={bloque}")
+        assert r.status_code == 200
+        filas[bloque] = list(csv.reader(io.StringIO(r.content.decode("utf-8-sig"))))
+    assert filas["cursos"][0][0] == "Curso" and [f[0] for f in filas["cursos"][1:]] == ["TOTAL", "PARCIAL", "REFORMULAR", "REABRIR"]
+    assert filas["casos"][0][0] == "Casos abiertos" and len(filas["casos"]) == 2
 
 
 def test_bloque_invalido_da_422(indicadores_client):

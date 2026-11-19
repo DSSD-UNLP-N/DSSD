@@ -150,6 +150,20 @@ export type Reporte = {
     etapas: { tarea: string; horas_promedio: number; emergencias: number }[];
     horas_total_promedio: number | null;
   };
+  cursos: {
+    disponible: boolean;
+    motivo: string | null;
+    filas: { curso: string; etiqueta: string; emergencias: number; veces: number; cobertura_promedio: number | null }[];
+  };
+  casos: {
+    disponible: boolean;
+    motivo: string | null;
+    abiertos: number;
+    archivados: number;
+    consistentes: number;
+    inconsistentes: number[];
+    horas_resolucion_promedio: number | null;
+  };
   finalizadas: {
     emergencia_id: number;
     municipio: string;
@@ -259,12 +273,14 @@ export const api = {
   tiposRecurso: () => request<TipoRecurso[]>("/api/tipos-recurso"),
   tiposRecursoAlta: () => request<TipoRecurso[]>("/api/ongs/alta/tipos-recurso"),
   altaOng: (body: AltaOngIn) => post<AltaOngOut>("/api/ongs/alta", body),
+  cambiarCantidadLote: (id: number, loteId: number, cantidad: number) =>
+    request<Lote>(`/api/emergencias/${id}/lotes/${loteId}`, { method: "PATCH", body: JSON.stringify({ cantidad }) }),
   createLote: (id: number, body: { tipo_recurso: string; detalle?: string; cantidad: number; tipo: string }) =>
     post<Lote>(`/api/emergencias/${id}/lotes`, body),
   publicar: (id: number, ventana_fin: string) =>
     post<Emergencia>(`/api/emergencias/${id}/publicar`, { ventana_fin }),
-  decidir: (id: number, decision: "PARCIAL" | "REFORMULAR") =>
-    post<Emergencia>(`/api/emergencias/${id}/decision`, { decision }),
+  decidir: (id: number, decision: "PARCIAL" | "REFORMULAR" | "REABRIR", ventana_fin?: string) =>
+    post<Emergencia>(`/api/emergencias/${id}/decision`, ventana_fin ? { decision, ventana_fin } : { decision }),
   adjudicar: (id: number, cuits: string[]) =>
     post<Emergencia>(`/api/emergencias/${id}/adjudicar`, { cuits }),
   monitorear: (id: number) => post<Emergencia>(`/api/emergencias/${id}/monitorear`),

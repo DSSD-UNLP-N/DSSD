@@ -114,21 +114,6 @@ class NacionalClient:
         """Catálogo: [{codigo, nombre, categoria, unidad, certificacion_requerida}]."""
         return self._request("GET", "/tipos-recurso")
 
-    def validar(self, gravedad: str, items: list[dict]) -> dict:
-        """Valida cantidades y competencia (no guarda nada).
-
-        items: [{cuit, tipo_recurso, cantidad}]. Devuelve {alcanza_todo, resultados: [{cuit, tipo_recurso,
-        nombre_recurso, unidad, solicitado, disponible, alcanza, nivel, riesgo_permitido,
-        asignacion_sugerida, observaciones}]}."""
-        return self._request("POST", "/validaciones", json={"gravedad": gravedad, "items": items})
-
-    def liberar(self, referencia: str) -> dict:
-        """Libera una reserva (idempotente): la usa la app cuando el Coordinador reformula la convocatoria."""
-        resultado = self._request("POST", f"/adjudicaciones/{referencia}/liberar")
-        if not isinstance(resultado, dict):
-            raise NacionalError("Sistema Nacional: respuesta inválida al liberar la reserva")
-        return resultado
-
 
 def get_nacional(settings: Settings = Depends(get_settings)) -> NacionalClient:
     return NacionalClient(settings.nacional_base_url, settings.nacional_timeout_seconds,

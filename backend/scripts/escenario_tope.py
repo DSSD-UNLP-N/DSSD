@@ -1,8 +1,9 @@
 """Escenario completo de validación de ofertas de las ONGs, por la API de la app (la misma que usa la SPA), con
 Bonita real y la API Nacional que tenga configurada el backend (local o la nube).
 
-Crea tres emergencias, carga lotes eligiendo tipos del catálogo nacional, las publica en Bonita y recorre los
-casos del tope por inventario, el retiro de ofertas, los permisos y una convocatoria que vence mientras corre.
+Crea tres emergencias, carga lotes eligiendo tipos del catálogo nacional, las publica en Bonita y recorre las
+versiones de las ofertas, el retiro, los permisos y una convocatoria que vence mientras corre. La app ya no pone tope
+por inventario (no llama a la API Nacional): ofrecer de más se acepta y lo resuelve la evaluación que hace Bonita.
 
 Requisitos: Bonita con el proceso desplegado, backend en :8001 apuntando a la API Nacional, y esa API con los
 datos del seed (Cruz Roja: 4 paramédicos, 3000 L de agua; Bomberos: 6 paramédicos).
@@ -63,32 +64,21 @@ def main() -> int:
 
     pm1, agua1, rac1, pm2, pm3 = l1["PARAMEDICO"], l1["AGUA_POTABLE"], l1["RACION_ALIMENTO"], l2["PARAMEDICO"], l3["PARAMEDICO"]
 
-    print("\n== Bomberos ocupa todo su stock en la convocatoria corta")
+    print("\n== Bomberos ofrece todo su stock en la convocatoria corta")
     e.esperar("B1 Bomberos ofrece sus 6 paramédicos en #3", e.ofrecer("ong.bomberos", e3, (pm3, 6)), 201)
-    e.esperar("B2 1 más en #1 → 400 (6 + 1 > 6)", e.ofrecer("ong.bomberos", e1, (pm1, 1)), 400,
-              "sumás 7 personas y tenés 6 disponibles")
 
-    print("\n== Cruz Roja: tope de paramédicos entre emergencias (tiene 4)")
+    print("\n== Cruz Roja: versiones (tiene 4 paramédicos; la app no pone tope)")
     r = e.ofrecer("ong.cruzroja", e1, (pm1, 2))
     e.check("C1 Ofrece 2 en #1 → versión 1", r.status_code == 201 and r.json()["version_actual"] == 1, r.text)
-    e.esperar("C2 Ofrece 3 en #2 → 400 (2 + 3 > 4)", e.ofrecer("ong.cruzroja", e2, (pm2, 3)), 400,
-              "No alcanza tu inventario", "Paramédico: entre tus ofertas abiertas sumás 5 personas y tenés 4 disponibles")
     r = e.ofrecer("ong.cruzroja", e1, (pm1, 3))
     e.check("C3 Edita #1 a 3 → versión 2 (reemplaza, no suma)", r.status_code == 201 and r.json()["version_actual"] == 2, r.text)
-    e.esperar("C4 Ofrece 2 en #2 → 400 (3 + 2 > 4)", e.ofrecer("ong.cruzroja", e2, (pm2, 2)), 400, "sumás 5")
-    e.esperar("C5 Ofrece 1 en #2 → 201 (3 + 1 = 4, justo)", e.ofrecer("ong.cruzroja", e2, (pm2, 1)), 201)
-    e.esperar("C5b Repite la misma oferta en #2 → 201 (no aumenta, no consulta)", e.ofrecer("ong.cruzroja", e2, (pm2, 1)), 201)
+    e.esperar("C5 Ofrece 1 en #2 → 201", e.ofrecer("ong.cruzroja", e2, (pm2, 1)), 201)
+    e.esperar("C5b Repite la misma oferta en #2 → 201", e.ofrecer("ong.cruzroja", e2, (pm2, 1)), 201)
 
     print("\n== Cruz Roja: varios recursos en una oferta")
     r = e.ofrecer("ong.cruzroja", e1, (pm1, 3), (agua1, 3000), (rac1, 1500))
     e.check("C6 #1 con paramédicos + agua + raciones (cada uno dentro de su stock) → 201",
             r.status_code == 201 and len(r.json()["items"]) == 3, r.text)
-    e.esperar("C7 Agua 3001 → 400 solo por el agua", e.ofrecer("ong.cruzroja", e1, (pm1, 3), (agua1, 3001)), 400,
-              "Agua potable: entre tus ofertas abiertas sumás 3001 litros y tenés 3000 disponibles")
-    e.esperar("C8 Paramédicos 4 y agua 4000 → 400 con los dos recursos",
-              e.ofrecer("ong.cruzroja", e1, (pm1, 4), (agua1, 4000)), 400, "Paramédico", "Agua potable")
-    r = e.get("ong.cruzroja", f"/emergencias/{e1}/ofertas").json()[0]
-    e.check("C8b El rechazo no guardó nada: sigue la versión 3", r["version_actual"] == 3, r)
 
     print("\n== Cruz Roja: retirar")
     r = e.ofrecer("ong.cruzroja", e1, (pm1, 3), (agua1, 3000))
@@ -97,9 +87,8 @@ def main() -> int:
     r = e.ofrecer("ong.cruzroja", e1)
     e.check("C10 Retira toda la oferta de #1 → retirada", r.status_code == 201 and r.json()["retirada"] is True, r.text)
     e.esperar("C11 Retirar de nuevo → 400", e.ofrecer("ong.cruzroja", e1), 400, "No tenés una oferta para retirar")
-    e.esperar("C12 El retiro liberó el cupo: sube #2 a 4 → 201", e.ofrecer("ong.cruzroja", e2, (pm2, 4)), 201)
-    r = e.ofrecer("ong.cruzroja", e1, (pm1, 1))
-    e.esperar("C13 Vuelve a ofertar en #1 (1 más) → 400 (4 + 1 > 4)", r, 400, "sumás 5")
+    e.esperar("C12 Ofrecer más de lo que tiene (10 con 4) → 201: lo resuelve la evaluación de Bonita",
+              e.ofrecer("ong.cruzroja", e2, (pm2, 10)), 201)
     e.esperar("C14 Retirar sin haber ofertado nunca (Bomberos en #2) → 400", e.ofrecer("ong.bomberos", e2), 400,
               "No tenés una oferta para retirar")
 
@@ -127,8 +116,6 @@ def main() -> int:
         time.sleep(faltan + 15)
     e.esperar("V1 Ofertar en #3 vencida → 400", e.ofrecer("ong.bomberos", e3, (pm3, 1)), 400, "cerró")
     e.esperar("V2 Retirar en #3 vencida → 400", e.ofrecer("ong.bomberos", e3), 400, "cerró")
-    e.esperar("V3 Bonita evaluó #3 y la API Nacional reservó los 6 paramédicos de Bomberos: ya no puede ofrecer 1 en #1",
-              e.ofrecer("ong.bomberos", e1, (pm1, 1)), 400, "tenés 0 disponibles")
     e.check("V5 La app marca #3 como EN_EVALUACION (el conector de Bonita pidió el consolidado)",
             e.get("coordinador.regional", f"/emergencias/{e3}").json()["estado"] == "EN_EVALUACION")
     admin = admin_bonita()

@@ -110,6 +110,16 @@ def test_get_archived_human_tasks_trae_el_ejecutor(client):
 
 
 @responses.activate
+def test_get_archived_case_busca_por_id_original_y_devuelve_none_si_no_esta(client):
+    responses.add(responses.GET, f"{BASE}/API/bpm/archivedCase",
+                  json=[{"sourceObjectId": "1001", "start": "2026-11-17 12:03:40.305", "end_date": "2026-11-17 12:05:21.647"}])
+    responses.add(responses.GET, f"{BASE}/API/bpm/archivedCase", json=[])
+    assert client.get_archived_case("1001")["end_date"].startswith("2026-11-17")
+    assert "sourceObjectId%3D1001" in responses.calls[0].request.url or "sourceObjectId=1001" in responses.calls[0].request.url
+    assert client.get_archived_case("1002") is None
+
+
+@responses.activate
 def test_actor_names_mapea_id_de_actor_a_nombre(client):
     responses.add(responses.GET, f"{BASE}/API/bpm/actor",
                   json=[{"id": "620", "name": "centro de controlador regional"}, {"id": "621", "name": "Municipio"}])

@@ -67,5 +67,18 @@ Alta de ONGs de prueba: `http://localhost:5173/alta-ong` (no está en el menú).
 
 Pruebas con Bonita real (≈ 17 min): `cd backend && python scripts/correr_escenarios.py`. Solo funcionan en modo local (necesitan resetear la API Nacional).
 
+### Base de demo (coloquio)
+Bases nuevas aparte (`demo.db`), sin tocar `dev.db` ni `nacional.db`: sin emergencias de prueba, las dos ONGs habilitadas con
+certificaciones vigentes y 10 paramédicos cada una. Cruz Roja sigue certificada hasta riesgo MEDIO (participa como PARCIAL en
+emergencias ALTO: el caso que muestra los niveles de competencia) y la ONG suspendida queda en la Nacional. Los tests y los
+escenarios siguen usando el seed base (que tiene una certificación vencida y menos stock a propósito).
+```bash
+cd nacional && DATABASE_URL=sqlite:///./demo.db python -m alembic upgrade head && DATABASE_URL=sqlite:///./demo.db python -m app.seed --demo
+cd backend && DATABASE_URL=sqlite:///./demo.db python -m alembic upgrade head && DATABASE_URL=sqlite:///./demo.db python -m app.seed
+```
+Levantar la Nacional y la app con la misma `DATABASE_URL=sqlite:///./demo.db` (cada una desde su carpeta). Los casos de Bonita
+se borran con cada despliegue en Studio: recrear las dos bases **después** del último despliegue y recién ahí correr los
+recorridos que alimentan el dashboard.
+
 ## Volver a la nube
 `copy backend\.env.nube backend\.env`, reiniciar la app, reimportar `entrega-3/entrega42_nube.bos` en Studio (y Ejecutar).

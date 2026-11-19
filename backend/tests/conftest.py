@@ -78,6 +78,8 @@ class FakeBonita:
 
     def __init__(self):
         self.nodos = {}  # case_id -> lista de registros de archivedFlowNode
+        self.abiertos = set()  # case_id de los casos en curso
+        self.archivados = {}  # case_id -> registro de archivedCase (con 'start' y 'end_date')
         self.falla = False  # True: cada llamada lanza requests.ConnectionError
 
     def login(self, *args, **kwargs):
@@ -88,6 +90,18 @@ class FakeBonita:
         if self.falla:
             raise requests.ConnectionError("Bonita caído (simulado)")
         return self.nodos.get(case_id, [])
+
+    def get_case(self, case_id):
+        if self.falla:
+            raise requests.ConnectionError("Bonita caído (simulado)")
+        if case_id not in self.abiertos:
+            resp = requests.Response()
+            resp.status_code = 404
+            raise requests.HTTPError("404", response=resp)
+        return {"id": case_id, "state": "started"}
+
+    def get_archived_case(self, case_id):
+        return self.archivados.get(case_id)
 
 
 @pytest.fixture
@@ -116,8 +130,6 @@ class FakeNacional:
             ("30-68522415-9", "PARAMEDICO"): 6,
         }
         self.comprometido = {}  # (CUIT, tipo) -> bloqueado por reservas; no cuenta en `inventario` (disponible)
-        self.validaciones = []  # (gravedad, items) de cada llamada a validar()
-        self.liberadas = []  # referencia de cada llamada a liberar()
         self.ongs_registradas = []  # kwargs de cada llamada a registrar_ong()
         self.inventarios = {}  # cuit -> items declarados con declarar_inventario()
         self.falla_registro = None  # NacionalError a lanzar en registrar_ong()
@@ -173,32 +185,9 @@ class FakeNacional:
                 "certificaciones": [{"codigo": "SALUD_PREHOSP", "nombre": "Atención de salud prehospitalaria",
                                      "riesgo_max": "CRITICO", "vence_el": "2027-10-01", "vigente": True}]}
 
-    def liberar(self, referencia):
-        self._verificar()
-        self.liberadas.append(referencia)
-        return {"referencia": referencia, "estado": "LIBERADA", "liberado": []}
-
     def tipos_recurso(self):
         self._verificar()
         return self.TIPOS
-
-    def validar(self, gravedad, items):
-        """Como la API real: suma lo pedido por (ONG, recurso) y compara con lo disponible."""
-        self._verificar()
-        self.validaciones.append((gravedad, items))
-        pedido = {}
-        for i in items:
-            clave = (i["cuit"], i["tipo_recurso"])
-            pedido[clave] = pedido.get(clave, 0) + i["cantidad"]
-        tipos = {t["codigo"]: t for t in self.TIPOS}
-        resultados = [
-            {"cuit": cuit, "tipo_recurso": codigo, "nombre_recurso": tipos[codigo]["nombre"],
-             "unidad": tipos[codigo]["unidad"], "solicitado": n, "disponible": self.inventario.get((cuit, codigo), 0),
-             "alcanza": n <= self.inventario.get((cuit, codigo), 0), "nivel": "PLENA",
-             "riesgo_permitido": "CRITICO", "asignacion_sugerida": "PRINCIPAL", "observaciones": []}
-            for (cuit, codigo), n in pedido.items()
-        ]
-        return {"alcanza_todo": all(r["alcanza"] for r in resultados), "resultados": resultados}
 
 
 @pytest.fixture

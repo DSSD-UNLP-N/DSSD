@@ -8,14 +8,16 @@ navegadores pueden esperar al mismo tiempo. Los tres guiones usan recursos disti
   ui_parada3.py   paramédicos de las dos ONGs (alta → cierre bilateral)
 
 `--completo` suma después, en serie, el caso A de ui_parada2.py (cobertura parcial con adjudicación a una sola ONG): usa los
-mismos paramédicos que ui_parada3.py y por eso no puede ir a la vez.
+mismos paramédicos que ui_parada3.py y por eso no puede ir a la vez. Después, también en serie, el camino feliz
+(`ui_parada3.py --total`, cobertura 100 % sin decisión del Coordinador) y REABRIR (`ui_reabrir.py`, misma convocatoria con
+ventana nueva).
 
 Requisitos: los de cada guion (Bonita con el proceso desplegado, app en :8001, front en :5173, API Nacional con el seed y
 nada comprometido de lo que usa cada uno); Chrome o Chromium. Tres navegadores a la vez piden más memoria: si la PC está
 justa, usar --solo o --ventana 1.5.
 
     python scripts/correr_ui.py                    # los tres a la vez, ~3 min
-    python scripts/correr_ui.py --completo         # + caso A de la parada 2 en serie
+    python scripts/correr_ui.py --completo         # + caso A de la parada 2, camino feliz y reabrir, en serie
     python scripts/correr_ui.py --solo parada3,e2e # algunos
     python scripts/correr_ui.py --sin-capturas
     python scripts/correr_ui.py --ventana 1.5      # más margen para cargar ofertas antes del cierre (PC lenta)
@@ -91,7 +93,7 @@ def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # la salida de los guiones trae flechas y tildes
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--solo", help="lista separada por comas de: " + ", ".join(GUIONES))
-    ap.add_argument("--completo", action="store_true", help="suma, en serie, el caso A de la parada 2")
+    ap.add_argument("--completo", action="store_true", help="suma, en serie, el caso A de la parada 2, el camino feliz y reabrir")
     ap.add_argument("--sin-capturas", action="store_true")
     ap.add_argument("--ventana", type=float, help="minutos de margen para cargar ofertas antes del cierre (parada 2 y 3)")
     ap.add_argument("--timer", type=int, metavar="SEGUNDOS", help="e2e_ui: cierre a esa distancia, y espera al timer")
@@ -132,6 +134,12 @@ def main() -> int:
         print("Ahora el caso A de la parada 2 (cobertura parcial), solo, porque usa los paramédicos…", flush=True)
         correr("parada2 + caso A", ["ui_parada2.py", "--con-parcial", *(["--sin-capturas"] if args.sin_capturas else []),
                                     *(["--ventana", str(args.ventana)] if args.ventana else [])], resultados)
+        print("Ahora el camino feliz (cobertura total), solo, por la misma razón…", flush=True)
+        correr("camino feliz", ["ui_parada3.py", "--total", *(["--sin-capturas"] if args.sin_capturas else []),
+                                *(["--ventana", str(args.ventana)] if args.ventana else [])], resultados)
+        print("Ahora reabrir (misma convocatoria, ventana nueva), solo, por la misma razón…", flush=True)
+        correr("reabrir", ["ui_reabrir.py", *(["--sin-capturas"] if args.sin_capturas else []),
+                           *(["--ventana", str(args.ventana)] if args.ventana else [])], resultados)
 
     total = time.monotonic() - inicio
     print(f"\n== Resumen ({total:.0f} s en total; en serie serían {sum(s for _, s, _ in resultados.values()):.0f} s)")

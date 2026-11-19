@@ -4,8 +4,9 @@ Recorre la SPA en un navegador con los cuatro perfiles y verifica, en cada paso,
 lo que pasó en la API Nacional y en qué tarea quedó el caso de Bonita. Saca una captura de cada paso en
 `entrega-3/img/parada-2/`.
 
-  B) reformulación (siempre): pide 3000 raciones; Cruz Roja ofrece 2000 (66,7 %). El Coordinador reformula; en la
-     segunda ronda Cruz Roja ofrece las 3000, la cobertura es completa y va directo a la adjudicación.
+  B) reformulación (siempre): pide 3000 raciones; Cruz Roja ofrece 2000 (66,7 %). El Coordinador reformula y ajusta el
+     lote a 2000 con «Ajustar»; en la segunda ronda Cruz Roja vuelve a ofrecer 2000, la cobertura es completa y va directo
+     a la adjudicación.
   A) cobertura parcial (solo con --con-parcial): pide 10 paramédicos; Cruz Roja ofrece 4 y Bomberos 2 (60 %). El
      Coordinador sigue con la cobertura parcial y el Municipio adjudica solo a Cruz Roja (Bomberos queda «no adjudicada»).
 
@@ -21,6 +22,7 @@ con --con-parcial, unos 4.
     python scripts/ui_parada2.py --con-parcial
     python scripts/ui_parada2.py --ventana 1.5    # minutos de margen para cargar las ofertas antes del cierre (por defecto 0.9)
     python scripts/ui_parada2.py --sin-capturas
+    python scripts/ui_parada2.py --img ../entrega-5/img/reformular    # capturas en otra carpeta
 """
 from __future__ import annotations
 
@@ -30,7 +32,7 @@ from pathlib import Path
 
 from playwright.sync_api import Page, sync_playwright
 
-from comun import BOMBEROS, CRUZ_ROJA, admin_bonita, comprometido, tarea_activa
+from comun import BOMBEROS, CRUZ_ROJA, admin_bonita, comprometido, esperar, tarea_activa
 import ui_comun
 from ui_comun import (PLAZO, Reporte, Ui, agregar_lote, cierre_de_ventana, esperar_estado, esperar_evaluacion,
                       esperar_hasta, ofrecer, publicar, registrar)
@@ -109,6 +111,7 @@ def caso_a_adjudicacion(u: Ui, app: str, admin: BonitaClient, nacional: str, ea:
 
 
 def main() -> int:
+    global IMG
     ap = argparse.ArgumentParser()
     ap.add_argument("--app", default="http://localhost:5173")
     ap.add_argument("--ventana", type=float, default=0.9,
@@ -116,8 +119,10 @@ def main() -> int:
     ap.add_argument("--con-parcial", action="store_true", help="suma el caso A (cobertura parcial, usa los paramédicos)")
     ap.add_argument("--visible", action="store_true", help="navegador visible")
     ap.add_argument("--sin-capturas", action="store_true", help="no guardar las fotos de cada paso")
+    ap.add_argument("--img", type=Path, default=IMG, help="carpeta de las capturas (se vacía al empezar)")
     args = ap.parse_args()
 
+    IMG = ui_comun.CAPTURAS = args.img.resolve()
     ui_comun.SIN_CAPTURAS = args.sin_capturas
     if not args.sin_capturas:
         IMG.mkdir(parents=True, exist_ok=True)
@@ -199,18 +204,31 @@ def main() -> int:
             u.ve("Convocatoria reformulada", "El Coordinador reformuló la convocatoria")
             u.abrir(app, eb)
             r.check("B: vuelve a «Registrada»", u.page.locator(".badge", has_text="Registrada").count() > 0)
-            r.check("B: Nacional liberó la reserva", comprometido(nacional, CRUZ_ROJA, "RACION_ALIMENTO") == 0)
-            r.check("B: Bonita volvió a «Revisar Informacion»", tarea_activa(admin, caso_b).startswith("Revisar Informacion"),
+            # Bonita libera por su cuenta: contra Render tarda más que el aviso a la pantalla, así que se espera
+            r.check("B: Nacional liberó la reserva",
+                    bool(esperar(lambda: comprometido(nacional, CRUZ_ROJA, "RACION_ALIMENTO") == 0, 60)))
+            r.check("B: Bonita volvió a «Revisar Informacion»",
+                    bool(esperar(lambda: tarea_activa(admin, caso_b).startswith("Revisar Informacion"), 60)),
                     tarea_activa(admin, caso_b))
             u.foto("coordinador-reformulada-b")
+            u.page.locator("[name=nueva_cantidad]").first.fill("2000")
+            u.page.get_by_role("button", name="Ajustar").first.click()
+            u.ve("Cantidad del lote actualizada", "B: el Coordinador ajusta el lote a 2000 raciones")
+            try:  # el aviso puede llegar antes de que se vuelva a pintar la lista de lotes
+                u.page.locator(".lote-row", has_text="2000 raciones").first.wait_for(timeout=PLAZO)
+                ajustado = True
+            except Exception:
+                ajustado = False
+            r.check("B: el lote quedó en 2000", ajustado, u.page.locator(".lote-row").first.inner_text())
+            u.foto("coordinador-ajusta-lote-b")
             fin2 = cierre_de_ventana(30)  # solo falta que Cruz Roja ofrezca
             publicar(u, fin2)
             u.foto("coordinador-ronda-2-b")
             u.entrar(app, "ong.cruzroja")
             u.abrir(app, eb)
-            u.page.locator("[name^=lote_]").first.fill("3000")
+            u.page.locator("[name^=lote_]").first.fill("2000")
             u.page.get_by_role("button", name="Enviar oferta").click()
-            u.ve("versión", "Cruz Roja ofrece las 3000 raciones en la ronda 2")
+            u.ve("versión", "Cruz Roja ofrece las 2000 raciones en la ronda 2")
             u.foto("ong-cruzroja-ronda-2-b")
             print(f"     la ronda 2 vence a las {fin2:%H:%M}")
 
@@ -230,7 +248,7 @@ def main() -> int:
             r.fase("10. Caso B: el Municipio adjudica")
             u.entrar(app, "operador.municipal")
             adjudicar(u, app, eb, CRUZ_ROJA, "municipio-adjudicar-b", "municipio-en-ejecucion-b")
-            r.check("B: Nacional: 3000 raciones adjudicadas a Cruz Roja", comprometido(nacional, CRUZ_ROJA, "RACION_ALIMENTO") == 3000)
+            r.check("B: Nacional: 2000 raciones adjudicadas a Cruz Roja", comprometido(nacional, CRUZ_ROJA, "RACION_ALIMENTO") == 2000)
             ref2 = nacional_post(f"{nacional}/adjudicaciones/emg-{eb}-r2-{CRUZ_ROJA}/confirmar", timeout=60).json()
             r.check("B: la reserva de la ronda 2 existe y está ADJUDICADA", ref2.get("estado") == "ADJUDICADA", ref2)
         except Exception as exc:

@@ -37,6 +37,7 @@ ESCENARIOS = {
     "evaluacion": "escenario_evaluacion.py",
     "tope": "escenario_tope.py",
     "adjudicacion": "escenario_adjudicacion.py",
+    "reabrir": "escenario_reabrir.py",
     "cierre": "escenario_cierre.py",
     "variantes": "escenario_cierre_variantes.py",
     "jwt": "escenario_jwt.py",

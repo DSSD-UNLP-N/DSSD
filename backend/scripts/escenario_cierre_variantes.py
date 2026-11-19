@@ -33,7 +33,7 @@ from datetime import datetime, timedelta
 
 import requests
 
-from comun import BOMBEROS, CRUZ_ROJA, comprometido, crear, esperar_detalle, publicar
+from comun import BOMBEROS, CRUZ_ROJA, comprometido, crear, esperar, esperar_detalle, publicar
 from ctx import CLAVES, Ctx, apagar, en_paralelo, levantar, recuperar_ok
 
 # La primera ventana vence VENTANA_S después de haber creado todas las emergencias: crear (instanciar el caso en Bonita) es lo
@@ -150,7 +150,9 @@ def variante_c_parte1(ctx: Ctx) -> None:
     r = e.post("coordinador.regional", f"/emergencias/{emg}/decision", {"decision": "REFORMULAR"})
     e.check("C: REFORMULAR → vuelve a REGISTRADA en la ronda 2", r.status_code == 200 and r.json()["estado"] == "REGISTRADA", r.text)
     e.check("C: Bonita volvió a «Revisar Informacion»", ctx.espera_tarea(caso, "Revisar Informacion"), ctx.tareas(caso))
-    e.check("C: la reserva de la ronda 1 se liberó", ctx.estado_ref(f"emg-{emg}-r1-{CRUZ_ROJA}") == "LIBERADA")
+    e.check("C: Bonita liberó la reserva de la ronda 1",
+            bool(esperar(lambda: ctx.estado_ref(f"emg-{emg}-r1-{CRUZ_ROJA}") == "LIBERADA", 60)),
+            ctx.estado_ref(f"emg-{emg}-r1-{CRUZ_ROJA}"))
     v["fin2"] = datetime.now().astimezone() + timedelta(seconds=RONDA2_S)
     r = e.post("coordinador.regional", f"/emergencias/{emg}/publicar", {"ventana_fin": v["fin2"].isoformat(timespec="seconds")})
     e.check("C: el Coordinador publica la ronda 2", r.status_code == 200 and r.json()["estado"] == "CONVOCATORIA", r.text)
